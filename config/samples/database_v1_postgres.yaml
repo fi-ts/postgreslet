@@ -4,4 +4,5 @@ metadata:
   name: postgres-sample
 spec:
   # Add fields here
-  foo: bar
+  name: my-db
+  version: "11.2"

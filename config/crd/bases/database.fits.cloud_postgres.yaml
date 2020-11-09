@@ -8,6 +8,13 @@ metadata:
   creationTimestamp: null
   name: postgres.database.fits.cloud
 spec:
+  additionalPrinterColumns:
+  - JSONPath: .spec.name
+    name: Name
+    type: string
+  - JSONPath: .spec.version
+    name: Version
+    type: string
   group: database.fits.cloud
   names:
     kind: Postgres
@@ -15,6 +22,7 @@ spec:
     plural: postgres
     singular: postgres
   scope: Namespaced
+  subresources: {}
   validation:
     openAPIV3Schema:
       description: Postgres is the Schema for the postgres API
@@ -34,9 +42,11 @@ spec:
         spec:
           description: PostgresSpec defines the desired state of Postgres
           properties:
-            foo:
-              description: Foo is an example field of Postgres. Edit Postgres_types.go
-                to remove/update
+            name:
+              description: Name the name of this postgres database
+              type: string
+            version:
+              description: Version is the postgres version
               type: string
           type: object
         status:

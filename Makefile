@@ -1,6 +1,6 @@
 
 # Image URL to use all building/pushing image targets
-IMG ?= postgress-controller:latest
+IMG ?= postgres-controller:latest
 # Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
 CRD_OPTIONS ?= "crd:trivialVersions=true"
 
@@ -61,6 +61,9 @@ docker-build: test
 # Push the docker image
 docker-push:
 	docker push ${IMG}
+
+docker-load-kind:
+	kind load docker-image ${IMG}
 
 # find or download controller-gen
 # download controller-gen if necessary
