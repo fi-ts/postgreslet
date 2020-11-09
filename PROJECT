@@ -1,0 +1,7 @@
+domain: fits.cloud
+repo: github.com/fi-ts/postgres-controller
+resources:
+- group: database
+  kind: Postgres
+  version: v1
+version: "2"

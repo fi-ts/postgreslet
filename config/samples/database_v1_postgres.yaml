@@ -1,0 +1,7 @@
+apiVersion: database.fits.cloud/v1
+kind: Postgres
+metadata:
+  name: postgres-sample
+spec:
+  # Add fields here
+  foo: bar
