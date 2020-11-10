@@ -74,6 +74,10 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "Postgres")
 		os.Exit(1)
 	}
+	if err = (&databasev1.Postgres{}).SetupWebhookWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create webhook", "webhook", "Postgres")
+		os.Exit(1)
+	}
 	// +kubebuilder:scaffold:builder
 
 	setupLog.Info("starting manager")
