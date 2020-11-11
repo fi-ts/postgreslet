@@ -18,11 +18,13 @@ package controllers
 
 import (
 	"context"
-	"fmt"
-	"time"
 
 	"github.com/go-logr/logr"
+	acidv1 "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+
+	// v1 "k8s.io/client-go/1.5/pkg/api/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -38,15 +40,42 @@ type PostgresReconciler struct {
 
 // +kubebuilder:rbac:groups=database.fits.cloud,resources=postgres,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=database.fits.cloud,resources=postgres/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=acid.zalan.do,resources=postgresql,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=acid.zalan.do,resources=postgresql/status,verbs=get;update;patch
 
 func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	_ = context.Background()
 	_ = r.Log.WithValues("postgres", req.NamespacedName)
 
-	// your logic here
-	// FIXME remove this is a stupid example
-	if 1 < 0 {
-		return ctrl.Result{RequeueAfter: 10 * time.Second, Requeue: true}, fmt.Errorf("one unequal 0")
+	instance := &databasev1.Postgres{}
+	if err := r.Get(context.Background(), req.NamespacedName, instance); err != nil {
+		if errors.IsNotFound(err) {
+			return ctrl.Result{}, nil
+		}
+		return ctrl.Result{}, err
+	}
+
+	if instance.IsBeingDeleted() {
+		// Delete the instance.
+	}
+
+	// Evaluate the status of the instance.
+	// One circumstance: Create
+	newInstance := &acidv1.Postgresql{
+		// ObjectMeta: v1.ObjectMeta{
+		// 	Name: instance.Spec.TeamID + "-" + instance.Name,
+		// },
+		Spec: acidv1.PostgresSpec{
+			TeamID:            instance.Spec.TeamID,
+			NumberOfInstances: instance.Spec.NumberOfInstances,
+			PostgresqlParam: acidv1.PostgresqlParam{
+				PgVersion: instance.Spec.Version,
+			},
+		},
+	}
+	newInstance.Name = instance.Spec.TeamID + "-" + instance.Name
+	if err := r.Create(context.Background(), newInstance); err != nil {
+
 	}
 
 	return ctrl.Result{}, nil
