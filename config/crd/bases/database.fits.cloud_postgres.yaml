@@ -42,12 +42,17 @@ spec:
         spec:
           description: PostgresSpec defines the desired state of Postgres
           properties:
-            name:
-              description: Name the name of this postgres database
+            numberOfInstances:
+              format: int32
+              type: integer
+            teamId:
               type: string
             version:
               description: Version is the postgres version
               type: string
+          required:
+          - numberOfInstances
+          - teamId
           type: object
         status:
           description: PostgresStatus defines the observed state of Postgres

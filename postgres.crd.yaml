@@ -1,0 +1,9 @@
+apiVersion: "database.fits.cloud/v1"
+kind: Postgres
+metadata:
+  name: example
+  namespace: default
+spec:
+  teamId: "super"
+  numberOfInstances: 2
+  version: "12"

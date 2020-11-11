@@ -18,13 +18,13 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/go-logr/logr"
-	acidv1 "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
+	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-
-	// v1 "k8s.io/client-go/1.5/pkg/api/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -61,23 +61,21 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 	// Evaluate the status of the instance.
 	// One circumstance: Create
-	newInstance := &acidv1.Postgresql{
-		// ObjectMeta: v1.ObjectMeta{
-		// 	Name: instance.Spec.TeamID + "-" + instance.Name,
-		// },
-		Spec: acidv1.PostgresSpec{
+	newInstance := &zalando.Postgresql{
+		ObjectMeta: meta.ObjectMeta{
+			Name: instance.Spec.TeamID + "-" + instance.Name,
+		},
+		Spec: zalando.PostgresSpec{
 			TeamID:            instance.Spec.TeamID,
 			NumberOfInstances: instance.Spec.NumberOfInstances,
-			PostgresqlParam: acidv1.PostgresqlParam{
+			PostgresqlParam: zalando.PostgresqlParam{
 				PgVersion: instance.Spec.Version,
 			},
 		},
 	}
-	newInstance.Name = instance.Spec.TeamID + "-" + instance.Name
 	if err := r.Create(context.Background(), newInstance); err != nil {
-
+		return ctrl.Result{}, fmt.Errorf("error while creating CRD postgresql: %v", err)
 	}
-
 	return ctrl.Result{}, nil
 }
 
