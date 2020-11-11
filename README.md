@@ -11,5 +11,5 @@ make docker-build
 # Check the image is ready
 docker image ls
 make docker-load-kind
-k run my-pg-controller --image=postgress-controller:latest
+make deploy
 ```

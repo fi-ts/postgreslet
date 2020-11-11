@@ -19,6 +19,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"log"
 
 	"github.com/go-logr/logr"
 	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
@@ -61,9 +62,10 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 	// Evaluate the status of the instance.
 	// One circumstance: Create
-	newInstance := &zalando.Postgresql{
+	newZInstance, err := addDefaultValue(&zalando.Postgresql{
 		ObjectMeta: meta.ObjectMeta{
-			Name: instance.Spec.TeamID + "-" + instance.Name,
+			Name:      instance.Spec.TeamID + "-" + instance.Name,
+			Namespace: instance.Namespace,
 		},
 		Spec: zalando.PostgresSpec{
 			TeamID:            instance.Spec.TeamID,
@@ -72,13 +74,21 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 				PgVersion: instance.Spec.Version,
 			},
 		},
+	})
+	log.Print(newZInstance)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("error while creating the local postgresql in GO-code: %v", err)
 	}
-	if err := r.Create(context.Background(), newInstance); err != nil {
+	if err := r.Create(context.Background(), newZInstance); err != nil {
 		return ctrl.Result{}, fmt.Errorf("error while creating CRD postgresql: %v", err)
 	}
 	return ctrl.Result{}, nil
 }
-
+func addDefaultValue(before *zalando.Postgresql) (*zalando.Postgresql, error) {
+	after := &zalando.Postgresql{}
+	// todo: Replace nil with an empty object.
+	return after, nil
+}
 func (r *PostgresReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&databasev1.Postgres{}).
