@@ -68,10 +68,41 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			Namespace: instance.Namespace,
 		},
 		Spec: zalando.PostgresSpec{
-			TeamID:            instance.Spec.TeamID,
+			Clone: zalando.CloneDescription{
+				ClusterName: "cluster-name-example",
+			},
 			NumberOfInstances: instance.Spec.NumberOfInstances,
+			Resources: zalando.Resources{
+				ResourceLimits: zalando.ResourceDescription{
+					CPU:    "1",
+					Memory: "2Gi",
+				},
+				ResourceRequests: zalando.ResourceDescription{
+					CPU:    "1",
+					Memory: "2Gi",
+				},
+			},
+			Patroni: zalando.Patroni{
+				InitDB: map[string]string{},
+				PgHba:  []string{},
+				Slots:  map[string]map[string]string{},
+			},
+			PodAnnotations: map[string]string{},
 			PostgresqlParam: zalando.PostgresqlParam{
-				PgVersion: instance.Spec.Version,
+				Parameters: map[string]string{},
+				PgVersion:  instance.Spec.Version,
+			},
+			ServiceAnnotations: map[string]string{},
+			StandbyCluster: &zalando.StandbyDescription{
+				S3WalPath: "s3-wal-path-example",
+			},
+			TeamID: instance.Spec.TeamID,
+			TLS: &zalando.TLSDescription{
+				SecretName: "secret-name-example",
+			},
+			Users: map[string]zalando.UserFlags{},
+			Volume: zalando.Volume{
+				Size: "8Gi",
 			},
 		},
 	})
@@ -84,10 +115,10 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	}
 	return ctrl.Result{}, nil
 }
+// todo: Modify the postgresql object.
 func addDefaultValue(before *zalando.Postgresql) (*zalando.Postgresql, error) {
-	after := &zalando.Postgresql{}
-	// todo: Replace nil with an empty object.
-	return after, nil
+	// after := &zalando.Postgresql{}
+	return before, nil
 }
 func (r *PostgresReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).

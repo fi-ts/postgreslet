@@ -11,5 +11,8 @@ make docker-build
 # Check the image is ready
 docker image ls
 make docker-load-kind
+make run
+
+# todo: Make this work.
 make deploy
 ```
