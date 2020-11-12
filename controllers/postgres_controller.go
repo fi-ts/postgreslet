@@ -115,6 +115,7 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	}
 	return ctrl.Result{}, nil
 }
+
 // todo: Modify the postgresql object.
 func addDefaultValue(before *zalando.Postgresql) (*zalando.Postgresql, error) {
 	// after := &zalando.Postgresql{}

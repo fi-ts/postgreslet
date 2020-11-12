@@ -3,6 +3,6 @@ kind: Postgres
 metadata:
   name: postgres-sample
 spec:
-  # Add fields here
-  name: my-db
-  version: "11.2"
+  teamId: "x"
+  numberOfInstances: 2
+  version: "12"
