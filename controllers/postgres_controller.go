@@ -41,8 +41,8 @@ type PostgresReconciler struct {
 
 // +kubebuilder:rbac:groups=database.fits.cloud,resources=postgres,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=database.fits.cloud,resources=postgres/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=acid.zalan.do,resources=postgresql,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=acid.zalan.do,resources=postgresql/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=acid.zalan.do,resources=postgresqls,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=acid.zalan.do,resources=postgresqls/status,verbs=get;update;patch
 
 func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	_ = context.Background()

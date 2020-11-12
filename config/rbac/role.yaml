@@ -9,7 +9,7 @@ rules:
 - apiGroups:
   - acid.zalan.do
   resources:
-  - postgresql
+  - postgresqls
   verbs:
   - create
   - delete
@@ -21,7 +21,7 @@ rules:
 - apiGroups:
   - acid.zalan.do
   resources:
-  - postgresql/status
+  - postgresqls/status
   verbs:
   - get
   - patch
