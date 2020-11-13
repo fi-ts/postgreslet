@@ -39,8 +39,10 @@ deploy: manifests
 	kustomize build config/default | kubectl apply -f -
 
 # Generate manifests e.g. CRD, RBAC etc.
+# todo: Remove `sed ...` once the bug in `kubebuilder` is fixed
 manifests: controller-gen
 	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=manager-role webhook paths="./..." output:crd:artifacts:config=config/crd/bases
+	sed -z 's#spec:#spec:\n  preserveUnknownFields: false#' -i config/crd/bases/database.fits.cloud_postgres.yaml
 
 # Run go fmt against code
 fmt:
