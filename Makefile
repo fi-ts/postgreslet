@@ -62,8 +62,8 @@ docker-build: test
 docker-push:
 	docker push ${IMG}
 
-docker-load-kind:
-	kind load docker-image ${IMG}
+kind-load-image:
+	kind load docker-image ${IMG} -v 1
 
 # find or download controller-gen
 # download controller-gen if necessary

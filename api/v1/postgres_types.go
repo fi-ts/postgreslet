@@ -24,10 +24,10 @@ import (
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
 // +kubebuilder:object:root=true
-
-// Postgres is the Schema for the postgres API
 // +kubebuilder:printcolumn:name="Name",type=string,JSONPath=`.spec.name`
 // +kubebuilder:printcolumn:name="Version",type=string,JSONPath=`.spec.version`
+
+// Postgres is the Schema for the postgres API
 type Postgres struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -41,12 +41,16 @@ type PostgresSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	// Name the name of this postgres database
-	Name string `json:"name,omitempty"`
+	NumberOfInstances int32  `json:"numberOfInstances"`
+	PostgresConfig
+	TeamID            string `json:"teamID"`
+
 	// Version is the postgres version
 	Version string `json:"version,omitempty"`
 }
-
+type PostgresConfig struct {
+	Version string `json:"version"`
+}
 // PostgresStatus defines the observed state of Postgres
 type PostgresStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
@@ -60,6 +64,11 @@ type PostgresList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []Postgres `json:"items"`
+}
+
+// IsBeingDeleted returns true if the deletion-timestamp is set
+func (p *Postgres) IsBeingDeleted() bool {
+	return !p.ObjectMeta.DeletionTimestamp.IsZero()
 }
 
 func init() {

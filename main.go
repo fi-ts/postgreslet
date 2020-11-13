@@ -28,6 +28,7 @@ import (
 
 	databasev1 "github.com/fi-ts/postgres-controller/api/v1"
 	"github.com/fi-ts/postgres-controller/controllers"
+	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -40,6 +41,7 @@ func init() {
 	_ = clientgoscheme.AddToScheme(scheme)
 
 	_ = databasev1.AddToScheme(scheme)
+	_ = zalando.AddToScheme(scheme)
 	// +kubebuilder:scaffold:scheme
 }
 

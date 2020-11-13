@@ -27,7 +27,7 @@ spec:
         - /manager
         args:
         - --enable-leader-election
-        image: postgres-controller:latest
+        image: controller:latest
         imagePullPolicy: IfNotPresent
         name: manager
         resources:

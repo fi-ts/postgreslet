@@ -1,8 +1,16 @@
 apiVersion: database.fits.cloud/v1
 kind: Postgres
 metadata:
-  name: postgres-sample
+  name: acid-minimal-cluster
+  namespace: default
 spec:
-  # Add fields here
-  name: my-db
-  version: "11.2"
+  numberOfInstances: 2
+  postgresConfig:
+    version: "12"
+  teamId: "acid"
+  users:
+    zalando:
+    - createdb
+    - superuser
+  volume:
+    size: 1Gi

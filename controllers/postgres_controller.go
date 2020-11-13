@@ -19,9 +19,12 @@ package controllers
 import (
 	"context"
 	"fmt"
-	"time"
+	"log"
 
 	"github.com/go-logr/logr"
+	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
+	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -38,20 +41,86 @@ type PostgresReconciler struct {
 
 // +kubebuilder:rbac:groups=database.fits.cloud,resources=postgres,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=database.fits.cloud,resources=postgres/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=acid.zalan.do,resources=postgresqls,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=acid.zalan.do,resources=postgresqls/status,verbs=get;update;patch
 
 func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	_ = context.Background()
 	_ = r.Log.WithValues("postgres", req.NamespacedName)
 
-	// your logic here
-	// FIXME remove this is a stupid example
-	if 1 < 0 {
-		return ctrl.Result{RequeueAfter: 10 * time.Second, Requeue: true}, fmt.Errorf("one unequal 0")
+	instance := &databasev1.Postgres{}
+	if err := r.Get(context.Background(), req.NamespacedName, instance); err != nil {
+		if errors.IsNotFound(err) {
+			return ctrl.Result{}, nil
+		}
+		return ctrl.Result{}, err
 	}
 
+	if instance.IsBeingDeleted() {
+		// Delete the instance.
+	}
+
+	// Evaluate the status of the instance.
+	// One circumstance: Create
+	newZInstance, err := addDefaultValue(&zalando.Postgresql{
+		ObjectMeta: meta.ObjectMeta{
+			Name:      instance.Spec.TeamID + "-" + instance.Name,
+			Namespace: instance.Namespace,
+		},
+			Spec: zalando.PostgresSpec{
+			Clone: zalando.CloneDescription{
+				ClusterName: "cluster-name-example",
+			},
+			NumberOfInstances: instance.Spec.NumberOfInstances,
+			Resources: zalando.Resources{
+				ResourceLimits: zalando.ResourceDescription{
+					CPU:    "1",
+					Memory: "2Gi",
+				},
+				ResourceRequests: zalando.ResourceDescription{
+					CPU:    "1",
+					Memory: "2Gi",
+				},
+			},
+			Patroni: zalando.Patroni{
+				InitDB: map[string]string{},
+				PgHba:  []string{},
+				Slots:  map[string]map[string]string{},
+			},
+			PodAnnotations: map[string]string{},
+			PostgresqlParam: zalando.PostgresqlParam{
+				Parameters: map[string]string{},
+				PgVersion:  instance.Spec.Version,
+			},
+			ServiceAnnotations: map[string]string{},
+			StandbyCluster: &zalando.StandbyDescription{
+				S3WalPath: "",
+			},
+			TeamID: instance.Spec.TeamID,
+			TLS: &zalando.TLSDescription{
+				SecretName: "",
+			},
+			Users: map[string]zalando.UserFlags{},
+			Volume: zalando.Volume{
+				Size: "1Gi",
+			},
+		},
+	})
+	log.Print(newZInstance)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("error while creating the local postgresql in GO-code: %v", err)
+	}
+	if err := r.Create(context.Background(), newZInstance); err != nil {
+		return ctrl.Result{}, fmt.Errorf("error while creating CRD postgresql: %v", err)
+	}
 	return ctrl.Result{}, nil
 }
 
+// todo: Modify the postgresql object.
+func addDefaultValue(before *zalando.Postgresql) (*zalando.Postgresql, error) {
+	// after := &zalando.Postgresql{}
+	return before, nil
+}
 func (r *PostgresReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&databasev1.Postgres{}).
