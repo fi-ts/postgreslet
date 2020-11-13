@@ -42,12 +42,15 @@ type PostgresSpec struct {
 	// Important: Run "make" to regenerate code after modifying this file
 
 	NumberOfInstances int32  `json:"numberOfInstances"`
-	TeamID            string `json:"teamId"`
+	PostgresConfig
+	TeamID            string `json:"teamID"`
 
 	// Version is the postgres version
 	Version string `json:"version,omitempty"`
 }
-
+type PostgresConfig struct {
+	Version string `json:"version"`
+}
 // PostgresStatus defines the observed state of Postgres
 type PostgresStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster

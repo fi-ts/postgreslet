@@ -67,7 +67,7 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			Name:      instance.Spec.TeamID + "-" + instance.Name,
 			Namespace: instance.Namespace,
 		},
-		Spec: zalando.PostgresSpec{
+			Spec: zalando.PostgresSpec{
 			Clone: zalando.CloneDescription{
 				ClusterName: "cluster-name-example",
 			},
@@ -94,15 +94,15 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			},
 			ServiceAnnotations: map[string]string{},
 			StandbyCluster: &zalando.StandbyDescription{
-				S3WalPath: "s3-wal-path-example",
+				S3WalPath: "",
 			},
 			TeamID: instance.Spec.TeamID,
 			TLS: &zalando.TLSDescription{
-				SecretName: "secret-name-example",
+				SecretName: "",
 			},
 			Users: map[string]zalando.UserFlags{},
 			Volume: zalando.Volume{
-				Size: "8Gi",
+				Size: "1Gi",
 			},
 		},
 	})
