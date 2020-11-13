@@ -4,7 +4,13 @@ package v1
 // will be configured during postgres-controller deployment
 // TODO should be a CRD as well to keep configuration identical
 type PostgresProfile struct {
-	Versions        []string
-	OperatorVersion string
+	Versions          []string
+	NumberOfInstances []int
+	Operators         []Operator
 	// TODO  more
+}
+
+type Operator struct {
+	Provider string
+	Version  []string
 }
