@@ -43,6 +43,11 @@ func (r *Postgres) Default() {
 	postgreslog.Info("default", "name", r.Name)
 
 	// TODO(user): fill in your defaulting logic.
+
+	if r.Spec.Size.CPU == "" {
+		// FIXME Defaults should come from a separate resource
+		r.Spec.Size.CPU = "500m"
+	}
 }
 
 // TODO(user): change verbs to "verbs=create;update;delete" if you want to enable deletion validation.

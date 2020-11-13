@@ -42,17 +42,70 @@ spec:
         spec:
           description: PostgresSpec defines the desired state of Postgres
           properties:
-            numberOfInstances:
+            access_list:
+              description: AccessList defines access restrictions
+              properties:
+                source_ranges:
+                  description: SourceRanges defines a list of prefixes in CIDR Notation
+                    e.g. 1.2.3.0/24
+                  items:
+                    type: string
+                  type: array
+              type: object
+            backup:
+              description: Backup parametes of the database backup
+              properties:
+                retention:
+                  description: Retention defines how many backups will reside. FIXME
+                    check zalando CRD for other options, e.g. Days
+                  format: int32
+                  type: integer
+              type: object
+            description:
+              description: Description
+              type: string
+            maintenance:
+              description: Maintenance defines automatic maintenance of the database
+              properties:
+                auto:
+                  description: Auto if set to true database maintenance is done by
+                    the operator
+                  type: boolean
+                time_window:
+                  description: Window defines the time window where the maintenance
+                    will happen if Auto is set to true FIXME format
+                  type: string
+              type: object
+            number_of_instances:
+              description: NumberOfInstances number of replicas
               format: int32
               type: integer
-            teamId:
+            partition_id:
+              description: PartitionID the partition where the database is created
+              type: string
+            project_id:
+              description: ProjectID metal project ID
+              type: string
+            size:
+              description: Size of the database
+              properties:
+                cpu:
+                  description: CPU is in the format as pod.spec.resource.request.cpu
+                  type: string
+                shared_buffer:
+                  description: SharedBuffer of the database
+                  type: string
+                storage_size:
+                  description: StorageSize the amount of Storage this database will
+                    get
+                  type: string
+              type: object
+            tenant:
+              description: Tenant metal tenant
               type: string
             version:
               description: Version is the postgres version
               type: string
-          required:
-          - numberOfInstances
-          - teamId
           type: object
         status:
           description: PostgresStatus defines the observed state of Postgres

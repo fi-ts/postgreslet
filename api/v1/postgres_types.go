@@ -41,16 +41,61 @@ type PostgresSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	NumberOfInstances int32  `json:"numberOfInstances"`
-	PostgresConfig
-	TeamID            string `json:"teamID"`
-
+	// Description
+	Description string `json:"description,omitempty"`
+	// ProjectID metal project ID
+	ProjectID string `json:"project_id,omitempty"`
+	// Tenant metal tenant
+	Tenant string `json:"tenant,omitempty"`
+	// PartitionID the partition where the database is created
+	PartitionID string `json:"partition_id,omitempty"`
+	// NumberOfInstances number of replicas
+	NumberOfInstances int32 `json:"number_of_instances,omitempty"`
 	// Version is the postgres version
 	Version string `json:"version,omitempty"`
+	// Size of the database
+	Size Size `json:"size,omitempty"`
+	// Maintenance defines automatic maintenance of the database
+	Maintenance Maintenance `json:"maintenance,omitempty"`
+	// Backup parametes of the database backup
+	Backup Backup `json:"backup,omitempty"`
+	// AccessList defines access restrictions
+	AccessList AccessList `json:"access_list,omitempty"`
 }
-type PostgresConfig struct {
-	Version string `json:"version"`
+
+// AccessList defines the type of restrictions to access the database
+type AccessList struct {
+	// SourceRanges defines a list of prefixes in CIDR Notation e.g. 1.2.3.0/24
+	// FIXME implement validation if source is a parsable CIDR
+	SourceRanges []string `json:"source_ranges,omitempty"`
 }
+
+// Backup configure parametes of the database backup
+type Backup struct {
+	// Retention defines how many backups will reside.
+	// FIXME check zalando CRD for other options, e.g. Days
+	Retention int32 `json:"retention,omitempty"`
+}
+
+// Size defines the size aspects of the database
+type Size struct {
+	// CPU is in the format as pod.spec.resource.request.cpu
+	CPU string `json:"cpu,omitempty"`
+	// SharedBuffer of the database
+	SharedBuffer string `json:"shared_buffer,omitempty"`
+	// StorageSize the amount of Storage this database will get
+	StorageSize string `json:"storage_size,omitempty"`
+}
+
+// Maintenance configures automatic database maintenance
+type Maintenance struct {
+	// Auto if set to true database maintenance is done by the operator
+	Auto bool `json:"auto,omitempty"`
+	// Window defines the time window where the maintenance will happen if Auto is set to true
+	// FIXME format
+	TimeWindow string `json:"time_window,omitempty"`
+}
+
 // PostgresStatus defines the observed state of Postgres
 type PostgresStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster

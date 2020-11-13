@@ -64,10 +64,10 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	// One circumstance: Create
 	newZInstance, err := addDefaultValue(&zalando.Postgresql{
 		ObjectMeta: meta.ObjectMeta{
-			Name:      instance.Spec.TeamID + "-" + instance.Name,
+			Name:      instance.Spec.ProjectID + "-" + instance.Name,
 			Namespace: instance.Namespace,
 		},
-			Spec: zalando.PostgresSpec{
+		Spec: zalando.PostgresSpec{
 			Clone: zalando.CloneDescription{
 				ClusterName: "cluster-name-example",
 			},
@@ -96,7 +96,7 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			StandbyCluster: &zalando.StandbyDescription{
 				S3WalPath: "",
 			},
-			TeamID: instance.Spec.TeamID,
+			TeamID: instance.Spec.ProjectID,
 			TLS: &zalando.TLSDescription{
 				SecretName: "",
 			},
