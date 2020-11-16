@@ -26,9 +26,10 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
+	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
+
 	databasev1 "github.com/fi-ts/postgres-controller/api/v1"
 	"github.com/fi-ts/postgres-controller/controllers"
-	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -78,6 +79,14 @@ func main() {
 	}
 	if err = (&databasev1.Postgres{}).SetupWebhookWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create webhook", "webhook", "Postgres")
+		os.Exit(1)
+	}
+	if err = (&controllers.PostgresProfileReconciler{
+		Client: mgr.GetClient(),
+		Log:    ctrl.Log.WithName("controllers").WithName("PostgresProfile"),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "PostgresProfile")
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder

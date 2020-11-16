@@ -46,3 +46,23 @@ rules:
   - get
   - patch
   - update
+- apiGroups:
+  - database.fits.cloud
+  resources:
+  - postgresprofiles
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - database.fits.cloud
+  resources:
+  - postgresprofiles/status
+  verbs:
+  - get
+  - patch
+  - update

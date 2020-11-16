@@ -4,4 +4,7 @@ resources:
 - group: database
   kind: Postgres
   version: v1
+- group: database
+  kind: PostgresProfile
+  version: v1
 version: "2"
