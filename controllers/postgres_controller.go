@@ -56,6 +56,15 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		return ctrl.Result{}, err
 	}
 
+	// TODO implement later once postgreslet is in place
+	// if instance.Spec.PartitionID != myPartition {
+	// 	return ctrl.Result{}, nil
+	// }
+
+	// if tenantOnly != "" && instance.Spec.Tenant != tenantOnly {
+	// 	return ctrl.Result{}, nil
+	// }
+
 	if instance.IsBeingDeleted() {
 		// Delete the instance.
 	}
