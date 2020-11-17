@@ -34,7 +34,7 @@ spec:
         spec:
           description: PostgresProfileSpec defines the desired state of PostgresProfile
           properties:
-            default_backup:
+            defaultBackup:
               description: Backup configure parametes of the database backup
               properties:
                 retention:
@@ -46,10 +46,10 @@ spec:
                     in cron format
                   type: string
               type: object
-            default_maintenance:
+            defaultMaintenance:
               description: Maintenance configures database maintenance
               properties:
-                time_window:
+                timeWindow:
                   description: TimeWindow defines when the maintenance should happen
                   properties:
                     end:
@@ -64,9 +64,9 @@ spec:
                     maintenance
                   type: integer
               type: object
-            default_number_of_instances:
+            defaultNumberOfInstances:
               type: integer
-            default_operator:
+            defaultOperator:
               description: Operator defines which provider of the operator should
                 be used and its version
               properties:
@@ -77,23 +77,23 @@ spec:
                     type: string
                   type: array
               type: object
-            default_size:
+            defaultSize:
               description: Size defines the size aspects of the database
               properties:
                 cpu:
                   description: CPU is in the format as pod.spec.resource.request.cpu
                   type: string
-                shared_buffer:
+                sharedBuffer:
                   description: SharedBuffer of the database
                   type: string
-                storage_size:
+                storageSize:
                   description: StorageSize the amount of Storage this database will
                     get
                   type: string
               type: object
-            default_version:
+            defaultVersion:
               type: string
-            number_of_instances:
+            numberOfInstances:
               items:
                 type: integer
               type: array
@@ -117,10 +117,10 @@ spec:
                   cpu:
                     description: CPU is in the format as pod.spec.resource.request.cpu
                     type: string
-                  shared_buffer:
+                  sharedBuffer:
                     description: SharedBuffer of the database
                     type: string
-                  storage_size:
+                  storageSize:
                     description: StorageSize the amount of Storage this database will
                       get
                     type: string

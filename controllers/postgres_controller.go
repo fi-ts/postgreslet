@@ -20,17 +20,25 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/go-logr/logr"
 	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	databasev1 "github.com/fi-ts/postgres-controller/api/v1"
 )
+
+// Requeue defines in how many seconds a requeue should happen
+var Requeue = ctrl.Result{
+	Requeue:      true,
+	RequeueAfter: 30 * time.Second,
+}
 
 // PostgresReconciler reconciles a Postgres object
 type PostgresReconciler struct {
@@ -69,25 +77,56 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		// Delete the instance.
 	}
 
-	// Evaluate the status of the instance.
-	// One circumstance: Create
-	newZInstance, err := addDefaultValue(&zalando.Postgresql{
+	if !instance.Status.Initiated {
+		newZInstance, err := toZInstance(instance)
+		log.Print(newZInstance)
+		if err != nil {
+			return ctrl.Result{}, fmt.Errorf("error while creating the local postgresql in GO-code: %v", err)
+		}
+		if err := r.Create(context.Background(), newZInstance); err != nil {
+			return ctrl.Result{}, fmt.Errorf("error while creating CRD postgresql: %v", err)
+		}
+		instance.Status.Initiated = true
+		if err := r.Status().Update(context.Background(), instance); err != nil {
+			return ctrl.Result{}, fmt.Errorf("error while updating the status: %v", err)
+		}
+	}
+
+	zInstance := &zalando.Postgresql{}
+	if err := r.Get(context.Background(), *toZKey(instance), zInstance); err != nil {
+		if errors.IsNotFound(err) {
+			return Requeue, nil
+		}
+		return ctrl.Result{}, err
+	}
+	instance.Status.Description = zInstance.Status.PostgresClusterStatus
+	if err := r.Status().Update(context.Background(), instance); err != nil {
+		return ctrl.Result{}, fmt.Errorf("error while updating the status: %v", err)
+	}
+
+	return ctrl.Result{}, nil
+}
+
+// Map to zalando CRD
+func toZInstance(in *databasev1.Postgres) (*zalando.Postgresql, error) {
+	return &zalando.Postgresql{
 		ObjectMeta: meta.ObjectMeta{
-			Name:      instance.Spec.ProjectID + "-" + instance.Name,
-			Namespace: instance.Namespace,
+			Name:      "acid-minimal-cluster",
+			Namespace: in.Namespace,
 		},
 		Spec: zalando.PostgresSpec{
 			Clone: zalando.CloneDescription{
-				ClusterName: "cluster-name-example",
+				ClusterName: "",
 			},
-			NumberOfInstances: instance.Spec.NumberOfInstances,
+			Databases:         map[string]string{"foo": "zalando"},
+			NumberOfInstances: in.Spec.NumberOfInstances,
 			Resources: zalando.Resources{
-				ResourceLimits: zalando.ResourceDescription{
-					CPU:    "1",
+				ResourceRequests: zalando.ResourceDescription{
+					CPU:    in.Spec.Size.CPU,
 					Memory: "2Gi",
 				},
-				ResourceRequests: zalando.ResourceDescription{
-					CPU:    "1",
+				ResourceLimits: zalando.ResourceDescription{
+					CPU:    in.Spec.Size.CPU,
 					Memory: "2Gi",
 				},
 			},
@@ -99,36 +138,32 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			PodAnnotations: map[string]string{},
 			PostgresqlParam: zalando.PostgresqlParam{
 				Parameters: map[string]string{},
-				PgVersion:  instance.Spec.Version,
+				PgVersion:  "12",
 			},
 			ServiceAnnotations: map[string]string{},
 			StandbyCluster: &zalando.StandbyDescription{
 				S3WalPath: "",
 			},
-			TeamID: instance.Spec.ProjectID,
+			TeamID: "acid",
 			TLS: &zalando.TLSDescription{
 				SecretName: "",
 			},
-			Users: map[string]zalando.UserFlags{},
+			Users: map[string]zalando.UserFlags{
+				"zalando": {"createdb", "superuser"},
+			},
 			Volume: zalando.Volume{
 				Size: "1Gi",
 			},
-		},
-	})
-	log.Print(newZInstance)
-	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("error while creating the local postgresql in GO-code: %v", err)
-	}
-	if err := r.Create(context.Background(), newZInstance); err != nil {
-		return ctrl.Result{}, fmt.Errorf("error while creating CRD postgresql: %v", err)
-	}
-	return ctrl.Result{}, nil
+		}}, nil
 }
-
-// todo: Modify the postgresql object.
-func addDefaultValue(before *zalando.Postgresql) (*zalando.Postgresql, error) {
-	// after := &zalando.Postgresql{}
-	return before, nil
+func toZKey(in *databasev1.Postgres) *types.NamespacedName {
+	return &types.NamespacedName{
+		Namespace: in.Namespace,
+		Name:      toZName(in),
+	}
+}
+func toZName(in *databasev1.Postgres) string {
+	return in.Spec.ProjectID + "-" + in.Name
 }
 func (r *PostgresReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).

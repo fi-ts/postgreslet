@@ -44,14 +44,14 @@ type PostgresSpec struct {
 	// Description
 	Description string `json:"description,omitempty"`
 	// ProjectID metal project ID
-	ProjectID string `json:"project_id,omitempty"`
+	ProjectID string `json:"projectID,omitempty"`
 	// Tenant metal tenant
 	Tenant string `json:"tenant,omitempty"`
 	// PartitionID the partition where the database is created
-	PartitionID string `json:"partition_id,omitempty"`
+	PartitionID string `json:"partitionID,omitempty"`
 	// NumberOfInstances number of replicas
-	NumberOfInstances int32 `json:"number_of_instances,omitempty"`
-	// Version is the postgres version
+	NumberOfInstances int32 `json:"numberOfInstances,omitempty"`
+	// Version is the version of Postgre-as-a-Service
 	Version string `json:"version,omitempty"`
 	// Size of the database
 	Size Size `json:"size,omitempty"`
@@ -60,21 +60,20 @@ type PostgresSpec struct {
 	// Backup parametes of the database backup
 	Backup Backup `json:"backup,omitempty"`
 	// AccessList defines access restrictions
-	AccessList AccessList `json:"access_list,omitempty"`
+	AccessList AccessList `json:"accessList,omitempty"`
 }
 
 // AccessList defines the type of restrictions to access the database
 type AccessList struct {
 	// SourceRanges defines a list of prefixes in CIDR Notation e.g. 1.2.3.0/24
 	// FIXME implement validation if source is a parsable CIDR
-	SourceRanges []string `json:"source_ranges,omitempty"`
+	SourceRanges []string `json:"sourceRanges,omitempty"`
 }
 
 // Backup configure parametes of the database backup
 type Backup struct {
 	// Retention defines how many days a backup will persist
 	Retention int32 `json:"retention,omitempty"`
-
 	// Schedule defines how often a backup should be made, in cron format
 	Schedule string `json:"schedule,omitempty"`
 }
@@ -84,9 +83,9 @@ type Size struct {
 	// CPU is in the format as pod.spec.resource.request.cpu
 	CPU string `json:"cpu,omitempty"`
 	// SharedBuffer of the database
-	SharedBuffer string `json:"shared_buffer,omitempty"`
+	SharedBuffer string `json:"sharedBuffer,omitempty"`
 	// StorageSize the amount of Storage this database will get
-	StorageSize string `json:"storage_size,omitempty"`
+	StorageSize string `json:"storageSize,omitempty"`
 }
 
 // Weekday defines a weekday or everyday
@@ -114,13 +113,15 @@ type Maintenance struct {
 	// Weekday defines when the operator is allowed to do maintenance
 	Weekday Weekday `json:"weekday,omitempty"`
 	// TimeWindow defines when the maintenance should happen
-	TimeWindow TimeWindow `json:"time_window,omitempty"`
+	TimeWindow TimeWindow `json:"timeWindow,omitempty"`
 }
 
 // PostgresStatus defines the observed state of Postgres
 type PostgresStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
+	Initiated   bool   `json:"initiated,omitempty"`
+	Description string `json:"description,omitempty"`
 }
 
 // +kubebuilder:object:root=true

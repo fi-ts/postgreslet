@@ -39,17 +39,17 @@ type PostgresProfileSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	NumberOfInstances []int      `json:"number_of_instances,omitempty"`
+	NumberOfInstances []int      `json:"numberOfInstances,omitempty"`
 	Operators         []Operator `json:"operators,omitempty"`
 	Sizes             []Size     `json:"sizes,omitempty"`
 	Versions          []string   `json:"versions,omitempty"`
 
-	DefaultBackup            Backup      `json:"default_backup,omitempty"`
-	DefaultMaintenance       Maintenance `json:"default_maintenance,omitempty"`
-	DefaultNumberOfInstances int         `json:"default_number_of_instances,omitempty"`
-	DefaultOperator          Operator    `json:"default_operator,omitempty"`
-	DefaultSize              Size        `json:"default_size,omitempty"`
-	DefaultVersion           string      `json:"default_version,omitempty"`
+	DefaultBackup            Backup      `json:"defaultBackup,omitempty"`
+	DefaultMaintenance       Maintenance `json:"defaultMaintenance,omitempty"`
+	DefaultNumberOfInstances int         `json:"defaultNumberOfInstances,omitempty"`
+	DefaultOperator          Operator    `json:"defaultOperator,omitempty"`
+	DefaultSize              Size        `json:"defaultSize,omitempty"`
+	DefaultVersion           string      `json:"defaultVersion,omitempty"`
 }
 
 // Operator defines which provider of the operator should be used and its version
