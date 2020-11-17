@@ -81,14 +81,7 @@ func main() {
 		setupLog.Error(err, "unable to create webhook", "webhook", "Postgres")
 		os.Exit(1)
 	}
-	if err = (&controllers.PostgresProfileReconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("PostgresProfile"),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "PostgresProfile")
-		os.Exit(1)
-	}
+
 	// +kubebuilder:scaffold:builder
 
 	setupLog.Info("starting manager")
