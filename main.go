@@ -26,9 +26,10 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
+	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
+
 	databasev1 "github.com/fi-ts/postgres-controller/api/v1"
 	"github.com/fi-ts/postgres-controller/controllers"
-	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -80,6 +81,7 @@ func main() {
 		setupLog.Error(err, "unable to create webhook", "webhook", "Postgres")
 		os.Exit(1)
 	}
+
 	// +kubebuilder:scaffold:builder
 
 	setupLog.Info("starting manager")

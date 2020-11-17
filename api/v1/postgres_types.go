@@ -72,9 +72,11 @@ type AccessList struct {
 
 // Backup configure parametes of the database backup
 type Backup struct {
-	// Retention defines how many backups will reside.
-	// FIXME check zalando CRD for other options, e.g. Days
+	// Retention defines how many days a backup will persist
 	Retention int32 `json:"retention,omitempty"`
+
+	// Schedule defines how often a backup should be made, in cron format
+	Schedule string `json:"schedule,omitempty"`
 }
 
 // Size defines the size aspects of the database
@@ -87,13 +89,32 @@ type Size struct {
 	StorageSize string `json:"storage_size,omitempty"`
 }
 
-// Maintenance configures automatic database maintenance
+// Weekday defines a weekday or everyday
+type Weekday int
+
+const (
+	Sun Weekday = iota
+	Mon
+	Tue
+	Wed
+	Thu
+	Fri
+	Sat
+	All
+)
+
+// TimeWindow defines an interval in time
+type TimeWindow struct {
+	Start metav1.Time `json:"start,omitempty"`
+	End   metav1.Time `json:"end,omitempty"`
+}
+
+// Maintenance configures database maintenance
 type Maintenance struct {
-	// Auto if set to true database maintenance is done by the operator
-	Auto bool `json:"auto,omitempty"`
-	// Window defines the time window where the maintenance will happen if Auto is set to true
-	// FIXME format
-	TimeWindow string `json:"time_window,omitempty"`
+	// Weekday defines when the operator is allowed to do maintenance
+	Weekday Weekday `json:"weekday,omitempty"`
+	// TimeWindow defines when the maintenance should happen
+	TimeWindow TimeWindow `json:"time_window,omitempty"`
 }
 
 // PostgresStatus defines the observed state of Postgres

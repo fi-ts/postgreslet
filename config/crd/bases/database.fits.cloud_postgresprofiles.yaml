@@ -6,27 +6,18 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.3.0
   creationTimestamp: null
-  name: postgres.database.fits.cloud
+  name: postgresprofiles.database.fits.cloud
 spec:
-  preserveUnknownFields: false
-  additionalPrinterColumns:
-  - JSONPath: .spec.name
-    name: Name
-    type: string
-  - JSONPath: .spec.version
-    name: Version
-    type: string
   group: database.fits.cloud
   names:
-    kind: Postgres
-    listKind: PostgresList
-    plural: postgres
-    singular: postgres
+    kind: PostgresProfile
+    listKind: PostgresProfileList
+    plural: postgresprofiles
+    singular: postgresprofile
   scope: Namespaced
-  subresources: {}
   validation:
     openAPIV3Schema:
-      description: Postgres is the Schema for the postgres API
+      description: PostgresProfile is the Schema for the postgresprofiles API
       properties:
         apiVersion:
           description: 'APIVersion defines the versioned schema of this representation
@@ -41,21 +32,10 @@ spec:
         metadata:
           type: object
         spec:
-          description: PostgresSpec defines the desired state of Postgres
+          description: PostgresProfileSpec defines the desired state of PostgresProfile
           properties:
-            access_list:
-              description: AccessList defines access restrictions
-              properties:
-                source_ranges:
-                  description: SourceRanges defines a list of prefixes in CIDR Notation
-                    e.g. 1.2.3.0/24 FIXME implement validation if source is a parsable
-                    CIDR
-                  items:
-                    type: string
-                  type: array
-              type: object
-            backup:
-              description: Backup parametes of the database backup
+            default_backup:
+              description: Backup configure parametes of the database backup
               properties:
                 retention:
                   description: Retention defines how many days a backup will persist
@@ -66,11 +46,8 @@ spec:
                     in cron format
                   type: string
               type: object
-            description:
-              description: Description
-              type: string
-            maintenance:
-              description: Maintenance defines automatic maintenance of the database
+            default_maintenance:
+              description: Maintenance configures database maintenance
               properties:
                 time_window:
                   description: TimeWindow defines when the maintenance should happen
@@ -87,18 +64,21 @@ spec:
                     maintenance
                   type: integer
               type: object
-            number_of_instances:
-              description: NumberOfInstances number of replicas
-              format: int32
+            default_number_of_instances:
               type: integer
-            partition_id:
-              description: PartitionID the partition where the database is created
-              type: string
-            project_id:
-              description: ProjectID metal project ID
-              type: string
-            size:
-              description: Size of the database
+            default_operator:
+              description: Operator defines which provider of the operator should
+                be used and its version
+              properties:
+                provider:
+                  type: string
+                version:
+                  items:
+                    type: string
+                  type: array
+              type: object
+            default_size:
+              description: Size defines the size aspects of the database
               properties:
                 cpu:
                   description: CPU is in the format as pod.spec.resource.request.cpu
@@ -111,15 +91,48 @@ spec:
                     get
                   type: string
               type: object
-            tenant:
-              description: Tenant metal tenant
+            default_version:
               type: string
-            version:
-              description: Version is the postgres version
-              type: string
+            number_of_instances:
+              items:
+                type: integer
+              type: array
+            operators:
+              items:
+                description: Operator defines which provider of the operator should
+                  be used and its version
+                properties:
+                  provider:
+                    type: string
+                  version:
+                    items:
+                      type: string
+                    type: array
+                type: object
+              type: array
+            sizes:
+              items:
+                description: Size defines the size aspects of the database
+                properties:
+                  cpu:
+                    description: CPU is in the format as pod.spec.resource.request.cpu
+                    type: string
+                  shared_buffer:
+                    description: SharedBuffer of the database
+                    type: string
+                  storage_size:
+                    description: StorageSize the amount of Storage this database will
+                      get
+                    type: string
+                type: object
+              type: array
+            versions:
+              items:
+                type: string
+              type: array
           type: object
         status:
-          description: PostgresStatus defines the observed state of Postgres
+          description: PostgresProfileStatus defines the observed state of PostgresProfile
           type: object
       type: object
   version: v1
