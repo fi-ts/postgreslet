@@ -1,14 +1,21 @@
 
 ---
-apiVersion: apiextensions.k8s.io/v1
+apiVersion: apiextensions.k8s.io/v1beta1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.4.0
+    controller-gen.kubebuilder.io/version: v0.2.5
   creationTimestamp: null
   name: postgres.database.fits.cloud
 spec:
   preserveUnknownFields: false
+  additionalPrinterColumns:
+  - JSONPath: .spec.name
+    name: Name
+    type: string
+  - JSONPath: .spec.version
+    name: Version
+    type: string
   group: database.fits.cloud
   names:
     kind: Postgres
@@ -16,124 +23,118 @@ spec:
     plural: postgres
     singular: postgres
   scope: Namespaced
-  versions:
-  - additionalPrinterColumns:
-    - jsonPath: .spec.name
-      name: Name
-      type: string
-    - jsonPath: .spec.version
-      name: Version
-      type: string
-    name: v1
-    schema:
-      openAPIV3Schema:
-        description: Postgres is the Schema for the postgres API
-        properties:
-          apiVersion:
-            description: 'APIVersion defines the versioned schema of this representation
-              of an object. Servers should convert recognized schemas to the latest
-              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
-            type: string
-          kind:
-            description: 'Kind is a string value representing the REST resource this
-              object represents. Servers may infer this from the endpoint the client
-              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
-            type: string
-          metadata:
-            type: object
-          spec:
-            description: PostgresSpec defines the desired state of Postgres
-            properties:
-              accessList:
-                description: AccessList defines access restrictions
-                properties:
-                  sourceRanges:
-                    description: SourceRanges defines a list of prefixes in CIDR Notation
-                      e.g. 1.2.3.0/24 FIXME implement validation if source is a parsable
-                      CIDR
-                    items:
+  subresources: {}
+  validation:
+    openAPIV3Schema:
+      description: Postgres is the Schema for the postgres API
+      properties:
+        apiVersion:
+          description: 'APIVersion defines the versioned schema of this representation
+            of an object. Servers should convert recognized schemas to the latest
+            internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+          type: string
+        kind:
+          description: 'Kind is a string value representing the REST resource this
+            object represents. Servers may infer this from the endpoint the client
+            submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+          type: string
+        metadata:
+          type: object
+        spec:
+          description: PostgresSpec defines the desired state of Postgres
+          properties:
+            accessList:
+              description: AccessList defines access restrictions
+              properties:
+                sourceRanges:
+                  description: SourceRanges defines a list of prefixes in CIDR Notation
+                    e.g. 1.2.3.0/24 FIXME implement validation if source is a parsable
+                    CIDR
+                  items:
+                    type: string
+                  type: array
+              type: object
+            backup:
+              description: Backup parametes of the database backup
+              properties:
+                retention:
+                  description: Retention defines how many days a backup will persist
+                  format: int32
+                  type: integer
+                schedule:
+                  description: Schedule defines how often a backup should be made,
+                    in cron format
+                  type: string
+              type: object
+            description:
+              description: Description
+              type: string
+            maintenance:
+              description: Maintenance defines automatic maintenance of the database
+              properties:
+                timeWindow:
+                  description: TimeWindow defines when the maintenance should happen
+                  properties:
+                    end:
+                      format: date-time
                       type: string
-                    type: array
-                type: object
-              backup:
-                description: Backup parametes of the database backup
-                properties:
-                  retention:
-                    description: Retention defines how many days a backup will persist
-                    format: int32
-                    type: integer
-                  schedule:
-                    description: Schedule defines how often a backup should be made,
-                      in cron format
-                    type: string
-                type: object
-              description:
-                description: Description
-                type: string
-              maintenance:
-                description: Maintenance defines automatic maintenance of the database
-                properties:
-                  timeWindow:
-                    description: TimeWindow defines when the maintenance should happen
-                    properties:
-                      end:
-                        format: date-time
-                        type: string
-                      start:
-                        format: date-time
-                        type: string
-                    type: object
-                  weekday:
-                    description: Weekday defines when the operator is allowed to do
-                      maintenance
-                    type: integer
-                type: object
-              numberOfInstances:
-                description: NumberOfInstances number of replicas
-                format: int32
-                type: integer
-              partitionID:
-                description: PartitionID the partition where the database is created
-                type: string
-              projectID:
-                description: ProjectID metal project ID
-                type: string
-              size:
-                description: Size of the database
-                properties:
-                  cpu:
-                    description: CPU is in the format as pod.spec.resource.request.cpu
-                    type: string
-                  sharedBuffer:
-                    description: SharedBuffer of the database
-                    type: string
-                  storageSize:
-                    description: StorageSize the amount of Storage this database will
-                      get
-                    type: string
-                type: object
-              tenant:
-                description: Tenant metal tenant
-                type: string
-              version:
-                description: Version is the version of Postgre-as-a-Service
-                type: string
-            type: object
-          status:
-            description: PostgresStatus defines the observed state of Postgres
-            properties:
-              description:
-                type: string
-              initiated:
-                description: 'INSERT ADDITIONAL STATUS FIELD - define observed state
-                  of cluster Important: Run "make" to regenerate code after modifying
-                  this file'
-                type: boolean
-            type: object
-        type: object
+                    start:
+                      format: date-time
+                      type: string
+                  type: object
+                weekday:
+                  description: Weekday defines when the operator is allowed to do
+                    maintenance
+                  type: integer
+              type: object
+            numberOfInstances:
+              description: NumberOfInstances number of replicas
+              format: int32
+              type: integer
+            partitionID:
+              description: PartitionID the partition where the database is created
+              type: string
+            projectID:
+              description: ProjectID metal project ID
+              type: string
+            size:
+              description: Size of the database
+              properties:
+                cpu:
+                  description: CPU is in the format as pod.spec.resource.request.cpu
+                  type: string
+                sharedBuffer:
+                  description: SharedBuffer of the database
+                  type: string
+                storageSize:
+                  description: StorageSize the amount of Storage this database will
+                    get
+                  type: string
+              type: object
+            tenant:
+              description: Tenant metal tenant
+              type: string
+            version:
+              description: Version is the version of Postgre-as-a-Service
+              type: string
+          type: object
+        status:
+          description: PostgresStatus defines the observed state of Postgres
+          properties:
+            description:
+              type: string
+            initiated:
+              description: 'INSERT ADDITIONAL STATUS FIELD - define observed state
+                of cluster Important: Run "make" to regenerate code after modifying
+                this file'
+              type: boolean
+          type: object
+      type: object
+  version: v1
+  versions:
+  - name: v1
     served: true
     storage: true
-    subresources: {}
 status:
   acceptedNames:
     kind: ""

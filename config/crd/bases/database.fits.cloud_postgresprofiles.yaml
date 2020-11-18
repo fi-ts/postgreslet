@@ -1,10 +1,10 @@
 
 ---
-apiVersion: apiextensions.k8s.io/v1
+apiVersion: apiextensions.k8s.io/v1beta1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.4.0
+    controller-gen.kubebuilder.io/version: v0.2.5
   creationTimestamp: null
   name: postgresprofiles.database.fits.cloud
 spec:
@@ -15,60 +15,90 @@ spec:
     plural: postgresprofiles
     singular: postgresprofile
   scope: Namespaced
-  versions:
-  - name: v1
-    schema:
-      openAPIV3Schema:
-        description: PostgresProfile is the Schema for the postgresprofiles API
-        properties:
-          apiVersion:
-            description: 'APIVersion defines the versioned schema of this representation
-              of an object. Servers should convert recognized schemas to the latest
-              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
-            type: string
-          kind:
-            description: 'Kind is a string value representing the REST resource this
-              object represents. Servers may infer this from the endpoint the client
-              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
-            type: string
-          metadata:
-            type: object
-          spec:
-            description: PostgresProfileSpec defines the desired state of PostgresProfile
-            properties:
-              defaultBackup:
-                description: Backup configure parametes of the database backup
-                properties:
-                  retention:
-                    description: Retention defines how many days a backup will persist
-                    format: int32
-                    type: integer
-                  schedule:
-                    description: Schedule defines how often a backup should be made,
-                      in cron format
+  validation:
+    openAPIV3Schema:
+      description: PostgresProfile is the Schema for the postgresprofiles API
+      properties:
+        apiVersion:
+          description: 'APIVersion defines the versioned schema of this representation
+            of an object. Servers should convert recognized schemas to the latest
+            internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+          type: string
+        kind:
+          description: 'Kind is a string value representing the REST resource this
+            object represents. Servers may infer this from the endpoint the client
+            submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+          type: string
+        metadata:
+          type: object
+        spec:
+          description: PostgresProfileSpec defines the desired state of PostgresProfile
+          properties:
+            defaultBackup:
+              description: Backup configure parametes of the database backup
+              properties:
+                retention:
+                  description: Retention defines how many days a backup will persist
+                  format: int32
+                  type: integer
+                schedule:
+                  description: Schedule defines how often a backup should be made,
+                    in cron format
+                  type: string
+              type: object
+            defaultMaintenance:
+              description: Maintenance configures database maintenance
+              properties:
+                timeWindow:
+                  description: TimeWindow defines when the maintenance should happen
+                  properties:
+                    end:
+                      format: date-time
+                      type: string
+                    start:
+                      format: date-time
+                      type: string
+                  type: object
+                weekday:
+                  description: Weekday defines when the operator is allowed to do
+                    maintenance
+                  type: integer
+              type: object
+            defaultNumberOfInstances:
+              type: integer
+            defaultOperator:
+              description: Operator defines which provider of the operator should
+                be used and its version
+              properties:
+                provider:
+                  type: string
+                version:
+                  items:
                     type: string
-                type: object
-              defaultMaintenance:
-                description: Maintenance configures database maintenance
-                properties:
-                  timeWindow:
-                    description: TimeWindow defines when the maintenance should happen
-                    properties:
-                      end:
-                        format: date-time
-                        type: string
-                      start:
-                        format: date-time
-                        type: string
-                    type: object
-                  weekday:
-                    description: Weekday defines when the operator is allowed to do
-                      maintenance
-                    type: integer
-                type: object
-              defaultNumberOfInstances:
+                  type: array
+              type: object
+            defaultSize:
+              description: Size defines the size aspects of the database
+              properties:
+                cpu:
+                  description: CPU is in the format as pod.spec.resource.request.cpu
+                  type: string
+                sharedBuffer:
+                  description: SharedBuffer of the database
+                  type: string
+                storageSize:
+                  description: StorageSize the amount of Storage this database will
+                    get
+                  type: string
+              type: object
+            defaultVersion:
+              type: string
+            numberOfInstances:
+              items:
                 type: integer
-              defaultOperator:
+              type: array
+            operators:
+              items:
                 description: Operator defines which provider of the operator should
                   be used and its version
                 properties:
@@ -79,7 +109,9 @@ spec:
                       type: string
                     type: array
                 type: object
-              defaultSize:
+              type: array
+            sizes:
+              items:
                 description: Size defines the size aspects of the database
                 properties:
                   cpu:
@@ -93,50 +125,19 @@ spec:
                       get
                     type: string
                 type: object
-              defaultVersion:
+              type: array
+            versions:
+              items:
                 type: string
-              numberOfInstances:
-                items:
-                  type: integer
-                type: array
-              operators:
-                items:
-                  description: Operator defines which provider of the operator should
-                    be used and its version
-                  properties:
-                    provider:
-                      type: string
-                    version:
-                      items:
-                        type: string
-                      type: array
-                  type: object
-                type: array
-              sizes:
-                items:
-                  description: Size defines the size aspects of the database
-                  properties:
-                    cpu:
-                      description: CPU is in the format as pod.spec.resource.request.cpu
-                      type: string
-                    sharedBuffer:
-                      description: SharedBuffer of the database
-                      type: string
-                    storageSize:
-                      description: StorageSize the amount of Storage this database
-                        will get
-                      type: string
-                  type: object
-                type: array
-              versions:
-                items:
-                  type: string
-                type: array
-            type: object
-          status:
-            description: PostgresProfileStatus defines the observed state of PostgresProfile
-            type: object
-        type: object
+              type: array
+          type: object
+        status:
+          description: PostgresProfileStatus defines the observed state of PostgresProfile
+          type: object
+      type: object
+  version: v1
+  versions:
+  - name: v1
     served: true
     storage: true
 status:
