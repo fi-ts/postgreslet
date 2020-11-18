@@ -19,7 +19,6 @@ package controllers
 import (
 	"context"
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -79,7 +78,6 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 	if !instance.Status.Initiated {
 		newZInstance, err := toZInstance(instance)
-		log.Print(newZInstance)
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("error while creating the local postgresql in GO-code: %v", err)
 		}
