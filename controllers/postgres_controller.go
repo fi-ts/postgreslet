@@ -129,14 +129,14 @@ func (r *PostgresReconciler) createOrUpdate(ctx context.Context, log logr.Logger
 func toZInstance(in *databasev1.Postgres) (*zalando.Postgresql, error) {
 	return &zalando.Postgresql{
 		ObjectMeta: meta.ObjectMeta{
-			Name:      "acid-minimal-cluster-2",
+			Name:      "acid-minimal-cluster",
 			Namespace: in.Namespace,
 		},
 		Spec: zalando.PostgresSpec{
 			Clone: zalando.CloneDescription{
-				ClusterName: "empty",
+				ClusterName: "acid-minimal-cluster",
 			},
-			Databases:         map[string]string{"foo": "zalando"},
+			// Databases:         map[string]string{"foo": "zalando"},
 			NumberOfInstances: in.Spec.NumberOfInstances,
 			Resources: zalando.Resources{
 				ResourceRequests: zalando.ResourceDescription{
@@ -148,27 +148,27 @@ func toZInstance(in *databasev1.Postgres) (*zalando.Postgresql, error) {
 					Memory: "100M",
 				},
 			},
-			Patroni: zalando.Patroni{
-				InitDB: map[string]string{},
-				PgHba:  []string{},
-				Slots:  map[string]map[string]string{},
-			},
-			PodAnnotations: map[string]string{},
+			// Patroni: zalando.Patroni{
+			// 	InitDB: map[string]string{},
+			// 	PgHba:  []string{},
+			// 	Slots:  map[string]map[string]string{},
+			// },
+			// PodAnnotations: map[string]string{},
 			PostgresqlParam: zalando.PostgresqlParam{
-				Parameters: map[string]string{},
-				PgVersion:  "12",
+				// Parameters: map[string]string{},
+				PgVersion: "12",
 			},
-			ServiceAnnotations: map[string]string{},
-			StandbyCluster: &zalando.StandbyDescription{
-				S3WalPath: "acid",
-			},
+			// ServiceAnnotations: map[string]string{},
+			// StandbyCluster: &zalando.StandbyDescription{
+			// 	S3WalPath: "acid",
+			// },
 			TeamID: "acid",
-			TLS: &zalando.TLSDescription{
-				SecretName: "default-token-srblx",
-			},
-			Users: map[string]zalando.UserFlags{
-				"zalando": {"createdb", "superuser"},
-			},
+			// TLS:    &zalando.TLSDescription{
+			// 	// SecretName: "default-token-srblx",
+			// },
+			// Users: map[string]zalando.UserFlags{
+			// 	"zalando": {"createdb", "superuser"},
+			// },
 			Volume: zalando.Volume{
 				Size: "1Gi",
 			},

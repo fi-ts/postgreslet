@@ -8,7 +8,6 @@ metadata:
   creationTimestamp: null
   name: postgres.database.fits.cloud
 spec:
-  preserveUnknownFields: false
   additionalPrinterColumns:
   - JSONPath: .spec.name
     name: Name
