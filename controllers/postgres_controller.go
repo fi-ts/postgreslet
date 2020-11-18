@@ -111,23 +111,23 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 func toZInstance(in *databasev1.Postgres) (*zalando.Postgresql, error) {
 	return &zalando.Postgresql{
 		ObjectMeta: meta.ObjectMeta{
-			Name:      "acid-minimal-cluster",
+			Name:      "acid-minimal-cluster-2",
 			Namespace: in.Namespace,
 		},
 		Spec: zalando.PostgresSpec{
 			Clone: zalando.CloneDescription{
-				ClusterName: "",
+				ClusterName: "empty",
 			},
 			Databases:         map[string]string{"foo": "zalando"},
 			NumberOfInstances: in.Spec.NumberOfInstances,
 			Resources: zalando.Resources{
 				ResourceRequests: zalando.ResourceDescription{
-					CPU:    in.Spec.Size.CPU,
-					Memory: "2Gi",
+					CPU:    "100m",
+					Memory: "100M",
 				},
 				ResourceLimits: zalando.ResourceDescription{
-					CPU:    in.Spec.Size.CPU,
-					Memory: "2Gi",
+					CPU:    "100m",
+					Memory: "100M",
 				},
 			},
 			Patroni: zalando.Patroni{
@@ -142,11 +142,11 @@ func toZInstance(in *databasev1.Postgres) (*zalando.Postgresql, error) {
 			},
 			ServiceAnnotations: map[string]string{},
 			StandbyCluster: &zalando.StandbyDescription{
-				S3WalPath: "",
+				S3WalPath: "acid",
 			},
 			TeamID: "acid",
 			TLS: &zalando.TLSDescription{
-				SecretName: "",
+				SecretName: "default-token-srblx",
 			},
 			Users: map[string]zalando.UserFlags{
 				"zalando": {"createdb", "superuser"},

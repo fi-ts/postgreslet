@@ -1,9 +1,11 @@
 # postgres-controller
-A small controller which act as bridge between zalando-postgres-operator
+
+A small controller which act as a bridge between the zalando-postgres-operator and our postgres Resource.
 
 ## Run an example on kind-cluster
-```
-# Intall zalando dependencies
+
+```bash
+# Install zalando dependencies
 k apply -k github.com/zalando/postgres-operator/manifests
 
 # Install cert-manager
