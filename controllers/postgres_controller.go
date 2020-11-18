@@ -19,7 +19,6 @@ package controllers
 import (
 	"context"
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -79,7 +78,6 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 	if !instance.Status.Initiated {
 		newZInstance, err := toZInstance(instance)
-		log.Print(newZInstance)
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("error while creating the local postgresql in GO-code: %v", err)
 		}
@@ -111,22 +109,22 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 func toZInstance(in *databasev1.Postgres) (*zalando.Postgresql, error) {
 	return &zalando.Postgresql{
 		ObjectMeta: meta.ObjectMeta{
-			Name:      "acid-minimal-cluster",
-			Namespace: in.Namespace,
+			Name:      "acid-minimal-cluster-3",
+			Namespace: "default",
 		},
 		Spec: zalando.PostgresSpec{
 			Clone: zalando.CloneDescription{
-				ClusterName: "",
+				ClusterName: "...",
 			},
 			Databases:         map[string]string{"foo": "zalando"},
 			NumberOfInstances: in.Spec.NumberOfInstances,
 			Resources: zalando.Resources{
 				ResourceRequests: zalando.ResourceDescription{
-					CPU:    in.Spec.Size.CPU,
+					CPU:    "1",
 					Memory: "2Gi",
 				},
 				ResourceLimits: zalando.ResourceDescription{
-					CPU:    in.Spec.Size.CPU,
+					CPU:    "1",
 					Memory: "2Gi",
 				},
 			},
@@ -142,11 +140,11 @@ func toZInstance(in *databasev1.Postgres) (*zalando.Postgresql, error) {
 			},
 			ServiceAnnotations: map[string]string{},
 			StandbyCluster: &zalando.StandbyDescription{
-				S3WalPath: "",
+				S3WalPath: "...",
 			},
 			TeamID: "acid",
 			TLS: &zalando.TLSDescription{
-				SecretName: "",
+				SecretName: "...",
 			},
 			Users: map[string]zalando.UserFlags{
 				"zalando": {"createdb", "superuser"},
