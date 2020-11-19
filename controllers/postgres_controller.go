@@ -129,43 +129,18 @@ func (r *PostgresReconciler) createOrUpdate(ctx context.Context, log logr.Logger
 func toZInstance(in *databasev1.Postgres) (*zalando.Postgresql, error) {
 	return &zalando.Postgresql{
 		ObjectMeta: meta.ObjectMeta{
-			Name:      "acid-minimal-cluster",
+			Name:      "fits-minimal-cluster",
 			Namespace: in.Namespace,
 		},
 		Spec: zalando.PostgresSpec{
 			Clone: zalando.CloneDescription{
-				ClusterName: "acid-minimal-cluster",
+				ClusterName: "fits-minimal-cluster",
 			},
-			// Databases:         map[string]string{"foo": "zalando"},
 			NumberOfInstances: in.Spec.NumberOfInstances,
-			Resources: zalando.Resources{
-				ResourceRequests: zalando.ResourceDescription{
-					CPU:    "100m",
-					Memory: "100M",
-				},
-				ResourceLimits: zalando.ResourceDescription{
-					CPU:    "100m",
-					Memory: "100M",
-				},
-			},
-			// Patroni: zalando.Patroni{
-			// 	InitDB: map[string]string{},
-			// 	PgHba:  []string{},
-			// 	Slots:  map[string]map[string]string{},
-			// },
-			// PodAnnotations: map[string]string{},
 			PostgresqlParam: zalando.PostgresqlParam{
-				// Parameters: map[string]string{},
 				PgVersion: "12",
 			},
-			// ServiceAnnotations: map[string]string{},
-			// StandbyCluster: &zalando.StandbyDescription{
-			// 	S3WalPath: "acid",
-			// },
-			TeamID: "acid",
-			// TLS:    &zalando.TLSDescription{
-			// 	// SecretName: "default-token-srblx",
-			// },
+			TeamID: "fits",
 			// Users: map[string]zalando.UserFlags{
 			// 	"zalando": {"createdb", "superuser"},
 			// },
