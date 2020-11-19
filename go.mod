@@ -15,3 +15,5 @@ require (
 )
 
 replace k8s.io/client-go => k8s.io/client-go v0.19.3
+
+replace github.com/zalando/postgres-operator => github.com/LimKianAn/postgres-operator v1.5.1-0.20201119204833-49ea74bbc92f

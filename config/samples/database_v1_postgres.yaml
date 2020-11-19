@@ -2,10 +2,10 @@ apiVersion: database.fits.cloud/v1
 kind: Postgres
 metadata:
   namespace: default
-  name: sample-name
+  name: sample-name-a
 spec:
   numberOfInstances: 2
-  version: 1.0.0
+  version: "12"
   projectID: sample-project-ID
   size:
     storageSize: 1Gi

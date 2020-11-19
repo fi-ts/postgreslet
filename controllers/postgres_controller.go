@@ -127,23 +127,30 @@ func (r *PostgresReconciler) createOrUpdate(ctx context.Context, log logr.Logger
 
 // Map to zalando CRD
 func toZInstance(in *databasev1.Postgres) (*zalando.Postgresql, error) {
+	clusterName := "fits-minimal-cluster-a"
 	return &zalando.Postgresql{
 		ObjectMeta: meta.ObjectMeta{
-			Name:      "fits-minimal-cluster",
+			Name:      clusterName,
 			Namespace: in.Namespace,
 		},
 		Spec: zalando.PostgresSpec{
 			Clone: zalando.CloneDescription{
-				ClusterName: "fits-minimal-cluster",
+				ClusterName: clusterName,
+			},
+			Databases: map[string]string{
+				"db0": "zalando",
 			},
 			NumberOfInstances: in.Spec.NumberOfInstances,
 			PostgresqlParam: zalando.PostgresqlParam{
 				PgVersion: "12",
 			},
+			PreparedDatabases: map[string]zalando.PreparedDatabase{
+				"prDB0": {},
+			},
 			TeamID: "fits",
-			// Users: map[string]zalando.UserFlags{
-			// 	"zalando": {"createdb", "superuser"},
-			// },
+			Users: map[string]zalando.UserFlags{
+				"zalando": {"createdb", "superuser"},
+			},
 			Volume: zalando.Volume{
 				Size: "1Gi",
 			},
