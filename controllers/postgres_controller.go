@@ -25,7 +25,9 @@ import (
 	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -107,7 +109,9 @@ func (r *PostgresReconciler) createOrUpdate(ctx context.Context, log logr.Logger
 			log.Info(err.Error(), "namespaced name", namespacedName)
 			if errors.IsNotFound(err) {
 				log.Info("create", "namespaced name", namespacedName)
-				if err := r.Client.Create(ctx, obj, &client.CreateOptions{}); err != nil {
+
+				if err := r.Client.Create(ctx, toUnstructured()); err != nil {
+					// if err := r.Client.Create(ctx, obj); err != nil {
 					log.Error(err, "unable to create", "namespaced name", namespacedName)
 					return err
 				}
@@ -115,28 +119,53 @@ func (r *PostgresReconciler) createOrUpdate(ctx context.Context, log logr.Logger
 			}
 			return err
 		}
-		log.Info("update", "namespaced name", namespacedName)
-		if err := r.Client.Update(ctx, obj); err != nil {
-			log.Error(err, "unable to update", "namespaced name", namespacedName)
-			return err
-		}
+		// log.Info("update", "namespaced name", namespacedName)
+		// if err := r.Client.Update(ctx, obj); err != nil {
+		// 	// if err := r.Client.Update(ctx, toUnstructured()); err != nil {
+		// 	log.Error(err, "unable to update", "namespaced name", namespacedName)
+		// 	return err
+		// }
 		return nil
 	})
 	return retryErr
 }
+func toUnstructured() *unstructured.Unstructured {
+	u := &unstructured.Unstructured{}
+	u.Object = map[string]interface{}{
+		"metadata": map[string]interface{}{
+			"name":      "fits-minimal-cluster",
+			"namespace": "default",
+		},
+		"spec": map[string]interface{}{
+			"numberOfInstances": 2,
+			"postgresql": map[string]interface{}{
+				"version": "12",
+			},
+			"teamId": "fits",
+			"volume": map[string]interface{}{
+				"size": "1Gi",
+			},
+		},
+	}
+	u.SetGroupVersionKind(schema.GroupVersionKind{
+		Group:   "acid.zalan.do",
+		Kind:    "postgresql",
+		Version: "v1",
+	})
+	return u
+}
 
 // Map to zalando CRD
 func toZInstance(in *databasev1.Postgres) (*zalando.Postgresql, error) {
-	clusterName := "fits-minimal-cluster-a"
 	return &zalando.Postgresql{
 		ObjectMeta: meta.ObjectMeta{
-			Name:      clusterName,
+			Name:      "fits-minimal-cluster-a",
 			Namespace: in.Namespace,
 		},
 		Spec: zalando.PostgresSpec{
-			Clone: zalando.CloneDescription{
-				ClusterName: clusterName,
-			},
+			// Clone: zalando.CloneDescription{
+			// 	ClusterName: "fits-clone-cluster",
+			// },
 			Databases: map[string]string{
 				"db0": "zalando",
 			},
