@@ -138,6 +138,26 @@ func (p *Postgres) IsBeingDeleted() bool {
 	return !p.ObjectMeta.DeletionTimestamp.IsZero()
 }
 
+func (p *Postgres) ToZalando() *ZalandoPostgres {
+	zp := &ZalandoPostgres{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "acid.zalan.do/v1",
+			Kind:       "postgresql",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      p.ObjectMeta.Name,
+			Namespace: p.Spec.ProjectID,
+		},
+		Spec: ZalandoPostgresSpec{
+			NumberOfInstances: 2,
+			TeamID:            p.Spec.ProjectID,
+			Postgresql:        ZalandoPostgresql{Version: "12"},
+			Volume:            ZalandoVolume{Size: "1Gi"},
+		},
+	}
+	return zp
+}
+
 func init() {
 	SchemeBuilder.Register(&Postgres{}, &PostgresList{})
 }
