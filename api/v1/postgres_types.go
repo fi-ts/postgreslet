@@ -18,6 +18,7 @@ package v1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -120,7 +121,6 @@ type Maintenance struct {
 type PostgresStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
-	Initiated   bool   `json:"initiated,omitempty"`
 	Description string `json:"description,omitempty"`
 }
 
@@ -138,24 +138,31 @@ func (p *Postgres) IsBeingDeleted() bool {
 	return !p.ObjectMeta.DeletionTimestamp.IsZero()
 }
 
-func (p *Postgres) ToZalando() *ZalandoPostgres {
-	zp := &ZalandoPostgres{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: "acid.zalan.do/v1",
-			Kind:       "postgresql",
-		},
+func (p *Postgres) ToKey() *types.NamespacedName {
+	return &types.NamespacedName{
+		Namespace: p.Namespace,
+		Name:      p.Name,
+	}
+}
+func (p *Postgres) ToZPostgres() *ZalandoPostgres {
+	return &ZalandoPostgres{
+		TypeMeta: ZalandoPostgresTypeMeta,
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      p.ObjectMeta.Name,
-			Namespace: p.Spec.ProjectID,
+			Name:      p.Spec.ProjectID + "-" + p.Name, // todo: Need another rule of naming. UID is not allowed by the operator.
+			Namespace: p.Namespace,                     // todo: Use Spec.ProjectID once ns creation is implemented.
 		},
 		Spec: ZalandoPostgresSpec{
-			NumberOfInstances: 2,
+			NumberOfInstances: p.Spec.NumberOfInstances,
 			TeamID:            p.Spec.ProjectID,
-			Postgresql:        ZalandoPostgresql{Version: "12"},
-			Volume:            ZalandoVolume{Size: "1Gi"},
+			PostgresqlParam:   PostgresqlParam{PgVersion: p.Spec.Version},
+			Volume:            Volume{Size: p.Spec.Size.StorageSize},
 		},
 	}
-	return zp
+}
+
+// Only names starting with the `TeamID` of the `Postgresql` are acceptable.
+func (p *Postgres) toZName() string {
+	return p.Spec.ProjectID + "-" + string(p.UID)
 }
 
 func init() {

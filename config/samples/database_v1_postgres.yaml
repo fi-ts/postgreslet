@@ -6,6 +6,6 @@ metadata:
 spec:
   numberOfInstances: 2
   version: "12"
-  projectID: sample-project-ID
+  projectID: fits
   size:
     storageSize: 1Gi

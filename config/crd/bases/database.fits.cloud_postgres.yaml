@@ -121,12 +121,10 @@ spec:
           description: PostgresStatus defines the observed state of Postgres
           properties:
             description:
-              type: string
-            initiated:
               description: 'INSERT ADDITIONAL STATUS FIELD - define observed state
                 of cluster Important: Run "make" to regenerate code after modifying
                 this file'
-              type: boolean
+              type: string
           type: object
       type: object
   version: v1

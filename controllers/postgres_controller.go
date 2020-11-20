@@ -24,9 +24,7 @@ import (
 	"github.com/go-logr/logr"
 	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -57,7 +55,7 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	lgr := r.Log.WithValues("postgres", req.NamespacedName)
 
 	instance := &databasev1.Postgres{}
-	if err := r.Get(context.Background(), req.NamespacedName, instance); err != nil {
+	if err := r.Get(ctx, req.NamespacedName, instance); err != nil {
 		if errors.IsNotFound(err) {
 			return ctrl.Result{}, nil
 		}
@@ -77,7 +75,7 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		// Delete the instance.
 	}
 
-	if err := r.createOrUpdate(ctx, lgr, types.NamespacedName{Name: instance.ObjectMeta.Name, Namespace: instance.Spec.ProjectID}, instance); err != nil {
+	if err := r.createOrUpdate(ctx, lgr, instance); err != nil {
 		return ctrl.Result{}, fmt.Errorf("error while creating CRD postgresql: %v", err)
 	}
 
@@ -96,68 +94,48 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 	return ctrl.Result{}, nil
 }
-func (r *PostgresReconciler) createOrUpdate(ctx context.Context, log logr.Logger, namespacedName types.NamespacedName, pg *databasev1.Postgres) error {
-	log.Info("create or update", "namespaced name", namespacedName)
-	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		if err := r.Client.Get(ctx, namespacedName, pg); err != nil {
-			log.Info(err.Error(), "namespaced name", namespacedName)
-			if errors.IsNotFound(err) {
-				log.Info("create", "namespaced name", namespacedName)
+func (r *PostgresReconciler) createOrUpdate(ctx context.Context, log logr.Logger, p *databasev1.Postgres) error {
+	k := p.ToKey()
+	log.Info("create or update", "namespaced name", k)
 
-				if err := r.Client.Create(ctx, pg.ToZalando()); err != nil {
-					// if err := r.Client.Create(ctx, obj); err != nil {
-					log.Error(err, "unable to create", "namespaced name", namespacedName)
+	rawZ := &zalando.Postgresql{}
+	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		if err := r.Client.Get(ctx, *k, rawZ); err != nil {
+			log.Info(err.Error(), "namespaced name", k)
+			if errors.IsNotFound(err) {
+				log.Info("create", "postgres", p)
+				u, err := p.ToZPostgres().ToUnstructured()
+				if err != nil {
+					return err
+				}
+
+				// todo: Create a ns if none.
+
+				if err := r.Client.Create(ctx, u); err != nil {
+					log.Error(err, "unable to create", "namespaced name", k)
 					return err
 				}
 				return nil
 			}
 			return err
 		}
-		// log.Info("update", "namespaced name", namespacedName)
+		// log.Info("update", "namespaced name", k)
 		// if err := r.Client.Update(ctx, obj); err != nil {
 		// 	// if err := r.Client.Update(ctx, toUnstructured()); err != nil {
-		// 	log.Error(err, "unable to update", "namespaced name", namespacedName)
+		// 	log.Error(err, "unable to update", "namespaced name", k)
 		// 	return err
 		// }
+
+		// instance.Status.Description = zInstance.Status.PostgresClusterStatus
+		// if err := r.Status().Update(context.Background(), instance); err != nil {
+		// 	return ctrl.Result{}, fmt.Errorf("error while updating the status: %v", err)
+		// }
+
 		return nil
 	})
 	return retryErr
 }
 
-// Map to zalando CRD
-func toZInstance(in *databasev1.Postgres) (*zalando.Postgresql, error) {
-	return &zalando.Postgresql{
-		ObjectMeta: meta.ObjectMeta{
-			Name:      "fits-minimal-cluster-a",
-			Namespace: in.Namespace,
-		},
-		Spec: zalando.PostgresSpec{
-			// Clone: zalando.CloneDescription{
-			// 	ClusterName: "fits-clone-cluster",
-			// },
-			Databases: map[string]string{
-				"db0": "zalando",
-			},
-			NumberOfInstances: in.Spec.NumberOfInstances,
-			PostgresqlParam: zalando.PostgresqlParam{
-				PgVersion: "12",
-			},
-			PreparedDatabases: map[string]zalando.PreparedDatabase{
-				"prDB0": {},
-			},
-			TeamID: "fits",
-			Users: map[string]zalando.UserFlags{
-				"zalando": {"createdb", "superuser"},
-			},
-			Volume: zalando.Volume{
-				Size: "1Gi",
-			},
-		}}, nil
-}
-
-func toZName(in *databasev1.Postgres) string {
-	return in.Spec.ProjectID + "-" + in.Name
-}
 func (r *PostgresReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&databasev1.Postgres{}).
