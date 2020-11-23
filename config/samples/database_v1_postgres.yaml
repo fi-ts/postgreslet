@@ -2,9 +2,9 @@ apiVersion: database.fits.cloud/v1
 kind: Postgres
 metadata:
   namespace: default
-  name: sample-name
+  name: sample-name-h
 spec:
-  numberOfInstances: 2
+  numberOfInstances: 16
   version: "12"
   projectID: fits
   size:

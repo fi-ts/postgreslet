@@ -4,6 +4,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 // ZalandoPostgresTypeMeta is the `TypeMeta` of the zalando's `Postgresql` type.
@@ -18,7 +19,8 @@ var ZalandoPostgresTypeMeta = metav1.TypeMeta{
 type ZalandoPostgres struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
-	Spec              ZalandoPostgresSpec `json:"spec"`
+	Spec              ZalandoPostgresSpec   `json:"spec"`
+	Status            ZalandoPostgresStatus `json:"status,omitempty"`
 }
 
 type ZalandoPostgresSpec struct {
@@ -35,6 +37,14 @@ type Volume struct {
 	Size string `json:"size"`
 }
 
+type ZalandoPostgresStatus struct {
+	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
+	// Important: Run "make" to regenerate code after modifying this file
+
+	// Following zalando postgresql, `P`ostgresClusterStatus in JSON.
+	PostgresClusterStatus string `json:"PostgresClusterStatus"`
+}
+
 // +kubebuilder:object:root=true
 
 // ZalandoPostgresList contains a list of Postgres
@@ -42,6 +52,13 @@ type ZalandoPostgresList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []ZalandoPostgres `json:"items"`
+}
+
+func (z *ZalandoPostgres) ToKey() *types.NamespacedName {
+	return &types.NamespacedName{
+		Namespace: z.Namespace,
+		Name:      z.Name,
+	}
 }
 
 func (z *ZalandoPostgres) ToUnstructured() (*unstructured.Unstructured, error) {

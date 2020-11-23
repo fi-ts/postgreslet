@@ -24,8 +24,8 @@ rules:
   - postgresqls/status
   verbs:
   - get
-  - patch
-  - update
+  - list
+  - watch
 - apiGroups:
   - database.fits.cloud
   resources:

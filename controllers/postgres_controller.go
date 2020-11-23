@@ -18,7 +18,6 @@ package controllers
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -28,6 +27,7 @@ import (
 	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	databasev1 "github.com/fi-ts/postgres-controller/api/v1"
 )
@@ -48,11 +48,11 @@ type PostgresReconciler struct {
 // +kubebuilder:rbac:groups=database.fits.cloud,resources=postgres,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=database.fits.cloud,resources=postgres/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=acid.zalan.do,resources=postgresqls,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=acid.zalan.do,resources=postgresqls/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=acid.zalan.do,resources=postgresqls/status,verbs=get;list;watch
 
 func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	ctx := context.Background()
-	lgr := r.Log.WithValues("postgres", req.NamespacedName)
+	log := r.Log.WithValues("postgres", req.NamespacedName)
 
 	instance := &databasev1.Postgres{}
 	if err := r.Get(ctx, req.NamespacedName, instance); err != nil {
@@ -75,69 +75,71 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		// Delete the instance.
 	}
 
-	if err := r.createOrUpdate(ctx, lgr, instance); err != nil {
-		return ctrl.Result{}, fmt.Errorf("error while creating CRD postgresql: %v", err)
+	rawZ := &zalando.Postgresql{}
+	z := instance.ToZPostgres()
+	// Add `instance` (owner) to the metadata of `z` (owned).
+	controllerutil.SetControllerReference(instance, z, r.Scheme)
+	k := z.ToKey()
+	u, err := z.ToUnstructured()
+	if err != nil {
+		log.Error(err, "error while converting to unstructured")
+		return ctrl.Result{}, err
 	}
 
-	// todo: Update the status
-	// zInstance := &zalando.Postgresql{}
-	// if err := r.Get(context.Background(), *toKey(newZInstance), zInstance); err != nil {
-	// 	if errors.IsNotFound(err) {
-	// 		return Requeue, nil
-	// 	}
-	// 	return ctrl.Result{}, err
-	// }
-	// instance.Status.Description = zInstance.Status.PostgresClusterStatus
-	// if err := r.Status().Update(context.Background(), instance); err != nil {
-	// 	return ctrl.Result{}, fmt.Errorf("error while updating the status: %v", err)
-	// }
+	// Get zalando postgresql and create one if none.
+	if err := r.Client.Get(ctx, *k, rawZ); err != nil {
+		log.Info("unable to fetch zalando postgresql", "error", err)
+		// errors other than `NotFound`
+		if !errors.IsNotFound(err) {
+			return ctrl.Result{}, err
+		}
+		log.Info("creating zalando postgresql", "ns/name", z)
 
-	return ctrl.Result{}, nil
-}
-func (r *PostgresReconciler) createOrUpdate(ctx context.Context, log logr.Logger, p *databasev1.Postgres) error {
-	k := p.ToKey()
-	log.Info("create or update", "namespaced name", k)
+		// todo: Create a ns if none.
 
-	rawZ := &zalando.Postgresql{}
-	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		if err := r.Client.Get(ctx, *k, rawZ); err != nil {
-			log.Info(err.Error(), "namespaced name", k)
-			if errors.IsNotFound(err) {
-				log.Info("create", "postgres", p)
-				u, err := p.ToZPostgres().ToUnstructured()
-				if err != nil {
-					return err
-				}
+		if err := r.Client.Create(ctx, u); err != nil {
+			log.Error(err, "error while creating zalando postgresql", "ns/name", k)
+			return ctrl.Result{}, err
+		}
+	}
 
-				// todo: Create a ns if none.
+	// Update zalando postgresql.
+	if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		log.Info("updating zalando postgresql", "ns/name", k)
 
-				if err := r.Client.Create(ctx, u); err != nil {
-					log.Error(err, "unable to create", "namespaced name", k)
-					return err
-				}
-				return nil
-			}
+		// Complete ObjectMeta.
+		z.ObjectMeta = rawZ.ObjectMeta
+		z.Status.PostgresClusterStatus = rawZ.Status.PostgresClusterStatus
+		u, err := z.ToUnstructured()
+		if err != nil {
+			log.Error(err, "error while converting to unstructured")
 			return err
 		}
-		// log.Info("update", "namespaced name", k)
-		// if err := r.Client.Update(ctx, obj); err != nil {
-		// 	// if err := r.Client.Update(ctx, toUnstructured()); err != nil {
-		// 	log.Error(err, "unable to update", "namespaced name", k)
-		// 	return err
-		// }
-
-		// instance.Status.Description = zInstance.Status.PostgresClusterStatus
-		// if err := r.Status().Update(context.Background(), instance); err != nil {
-		// 	return ctrl.Result{}, fmt.Errorf("error while updating the status: %v", err)
-		// }
-
+		if err := r.Client.Update(ctx, u); err != nil {
+			log.Error(err, "error while updating zalando postgresql ", "ns/name", k)
+			return err
+		}
+		log.Info("zalando postgresql updated", "ns/name", k)
 		return nil
-	})
-	return retryErr
+	}); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	// Update status.
+	newStatus := rawZ.Status.PostgresClusterStatus
+	instance.Status.Description = newStatus
+	if err := r.Status().Update(ctx, instance); err != nil {
+		log.Error(err, "error while updating postgres status")
+		return ctrl.Result{}, err
+	}
+	log.Info("postgres status updated successfully", "status", newStatus)
+
+	return ctrl.Result{}, nil
 }
 
 func (r *PostgresReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&databasev1.Postgres{}).
+		Owns(&zalando.Postgresql{}).
 		Complete(r)
 }

@@ -9,11 +9,11 @@ metadata:
   name: postgres.database.fits.cloud
 spec:
   additionalPrinterColumns:
-  - JSONPath: .spec.name
-    name: Name
-    type: string
   - JSONPath: .spec.version
     name: Version
+    type: string
+  - JSONPath: .status.description
+    name: Status
     type: string
   group: database.fits.cloud
   names:
@@ -22,7 +22,8 @@ spec:
     plural: postgres
     singular: postgres
   scope: Namespaced
-  subresources: {}
+  subresources:
+    status: {}
   validation:
     openAPIV3Schema:
       description: Postgres is the Schema for the postgres API

@@ -57,6 +57,15 @@ spec:
           - teamId
           - volume
           type: object
+        status:
+          properties:
+            PostgresClusterStatus:
+              description: Following zalando postgresql, `P`ostgresClusterStatus in
+                JSON.
+              type: string
+          required:
+          - PostgresClusterStatus
+          type: object
       required:
       - spec
       type: object
