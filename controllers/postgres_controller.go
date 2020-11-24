@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -61,6 +62,8 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		}
 		return ctrl.Result{}, err
 	}
+	z := instance.ToZPostgres()
+	k := z.ToKey()
 
 	// TODO implement later once postgreslet is in place
 	// if instance.Spec.PartitionID != myPartition {
@@ -71,15 +74,21 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	// 	return ctrl.Result{}, nil
 	// }
 
+	// Delete
 	if instance.IsBeingDeleted() {
-		// Delete the instance.
+		rawZ := &zalando.Postgresql{}
+		if err := r.Get(ctx, *k, rawZ); err != nil {
+			return ctrl.Result{}, fmt.Errorf("error while fetching zalando postgresql to delete: %v", err)
+		}
+		if err := r.Delete(ctx, rawZ); err != nil {
+			return ctrl.Result{}, fmt.Errorf("error while deleting zalando postgresql: %v", err)
+		}
+		log.Info("zalando postgresql deleted")
+		return ctrl.Result{}, nil
 	}
 
-	rawZ := &zalando.Postgresql{}
-	z := instance.ToZPostgres()
 	// Add `instance` (owner) to the metadata of `z` (owned).
 	controllerutil.SetControllerReference(instance, z, r.Scheme)
-	k := z.ToKey()
 	u, err := z.ToUnstructured()
 	if err != nil {
 		log.Error(err, "error while converting to unstructured")
@@ -87,6 +96,7 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	}
 
 	// Get zalando postgresql and create one if none.
+	rawZ := &zalando.Postgresql{}
 	if err := r.Client.Get(ctx, *k, rawZ); err != nil {
 		log.Info("unable to fetch zalando postgresql", "error", err)
 		// errors other than `NotFound`
@@ -106,16 +116,9 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	// Update zalando postgresql.
 	if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		log.Info("updating zalando postgresql", "ns/name", k)
-
-		// Complete ObjectMeta.
-		z.ObjectMeta = rawZ.ObjectMeta
-		z.Status.PostgresClusterStatus = rawZ.Status.PostgresClusterStatus
-		u, err := z.ToUnstructured()
-		if err != nil {
-			log.Error(err, "error while converting to unstructured")
-			return err
-		}
-		if err := r.Client.Update(ctx, u); err != nil {
+		patch := client.MergeFrom(rawZ.DeepCopy())
+		patchRawZ(rawZ, instance)
+		if err := r.Client.Patch(ctx, rawZ, patch); err != nil {
 			log.Error(err, "error while updating zalando postgresql ", "ns/name", k)
 			return err
 		}
@@ -142,4 +145,33 @@ func (r *PostgresReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&databasev1.Postgres{}).
 		Owns(&zalando.Postgresql{}).
 		Complete(r)
+}
+
+func patchRawZ(out *zalando.Postgresql, in *databasev1.Postgres) {
+	out.Spec.NumberOfInstances = in.Spec.NumberOfInstances
+
+	// todo: Check if the validation should be performed here.
+	out.Spec.PostgresqlParam.PgVersion = in.Spec.Version
+
+	out.Spec.ResourceRequests.CPU = in.Spec.Size.CPU
+
+	// todo: Check if the validation should be performed here.
+	out.Spec.Volume.Size = in.Spec.Size.StorageSize
+
+	isEvery := in.Spec.Maintenance.Weekday == databasev1.All
+	out.Spec.MaintenanceWindows = []zalando.MaintenanceWindow{
+		{
+			Everyday: isEvery,
+			Weekday: func() time.Weekday {
+				if isEvery {
+					return time.Weekday(0)
+				}
+				return time.Weekday(in.Spec.Maintenance.Weekday)
+			}(),
+			StartTime: in.Spec.Maintenance.TimeWindow.Start,
+			EndTime:   in.Spec.Maintenance.TimeWindow.End,
+		},
+	}
+
+	// todo: in.Spec.Backup, in.Spec.AccessList
 }

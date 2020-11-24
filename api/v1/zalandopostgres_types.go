@@ -1,6 +1,8 @@
 package v1
 
 import (
+	"time"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -24,15 +26,35 @@ type ZalandoPostgres struct {
 }
 
 type ZalandoPostgresSpec struct {
-	NumberOfInstances int32           `json:"numberOfInstances"`
-	TeamID            string          `json:"teamId"`
-	PostgresqlParam   PostgresqlParam `json:"postgresql"`
-	Volume            Volume          `json:"volume"`
+	MaintenanceWindows []MaintenanceWindow `json:"maintenanceWindows,omitempty"`
+	NumberOfInstances  int32               `json:"numberOfInstances"`
+	PostgresqlParam    PostgresqlParam     `json:"postgresql"`
+	Resources          *Resources          `json:"resources,omitempty"`
+	TeamID             string              `json:"teamId"`
+	Volume             Volume              `json:"volume"`
+}
+
+type MaintenanceWindow struct {
+	Everyday  bool         `json:"everyday,omitempty"`
+	Weekday   time.Weekday `json:"weekday,omitempty"`
+	StartTime metav1.Time  `json:"startTime,omitempty"`
+	EndTime   metav1.Time  `json:"endTime,omitempty"`
 }
 
 type PostgresqlParam struct {
 	PgVersion string `json:"version"`
 }
+
+type Resources struct {
+	ResourceRequests *ResourceDescription `json:"requests,omitempty"`
+	ResourceLimits   *ResourceDescription `json:"limits,omitempty"`
+}
+
+type ResourceDescription struct {
+	CPU    string `json:"cpu,omitempty"`
+	Memory string `json:"memory,omitempty"`
+}
+
 type Volume struct {
 	Size string `json:"size"`
 }

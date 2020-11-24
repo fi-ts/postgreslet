@@ -153,10 +153,37 @@ func (p *Postgres) ToZPostgres() *ZalandoPostgres {
 			Namespace: p.Namespace,                     // todo: Use Spec.ProjectID once ns creation is implemented.
 		},
 		Spec: ZalandoPostgresSpec{
+			MaintenanceWindows: func() []MaintenanceWindow {
+				return nil
+				// todo: Fix it.
+				// isEvery := p.Spec.Maintenance.Weekday == All
+				// return []MaintenanceWindow{
+				// 	{Everyday: isEvery,
+				// 		Weekday: func() time.Weekday {
+				// 			if isEvery {
+				// 				return time.Weekday(0)
+				// 			}
+				// 			return time.Weekday(p.Spec.Maintenance.Weekday)
+				// 		}(),
+				// 		StartTime: p.Spec.Maintenance.TimeWindow.Start,
+				// 		EndTime:   p.Spec.Maintenance.TimeWindow.End,
+				// 	},
+				// }
+			}(),
 			NumberOfInstances: p.Spec.NumberOfInstances,
-			TeamID:            p.Spec.ProjectID,
 			PostgresqlParam:   PostgresqlParam{PgVersion: p.Spec.Version},
-			Volume:            Volume{Size: p.Spec.Size.StorageSize},
+			Resources: func() *Resources {
+				return nil
+				// todo: Fix it.
+				// return &Resources{
+				// 	ResourceRequests: &ResourceDescription{
+				// 		CPU: p.Spec.Size.CPU,
+				// 	},
+				// 	ResourceLimits: &ResourceDescription{}, // todo: Fill it out.
+				// }
+			}(),
+			TeamID: p.Spec.ProjectID,
+			Volume: Volume{Size: p.Spec.Size.StorageSize},
 		},
 	}
 }
