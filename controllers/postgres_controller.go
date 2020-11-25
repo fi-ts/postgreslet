@@ -25,7 +25,6 @@ import (
 	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -114,18 +113,23 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	}
 
 	// Update zalando postgresql.
-	if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+	if rawZ.Name != "" {
+		// if err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		log.Info("updating zalando postgresql", "ns/name", k)
 		patch := client.MergeFrom(rawZ.DeepCopy())
 		patchRawZ(rawZ, instance)
 		if err := r.Client.Patch(ctx, rawZ, patch); err != nil {
+			if err.Error() == "the object has been modified; please apply your changes to the latest version and try again" {
+				return Requeue, nil
+			}
 			log.Error(err, "error while updating zalando postgresql ", "ns/name", k)
-			return err
+			return ctrl.Result{}, err
 		}
 		log.Info("zalando postgresql updated", "ns/name", k)
-		return nil
-	}); err != nil {
-		return ctrl.Result{}, err
+		// return nil
+		// }); err != nil {
+		// 	return ctrl.Result{}, err
+		// }
 	}
 
 	// Update status.
