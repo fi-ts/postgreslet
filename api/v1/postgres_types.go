@@ -17,6 +17,8 @@ limitations under the License.
 package v1
 
 import (
+	"time"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 )
@@ -56,7 +58,7 @@ type PostgresSpec struct {
 	// Version is the version of Postgre-as-a-Service
 	Version string `json:"version,omitempty"`
 	// Size of the database
-	Size Size `json:"size,omitempty"`
+	Size *Size `json:"size,omitempty"`
 	// Maintenance defines automatic maintenance of the database
 	Maintenance *Maintenance `json:"maintenance,omitempty"`
 	// Backup parametes of the database backup
@@ -154,38 +156,73 @@ func (p *Postgres) ToZPostgres() *ZalandoPostgres {
 		},
 		Spec: ZalandoPostgresSpec{
 			MaintenanceWindows: func() []MaintenanceWindow {
-				return nil
-				// todo: Fix it.
-				// isEvery := p.Spec.Maintenance.Weekday == All
-				// return []MaintenanceWindow{
-				// 	{Everyday: isEvery,
-				// 		Weekday: func() time.Weekday {
-				// 			if isEvery {
-				// 				return time.Weekday(0)
-				// 			}
-				// 			return time.Weekday(p.Spec.Maintenance.Weekday)
-				// 		}(),
-				// 		StartTime: p.Spec.Maintenance.TimeWindow.Start,
-				// 		EndTime:   p.Spec.Maintenance.TimeWindow.End,
-				// 	},
-				// }
+				if p.Spec.Maintenance == nil {
+					return nil
+				}
+				isEvery := p.Spec.Maintenance.Weekday == All
+				return []MaintenanceWindow{
+					{Everyday: isEvery,
+						Weekday: func() time.Weekday {
+							if isEvery {
+								return time.Weekday(0)
+							}
+							return time.Weekday(p.Spec.Maintenance.Weekday)
+						}(),
+						StartTime: p.Spec.Maintenance.TimeWindow.Start,
+						EndTime:   p.Spec.Maintenance.TimeWindow.End,
+					},
+				}
 			}(),
 			NumberOfInstances: p.Spec.NumberOfInstances,
 			PostgresqlParam:   PostgresqlParam{PgVersion: p.Spec.Version},
 			Resources: func() *Resources {
-				return nil
-				// todo: Fix it.
-				// return &Resources{
-				// 	ResourceRequests: &ResourceDescription{
-				// 		CPU: p.Spec.Size.CPU,
-				// 	},
-				// 	ResourceLimits: &ResourceDescription{}, // todo: Fill it out.
-				// }
+				if p.Spec.Size.CPU == "" {
+					return nil
+				}
+				return &Resources{
+					ResourceRequests: &ResourceDescription{
+						CPU: p.Spec.Size.CPU,
+					},
+					ResourceLimits: &ResourceDescription{}, // todo: Fill it out.
+				}
 			}(),
 			TeamID: p.Spec.ProjectID,
 			Volume: Volume{Size: p.Spec.Size.StorageSize},
 		},
 	}
+}
+
+const PostgresFinalizerName = "postgres.finalizers.database.fits.cloud"
+
+func (p *Postgres) HasFinalizer(finalizerName string) bool {
+	return containsElem(p.ObjectMeta.Finalizers, finalizerName)
+}
+
+func (p *Postgres) AddFinalizer(finalizerName string) {
+	p.ObjectMeta.Finalizers = append(p.ObjectMeta.Finalizers, finalizerName)
+}
+
+func (p *Postgres) RemoveFinalizer(finalizerName string) {
+	p.ObjectMeta.Finalizers = removeElem(p.ObjectMeta.Finalizers, finalizerName)
+}
+
+func containsElem(ss []string, s string) bool {
+	for _, elem := range ss {
+		if elem == s {
+			return true
+		}
+	}
+	return false
+}
+
+func removeElem(ss []string, s string) (out []string) {
+	for _, elem := range ss {
+		if elem == s {
+			continue
+		}
+		out = append(out, elem)
+	}
+	return
 }
 
 // Only names starting with the `TeamID` of the `Postgresql` are acceptable.

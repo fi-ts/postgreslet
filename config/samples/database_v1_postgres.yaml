@@ -4,7 +4,7 @@ metadata:
   namespace: default
   name: sample-name
 spec:
-  numberOfInstances: 3
+  numberOfInstances: 2
   version: "12"
   projectID: fits
   size:
