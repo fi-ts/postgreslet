@@ -22,7 +22,6 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	"github.com/prometheus/common/log"
 	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -180,6 +179,7 @@ func (r *PostgresReconciler) isManagedByUs(obj *paasv1.Postgres) bool {
 }
 
 func (r *PostgresReconciler) deleteZalando(ctx context.Context, ns *types.NamespacedName) (ctrl.Result, error) {
+	log := r.Log.WithValues("zalando", types.NamespacedName{Name: z.Name, Namespace: z.Namespace})
 	rawZ := &zalando.Postgresql{}
 	if err := r.Get(ctx, *ns, rawZ); err != nil {
 		return ctrl.Result{}, fmt.Errorf("error while fetching zalando postgresql to delete: %v", err)
