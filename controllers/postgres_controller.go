@@ -179,7 +179,7 @@ func (r *PostgresReconciler) isManagedByUs(obj *paasv1.Postgres) bool {
 }
 
 func (r *PostgresReconciler) deleteZalando(ctx context.Context, ns *types.NamespacedName) (ctrl.Result, error) {
-	log := r.Log.WithValues("zalando", types.NamespacedName{Name: z.Name, Namespace: z.Namespace})
+	log := r.Log.WithValues("zalando", ns)
 	rawZ := &zalando.Postgresql{}
 	if err := r.Get(ctx, *ns, rawZ); err != nil {
 		return ctrl.Result{}, fmt.Errorf("error while fetching zalando postgresql to delete: %v", err)
