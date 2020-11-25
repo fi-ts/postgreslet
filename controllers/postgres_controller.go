@@ -22,15 +22,17 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	"github.com/prometheus/common/log"
 	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	databasev1 "github.com/fi-ts/postgres-controller/api/v1"
+	paasv1 "github.com/fi-ts/postgres-controller/api/v1"
 )
 
 // Requeue defines in how many seconds a requeue should happen
@@ -55,45 +57,29 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	ctx := context.Background()
 	log := r.Log.WithValues("postgres", req.NamespacedName)
 
-	instance := &databasev1.Postgres{}
+	log.Info("getting paasv1.Postgres")
+	instance := &paasv1.Postgres{}
 	if err := r.Get(ctx, req.NamespacedName, instance); err != nil {
-		if errors.IsNotFound(err) {
-			return ctrl.Result{}, nil
-		}
-		return ctrl.Result{}, err
+		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
+	log.Info("got paasv1.Postgres", "paas", instance)
+
+	if !r.isManagedByUs(instance) {
+		log.Info("object should be manage by another controller, ignoring event.")
+		return ctrl.Result{}, nil
+	}
+
 	z := instance.ToZPostgres()
 	k := z.ToKey()
 
-	// TODO implement later once postgreslet is in place
-	// if instance.Spec.PartitionID != myPartition {
-	// 	return ctrl.Result{}, nil
-	// }
-
-	// if tenantOnly != "" && instance.Spec.Tenant != tenantOnly {
-	// 	return ctrl.Result{}, nil
-	// }
-
 	// Delete
 	if instance.IsBeingDeleted() {
-		rawZ := &zalando.Postgresql{}
-		if err := r.Get(ctx, *k, rawZ); err != nil {
-			return ctrl.Result{}, fmt.Errorf("error while fetching zalando postgresql to delete: %v", err)
-		}
-		if err := r.Delete(ctx, rawZ); err != nil {
-			return ctrl.Result{}, fmt.Errorf("error while deleting zalando postgresql: %v", err)
-		}
-		log.Info("zalando postgresql deleted")
-		return ctrl.Result{}, nil
+		log.Info("object marked for deletion")
+		return r.deleteZalando(ctx, k)
 	}
 
 	// Add `instance` (owner) to the metadata of `z` (owned).
 	controllerutil.SetControllerReference(instance, z, r.Scheme)
-	u, err := z.ToUnstructured()
-	if err != nil {
-		log.Error(err, "error while converting to unstructured")
-		return ctrl.Result{}, err
-	}
 
 	// Get zalando postgresql and create one if none.
 	rawZ := &zalando.Postgresql{}
@@ -105,12 +91,7 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		}
 		log.Info("creating zalando postgresql", "ns/name", z)
 
-		// todo: Create a ns if none.
-
-		if err := r.Client.Create(ctx, u); err != nil {
-			log.Error(err, "error while creating zalando postgresql", "ns/name", k)
-			return ctrl.Result{}, err
-		}
+		return r.createZalando(ctx, z)
 	}
 
 	// Update zalando postgresql.
@@ -142,12 +123,12 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 func (r *PostgresReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&databasev1.Postgres{}).
+		For(&paasv1.Postgres{}).
 		Owns(&zalando.Postgresql{}).
 		Complete(r)
 }
 
-func patchRawZ(out *zalando.Postgresql, in *databasev1.Postgres) {
+func patchRawZ(out *zalando.Postgresql, in *paasv1.Postgres) {
 	out.Spec.NumberOfInstances = in.Spec.NumberOfInstances
 
 	// todo: Check if the validation should be performed here.
@@ -162,7 +143,7 @@ func patchRawZ(out *zalando.Postgresql, in *databasev1.Postgres) {
 		if in.Spec.Maintenance == nil {
 			return nil
 		}
-		isEvery := in.Spec.Maintenance.Weekday == databasev1.All
+		isEvery := in.Spec.Maintenance.Weekday == paasv1.All
 		return []zalando.MaintenanceWindow{
 			{
 				Everyday: isEvery,
@@ -179,4 +160,50 @@ func patchRawZ(out *zalando.Postgresql, in *databasev1.Postgres) {
 	}()
 
 	// todo: in.Spec.Backup, in.Spec.AccessList
+}
+
+func (r *PostgresReconciler) isManagedByUs(obj *paasv1.Postgres) bool {
+	// TODO implement later once postgreslet is in place
+
+	// if obj.Spec.PartitionID != myPartition {
+	// 	return false
+	// }
+
+	// if tenantOnly != "" && obj.Spec.Tenant != tenantOnly {
+	// 	return false
+	// }
+	return true
+}
+
+func (r *PostgresReconciler) deleteZalando(ctx context.Context, ns *types.NamespacedName) (ctrl.Result, error) {
+	rawZ := &zalando.Postgresql{}
+	if err := r.Get(ctx, *ns, rawZ); err != nil {
+		return ctrl.Result{}, fmt.Errorf("error while fetching zalando postgresql to delete: %v", err)
+	}
+
+	if err := r.Delete(ctx, rawZ); err != nil {
+		return ctrl.Result{}, fmt.Errorf("error while deleting zalando postgresql: %v", err)
+	}
+
+	log.Info("zalando postgresql deleted")
+	return ctrl.Result{}, nil
+}
+
+func (r *PostgresReconciler) createZalando(ctx context.Context, z *paasv1.ZalandoPostgres) (ctrl.Result, error) {
+	log := r.Log.WithValues("zalando", types.NamespacedName{Name: z.Name, Namespace: z.Namespace})
+
+	// todo: Create a ns if none.
+
+	u, err := z.ToUnstructured()
+	if err != nil {
+		log.Error(err, "error while converting to unstructured")
+		return ctrl.Result{}, err
+	}
+
+	if err := r.Client.Create(ctx, u); err != nil {
+		log.Error(err, "error while creating zalando postgresql")
+		return ctrl.Result{}, err
+	}
+
+	return ctrl.Result{}, nil
 }
