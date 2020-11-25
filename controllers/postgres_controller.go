@@ -158,20 +158,25 @@ func patchRawZ(out *zalando.Postgresql, in *databasev1.Postgres) {
 	// todo: Check if the validation should be performed here.
 	out.Spec.Volume.Size = in.Spec.Size.StorageSize
 
-	isEvery := in.Spec.Maintenance.Weekday == databasev1.All
-	out.Spec.MaintenanceWindows = []zalando.MaintenanceWindow{
-		{
-			Everyday: isEvery,
-			Weekday: func() time.Weekday {
-				if isEvery {
-					return time.Weekday(0)
-				}
-				return time.Weekday(in.Spec.Maintenance.Weekday)
-			}(),
-			StartTime: in.Spec.Maintenance.TimeWindow.Start,
-			EndTime:   in.Spec.Maintenance.TimeWindow.End,
-		},
-	}
+	out.Spec.MaintenanceWindows = func() []zalando.MaintenanceWindow {
+		if in.Spec.Maintenance == nil {
+			return nil
+		}
+		isEvery := in.Spec.Maintenance.Weekday == databasev1.All
+		return []zalando.MaintenanceWindow{
+			{
+				Everyday: isEvery,
+				Weekday: func() time.Weekday {
+					if isEvery {
+						return time.Weekday(0)
+					}
+					return time.Weekday(in.Spec.Maintenance.Weekday)
+				}(),
+				StartTime: in.Spec.Maintenance.TimeWindow.Start,
+				EndTime:   in.Spec.Maintenance.TimeWindow.End,
+			},
+		}
+	}()
 
 	// todo: in.Spec.Backup, in.Spec.AccessList
 }

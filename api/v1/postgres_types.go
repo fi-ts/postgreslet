@@ -58,11 +58,11 @@ type PostgresSpec struct {
 	// Size of the database
 	Size Size `json:"size,omitempty"`
 	// Maintenance defines automatic maintenance of the database
-	Maintenance Maintenance `json:"maintenance,omitempty"`
+	Maintenance *Maintenance `json:"maintenance,omitempty"`
 	// Backup parametes of the database backup
-	Backup Backup `json:"backup,omitempty"`
+	Backup *Backup `json:"backup,omitempty"`
 	// AccessList defines access restrictions
-	AccessList AccessList `json:"accessList,omitempty"`
+	AccessList *AccessList `json:"accessList,omitempty"`
 }
 
 // AccessList defines the type of restrictions to access the database
