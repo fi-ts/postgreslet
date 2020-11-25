@@ -11,6 +11,12 @@ else
 GOBIN=$(shell go env GOBIN)
 endif
 
+# for version informations in the binary
+SHA := $(shell git rev-parse --short=8 HEAD)
+GITVERSION := $(shell git describe --long --all)
+BUILDDATE := $(shell date -Iseconds)
+VERSION := $(or ${DOCKER_TAG},devel)
+
 all: manager
 
 # Run tests
@@ -19,7 +25,12 @@ test: generate fmt vet manifests
 
 # Build manager binary
 manager: generate fmt vet
-	go build -o bin/manager main.go
+	go build -a -ldflags "-extldflags '-static' \
+						-X 'github.com/metal-stack/v.Version=$(VERSION)' \
+						-X 'github.com/metal-stack/v.Revision=$(GITVERSION)' \
+						-X 'github.com/metal-stack/v.GitSHA1=$(SHA)' \
+						-X 'github.com/metal-stack/v.BuildDate=$(BUILDDATE)'" \
+	-o bin/manager main.go
 
 # Run against the configured Kubernetes cluster in ~/.kube/config
 run: generate fmt vet manifests
