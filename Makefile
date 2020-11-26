@@ -31,6 +31,7 @@ manager: generate fmt vet
 						-X 'github.com/metal-stack/v.GitSHA1=$(SHA)' \
 						-X 'github.com/metal-stack/v.BuildDate=$(BUILDDATE)'" \
 	-o bin/manager main.go
+	strip bin/manager
 
 # Run against the configured Kubernetes cluster in ~/.kube/config
 run: generate fmt vet manifests
@@ -65,6 +66,7 @@ vet:
 
 # Generate code
 generate: controller-gen
+	$(STATIK) -src=config -ns config
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
 
 # Build the docker image
@@ -93,4 +95,21 @@ ifeq (, $(shell which controller-gen))
 CONTROLLER_GEN=$(GOBIN)/controller-gen
 else
 CONTROLLER_GEN=$(shell which controller-gen)
+endif
+
+# find or download statik
+.PHONY: statik
+statik:
+ifeq (, $(shell which statik))
+	@{ \
+	set -e ;\
+	STATIK_TMP_DIR=$$(mktemp -d) ;\
+	cd $$STATIK_TMP_DIR ;\
+	go mod init tmp ;\
+	go get github.com/rakyll/statik ;\
+	rm -rf $$STATIK_TMP_DIR ;\
+	}
+STATIK=$(GOBIN)/statik
+else
+STATIK=$(shell which statik)
 endif

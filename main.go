@@ -19,6 +19,7 @@ package main
 import (
 	"flag"
 	"os"
+	"time"
 
 	"github.com/metal-stack/v"
 
@@ -32,6 +33,7 @@ import (
 
 	databasev1 "github.com/fi-ts/postgres-controller/api/v1"
 	"github.com/fi-ts/postgres-controller/controllers"
+	"github.com/fi-ts/postgres-controller/pkg/manifest"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -59,7 +61,8 @@ func main() {
 
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
+	restConfig := ctrl.GetConfigOrDie()
+	mgr, err := ctrl.NewManager(restConfig, ctrl.Options{
 		Scheme:             scheme,
 		MetricsBindAddress: metricsAddr,
 		Port:               9443,
@@ -68,6 +71,25 @@ func main() {
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
+		os.Exit(1)
+	}
+
+	// Install required CRD
+	manifests, err := manifest.InstallManifests(restConfig, manifest.InstallOptions{
+		UseVFS: true,
+		Paths:  []string{"/crd/bases"},
+	})
+	if err != nil {
+		setupLog.Error(err, "unable to create crds of postgres-controller")
+		os.Exit(1)
+	}
+
+	err = manifest.WaitForManifests(restConfig, manifests, manifest.InstallOptions{
+		MaxTime:      500 * time.Millisecond,
+		PollInterval: 100 * time.Millisecond,
+	})
+	if err != nil {
+		setupLog.Error(err, "unable to wait for created crds of postgres-controller")
 		os.Exit(1)
 	}
 
