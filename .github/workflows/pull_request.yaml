@@ -32,7 +32,7 @@ jobs:
     - name: Build Docker image
       run: |
         export DOCKER_TAG=pr-${GITHUB_REF##*/}
-        make docker-push
+        make docker-build
 
     - name: Push Docker image
       run: |
