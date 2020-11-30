@@ -147,7 +147,7 @@ func (p *Postgres) ToKey() *types.NamespacedName {
 		Name:      p.Name,
 	}
 }
-func (p *Postgres) ToZPostgres() *ZalandoPostgres {
+func (p *Postgres) ToZalandoPostgres() *ZalandoPostgres {
 	return &ZalandoPostgres{
 		TypeMeta: ZalandoPostgresTypeMeta,
 		ObjectMeta: metav1.ObjectMeta{
@@ -226,7 +226,7 @@ func removeElem(ss []string, s string) (out []string) {
 }
 
 // Only names starting with the `TeamID` of the `Postgresql` are acceptable.
-func (p *Postgres) toZName() string {
+func (p *Postgres) toZalandoPostgresName() string {
 	return p.Spec.ProjectID + "-" + string(p.UID)
 }
 

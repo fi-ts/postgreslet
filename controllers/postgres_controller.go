@@ -33,8 +33,8 @@ import (
 	pg "github.com/fi-ts/postgres-controller/api/v1"
 )
 
-// Requeue defines in how many seconds a requeue should happen
-var Requeue = ctrl.Result{
+// requeue defines in how many seconds a requeue should happen
+var requeue = ctrl.Result{
 	Requeue:      true,
 	RequeueAfter: 30 * time.Second,
 }
@@ -67,7 +67,7 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		return ctrl.Result{}, nil
 	}
 
-	z := instance.ToZPostgres()
+	z := instance.ToZalandoPostgres()
 	k := z.ToKey()
 
 	// Delete
@@ -86,7 +86,8 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	// Add finalizer if none.
 	if !instance.HasFinalizer(pg.PostgresFinalizerName) {
 		r.Log.Info("finalizer being added")
-		if err := r.addFinalizer(ctx, instance); err != nil {
+		instance.AddFinalizer(pg.PostgresFinalizerName)
+		if err := r.Update(ctx, instance); err != nil {
 			return ctrl.Result{}, fmt.Errorf("error while adding finalizer: %v", err)
 		}
 		r.Log.Info("finalizer added")
