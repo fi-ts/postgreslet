@@ -25,7 +25,6 @@ import (
 	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -74,7 +73,7 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	if instance.IsBeingDeleted() {
 		log.Info("deleting owned zalando postgresql")
 
-		r.deleteZPostgresql(ctx, k)
+		// r.deleteZPostgrsql(ctx, k)
 
 		instance.RemoveFinalizer(pg.PostgresFinalizerName)
 		if err := r.Update(ctx, instance); err != nil {
@@ -174,21 +173,6 @@ func (r *PostgresReconciler) createZalandoPostgresql(ctx context.Context, z *pg.
 	}
 
 	return ctrl.Result{}, nil
-}
-
-func (r *PostgresReconciler) deleteZPostgresql(ctx context.Context, k *types.NamespacedName) error {
-	log := r.Log.WithValues("zalando postgrsql", k)
-	rawZ := &zalando.Postgresql{}
-	if err := r.Get(ctx, *k, rawZ); err != nil {
-		return fmt.Errorf("error while fetching zalando postgresql to delete: %v", err)
-	}
-
-	if err := r.Delete(ctx, rawZ); err != nil {
-		return fmt.Errorf("error while deleting zalando postgresql: %v", err)
-	}
-
-	log.Info("zalando postgresql deleted")
-	return nil
 }
 
 func patchRawZ(out *zalando.Postgresql, in *pg.Postgres) {
