@@ -87,10 +87,10 @@ func main() {
 
 	if err = (&controllers.StatusReconciler{
 		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("ZalandoStatus"),
+		Log:    ctrl.Log.WithName("controllers").WithName("Status"),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "ZalandoStatus")
+		setupLog.Error(err, "unable to create controller", "controller", "Status")
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder
