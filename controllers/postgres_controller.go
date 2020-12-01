@@ -128,7 +128,7 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	instance.Status.Description = newStatus
 	if err := r.Status().Update(ctx, instance); err != nil {
 		log.Error(err, "error while updating postgres status")
-		return requeue, err
+		return ctrl.Result{}, err
 	}
 	log.Info("postgres status updated successfully", "status", newStatus)
 

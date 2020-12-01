@@ -8,6 +8,7 @@ metadata:
   creationTimestamp: null
   name: postgres.database.fits.cloud
 spec:
+  preserveUnknownFields: false
   additionalPrinterColumns:
   - JSONPath: .spec.version
     name: Version
