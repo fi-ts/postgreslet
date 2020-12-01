@@ -1,6 +1,6 @@
 
 # Image URL to use all building/pushing image targets
-IMG ?= postgres-controller:latest
+IMG ?= r.metal-stack.io/extensions/postgreslet
 # Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
 CRD_OPTIONS ?= "crd:trivialVersions=true"
 
@@ -15,7 +15,7 @@ endif
 SHA := $(shell git rev-parse --short=8 HEAD)
 GITVERSION := $(shell git describe --long --all)
 BUILDDATE := $(shell date -Iseconds)
-VERSION := $(or ${DOCKER_TAG},devel)
+VERSION := $(or ${DOCKER_TAG},latest)
 
 all: manager
 
@@ -46,7 +46,7 @@ uninstall: manifests
 
 # Deploy controller in the configured Kubernetes cluster in ~/.kube/config
 deploy: manifests
-	cd config/manager && kustomize edit set image controller=${IMG}
+	cd config/manager && kustomize edit set image controller=${IMG}:${VERSION}
 	kustomize build config/default | kubectl apply -f -
 
 # Generate manifests e.g. CRD, RBAC etc.
@@ -68,15 +68,15 @@ generate: controller-gen
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
 
 # Build the docker image
-docker-build: test
-	docker build . -t ${IMG}
+docker-build:
+	docker build . -t ${IMG}:${VERSION}
 
 # Push the docker image
 docker-push:
-	docker push ${IMG}
+	docker push ${IMG}:${VERSION}
 
 kind-load-image:
-	kind load docker-image ${IMG} -v 1
+	kind load docker-image ${IMG}:${VERSION} -v 1
 
 # find or download controller-gen
 # download controller-gen if necessary

@@ -25,7 +25,6 @@ import (
 	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -78,7 +77,7 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 		instance.RemoveFinalizer(pg.PostgresFinalizerName)
 		if err := r.Update(ctx, instance); err != nil {
-			return ctrl.Result{}, err
+			return requeue, err
 		}
 		return ctrl.Result{}, nil
 	}
@@ -88,26 +87,28 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		r.Log.Info("finalizer being added")
 		instance.AddFinalizer(pg.PostgresFinalizerName)
 		if err := r.Update(ctx, instance); err != nil {
-			return ctrl.Result{}, fmt.Errorf("error while adding finalizer: %v", err)
+			return requeue, fmt.Errorf("error while adding finalizer: %v", err)
 		}
 		r.Log.Info("finalizer added")
 		return ctrl.Result{}, nil
 	}
 
 	// Add `instance` (owner) to the metadata of `z` (owned).
-	controllerutil.SetControllerReference(instance, z, r.Scheme)
-
+	err := controllerutil.SetControllerReference(instance, z, r.Scheme)
+	if err != nil {
+		return requeue, err
+	}
 	// Get zalando postgresql and create one if none.
 	rawZ := &zalando.Postgresql{}
 	if err := r.Client.Get(ctx, *k, rawZ); err != nil {
 		log.Info("unable to fetch zalando postgresql", "error", err)
 		// errors other than `NotFound`
 		if !errors.IsNotFound(err) {
-			return ctrl.Result{}, err
+			return requeue, err
 		}
 		log.Info("creating zalando postgresql", "ns/name", z)
 
-		return r.createZPostgrsql(ctx, z)
+		return r.createZalandoPostgresql(ctx, z)
 	}
 
 	// Update zalando postgresql.
@@ -117,7 +118,7 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		patchRawZ(rawZ, instance)
 		if err := r.Client.Patch(ctx, rawZ, patch); err != nil {
 			log.Error(err, "error while updating zalando postgresql ", "ns/name", k)
-			return ctrl.Result{}, err
+			return requeue, err
 		}
 		log.Info("zalando postgresql updated", "ns/name", k)
 	}
@@ -127,7 +128,7 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	instance.Status.Description = newStatus
 	if err := r.Status().Update(ctx, instance); err != nil {
 		log.Error(err, "error while updating postgres status")
-		return ctrl.Result{}, err
+		return requeue, err
 	}
 	log.Info("postgres status updated successfully", "status", newStatus)
 
@@ -154,11 +155,8 @@ func (r *PostgresReconciler) isManagedByUs(obj *pg.Postgres) bool {
 	// }
 	return true
 }
-func (r *PostgresReconciler) addFinalizer(ctx context.Context, instance *pg.Postgres) error {
-	instance.AddFinalizer(pg.PostgresFinalizerName)
-	return r.Update(ctx, instance)
-}
-func (r *PostgresReconciler) createZPostgrsql(ctx context.Context, z *pg.ZalandoPostgres) (ctrl.Result, error) {
+
+func (r *PostgresReconciler) createZalandoPostgresql(ctx context.Context, z *pg.ZalandoPostgres) (ctrl.Result, error) {
 	log := r.Log.WithValues("zalando postgresql", z.ToKey())
 
 	// todo: Create a ns if none.
@@ -175,21 +173,6 @@ func (r *PostgresReconciler) createZPostgrsql(ctx context.Context, z *pg.Zalando
 	}
 
 	return ctrl.Result{}, nil
-}
-
-func (r *PostgresReconciler) deleteZPostgresql(ctx context.Context, k *types.NamespacedName) error {
-	log := r.Log.WithValues("zalando postgrsql", k)
-	rawZ := &zalando.Postgresql{}
-	if err := r.Get(ctx, *k, rawZ); err != nil {
-		return fmt.Errorf("error while fetching zalando postgresql to delete: %v", err)
-	}
-
-	if err := r.Delete(ctx, rawZ); err != nil {
-		return fmt.Errorf("error while deleting zalando postgresql: %v", err)
-	}
-
-	log.Info("zalando postgresql deleted")
-	return nil
 }
 
 func patchRawZ(out *zalando.Postgresql, in *pg.Postgres) {
