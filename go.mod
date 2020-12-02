@@ -11,6 +11,7 @@ require (
 	github.com/zalando/postgres-operator v1.5.0
 	k8s.io/api v0.19.4
 	k8s.io/apimachinery v0.19.4
+	k8s.io/cli-runtime v0.19.4
 	k8s.io/client-go v11.0.0+incompatible
 	sigs.k8s.io/controller-runtime v0.6.4
 )
