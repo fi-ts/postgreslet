@@ -22,6 +22,9 @@ import (
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -50,10 +53,7 @@ func (r *StatusReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		if !errors.IsNotFound(err) {
 			return ctrl.Result{}, err
 		}
-		// TODO discuss. the zalando object should only be deleted as a result of the remote object being deleted, so in
-		// theory, no action should be necessary here? however, if the zalando object was removed manually for some
-		// reason, it should probably be recreated here?
-		log.Info("status changed to Deleted?")
+		log.Info("status changed to Deleted")
 		return ctrl.Result{}, nil
 	}
 	log.Info("Got status update", "PostgresClusterStatus", instance.Status.PostgresClusterStatus)
@@ -68,6 +68,7 @@ func (r *StatusReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	// FIXME currently hardcoded!!!
 	derivedOwnerName := "sample-name"
 	var owner pg.Postgres
+	var ownerFound bool
 	for _, owner = range owners.Items {
 		// TODO switch to UID
 		if owner.Name != derivedOwnerName {
@@ -77,14 +78,33 @@ func (r *StatusReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		// TODO also check ProjectID
 
 		log.Info("Found owner", "owner", owner)
+		ownerFound = true
 		break
 	}
 
-	owner.Status.Description = instance.Status.PostgresClusterStatus
-	log.Info("Updating remote", "remote", owner)
-	if err := r.Client.Update(ctx, &owner); err != nil {
-		log.Error(err, "failed to update remote object")
+	if !ownerFound {
+		// TODO no owner found (should never happen...?)
+		err := errors.NewNotFound(schema.GroupResource{Group: pg.GroupVersion.Group, Resource: owner.GetObjectKind().GroupVersionKind().Kind}, derivedOwnerName)
+		log.Error(err, "Could not find the owner")
 		return ctrl.Result{}, err
+	}
+
+	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		// get a fresh copy of the owner object
+		if err := r.Client.Get(ctx, types.NamespacedName{Name: owner.Name, Namespace: owner.Namespace}, &owner); err != nil {
+			return err
+		}
+		log.Info("Updating owner", "owner", owner)
+		owner.Status.Description = instance.Status.PostgresClusterStatus
+		if err := r.Client.Update(ctx, &owner); err != nil {
+			log.Error(err, "failed to update owner object")
+			return err
+		}
+		return nil
+	})
+
+	if retryErr != nil {
+		return ctrl.Result{}, retryErr
 	}
 
 	return ctrl.Result{}, nil
