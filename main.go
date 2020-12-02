@@ -24,16 +24,10 @@ import (
 
 	"github.com/metal-stack/v"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
-	"k8s.io/cli-runtime/pkg/resource"
-	"k8s.io/client-go/kubernetes"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
-	"k8s.io/client-go/rest"
-	"k8s.io/client-go/restmapper"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -86,10 +80,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	// if err := installServiceAccountRBAC("./externalyaml/operator-service-account-rbac.yaml/", mgr.GetClient()); err != nil {
-	// 	setupLog.Error(err, "unable to install zalando service account RBAC")
-	// }
-
 	if err = (&controllers.PostgresReconciler{
 		Client: mgr.GetClient(),
 		Log:    ctrl.Log.WithName("controllers").WithName("Postgres"),
@@ -138,56 +128,4 @@ func installExternalYAML(fileName string, client client.Client) error {
 	}
 
 	return nil
-}
-
-// func installServiceAccountRBAC(fileName string, client client.Client) error {
-// 	bb, err := ioutil.ReadFile(fileName)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	resource.NewHelper()
-
-// }
-func createObject(kubeClientset kubernetes.Interface, restConfig rest.Config, obj runtime.Object) (runtime.Object, error) {
-	// Create a REST mapper that tracks information about the available resources in the cluster.
-	groupResources, err := restmapper.GetAPIGroupResources(kubeClientset.Discovery())
-	if err != nil {
-		return nil, err
-	}
-	rm := restmapper.NewDiscoveryRESTMapper(groupResources)
-
-	// Get some metadata needed to make the REST request.
-	gvk := obj.GetObjectKind().GroupVersionKind()
-	gk := schema.GroupKind{Group: gvk.Group, Kind: gvk.Kind}
-	mapping, err := rm.RESTMapping(gk, gvk.Version)
-	if err != nil {
-		return nil, err
-	}
-
-	_, err = meta.NewAccessor().Name(obj)
-	if err != nil {
-		return nil, err
-	}
-
-	// Create a client specifically for creating the object.
-	restClient, err := newRestClient(restConfig, mapping.GroupVersionKind.GroupVersion())
-	if err != nil {
-		return nil, err
-	}
-
-	// Use the REST helper to create the object in the "default" namespace.
-	restHelper := resource.NewHelper(restClient, mapping)
-	return restHelper.Create("default", false, obj)
-}
-
-func newRestClient(restConfig rest.Config, gv schema.GroupVersion) (rest.Interface, error) {
-	restConfig.ContentConfig = resource.UnstructuredPlusDefaultContentConfig()
-	restConfig.GroupVersion = &gv
-	if len(gv.Group) == 0 {
-		restConfig.APIPath = "/api"
-	} else {
-		restConfig.APIPath = "/apis"
-	}
-
-	return rest.RESTClientFor(&restConfig)
 }
