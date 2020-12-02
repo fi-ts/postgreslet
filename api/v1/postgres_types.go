@@ -225,11 +225,6 @@ func removeElem(ss []string, s string) (out []string) {
 	return
 }
 
-// Only names starting with the `TeamID` of the `Postgresql` are acceptable.
-func (p *Postgres) toZalandoPostgresName() string {
-	return p.Spec.ProjectID + "-" + string(p.UID)
-}
-
 func init() {
 	SchemeBuilder.Register(&Postgres{}, &PostgresList{})
 }
