@@ -103,7 +103,7 @@ func main() {
 	}
 }
 
-func installExternalYAML(fileName string, client client.Client) error {
+func installExternalYAML(fileName string, k8sClient client.Client) error {
 	bb, err := ioutil.ReadFile(fileName)
 	if err != nil {
 		return err
@@ -122,7 +122,7 @@ func installExternalYAML(fileName string, client client.Client) error {
 		}
 
 		// todo: Check the NS.
-		if err := client.Create(context.Background(), obj); err != nil {
+		if err := k8sClient.Patch(context.Background(), obj, client.MergeFrom(obj.DeepCopyObject())); err != nil {
 			return err
 		}
 	}
