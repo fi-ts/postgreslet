@@ -24,6 +24,7 @@ import (
 
 	"github.com/metal-stack/v"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -75,10 +76,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := installExternalYAML("./external.yaml", mgr.GetClient()); err != nil {
+	objs, err := installExternalYAML("./external.yaml", "example-partition", mgr.GetClient())
+	if err != nil {
 		setupLog.Error(err, "unable to install external YAML")
 		os.Exit(1)
 	}
+	defer uninstallExternalYaml(objs, mgr.GetClient())
 
 	if err = (&controllers.PostgresReconciler{
 		Client: mgr.GetClient(),
@@ -103,29 +106,55 @@ func main() {
 	}
 }
 
-func installExternalYAML(fileName string, k8sClient client.Client) error {
+func installExternalYAML(fileName, partitionID string, k8sClient client.Client) (objs []runtime.Object, err error) {
 	bb, err := ioutil.ReadFile(fileName)
 	if err != nil {
-		return err
+		return
 	}
 
+	ctx := context.Background()
+
+	// Make sure the namespace `partitionID` exists.
+	ns := &corev1.Namespace{}
+	if err = k8sClient.Get(ctx, client.ObjectKey{Name: partitionID}, &corev1.Namespace{}); err != nil {
+		ns.Name = partitionID
+		if err = k8sClient.Create(ctx, ns); err != nil {
+			return
+		}
+	}
+
+	// Convert to a list of YAMLs.
 	deserializer := serializer.NewCodecFactory(scheme).UniversalDeserializer()
 	list := &corev1.List{}
 	if _, _, err = deserializer.Decode(bb, nil, list); err != nil {
-		return err
+		return
 	}
 
+	// Decode each YAML to `runtime.Object`, add the namespace to it and install it.
+	accessor := meta.NewAccessor()
 	for _, item := range list.Items {
-		obj, _, err := deserializer.Decode(item.Raw, nil, nil)
-		if err != nil {
-			return err
+		obj, _, er := deserializer.Decode(item.Raw, nil, nil)
+		if er != nil {
+			return objs, er
+		}
+		if err = accessor.SetNamespace(obj, partitionID); err != nil {
+			return
 		}
 
-		// todo: Check the NS.
-		if err := k8sClient.Patch(context.Background(), obj, client.MergeFrom(obj.DeepCopyObject())); err != nil {
+		if err = k8sClient.Create(ctx, obj); err != nil {
+			return
+		}
+		objs = append(objs, obj)
+	}
+
+	return
+}
+
+func uninstallExternalYaml(objs []runtime.Object, k8sClient client.Client) error {
+	for _, obj := range objs {
+		if err := k8sClient.Delete(context.Background(), obj); err != nil {
 			return err
 		}
 	}
-
 	return nil
 }
