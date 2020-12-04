@@ -18,11 +18,12 @@ package controllers
 
 import (
 	"context"
+	"fmt"
+	"strings"
 
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -65,28 +66,26 @@ func (r *StatusReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		return ctrl.Result{}, err
 	}
 
-	// FIXME currently hardcoded!!!
-	derivedOwnerName := "sample-name"
+	derivedOwnerUID, err := deriveOwnerData(instance.Name)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
 	var owner pg.Postgres
-	var ownerFound bool
-	for _, owner = range owners.Items {
-		// TODO switch to UID
-		if owner.Name != derivedOwnerName {
-			log.Info("owner not a match", "remote", owner)
+	ownerFound := false
+	for _, o := range owners.Items {
+		if o.UID != derivedOwnerUID {
+			log.Info("owner not a match", "remote", o)
 			continue
 		}
-		// TODO also check ProjectID
 
-		log.Info("Found owner", "owner", owner)
+		log.Info("Found owner", "owner", o)
+		owner = o
 		ownerFound = true
 		break
 	}
 
 	if !ownerFound {
-		// TODO no owner found (should never happen...?)
-		err := errors.NewNotFound(schema.GroupResource{Group: pg.GroupVersion.Group, Resource: owner.GetObjectKind().GroupVersionKind().Kind}, derivedOwnerName)
-		log.Error(err, "Could not find the owner")
-		return ctrl.Result{}, err
+		return ctrl.Result{}, fmt.Errorf("Could not find the owner")
 	}
 
 	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
@@ -115,4 +114,13 @@ func (r *StatusReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&zalando.Postgresql{}).
 		Complete(r)
+}
+
+func deriveOwnerData(instanceName string) (types.UID, error) {
+	result := strings.SplitN(instanceName, ".", 2)
+	if len(result) < 2 {
+		return "", fmt.Errorf("Could not derive owner reference")
+	}
+	ownerUID := types.UID(strings.Join(result[1:], ""))
+	return ownerUID, nil
 }
