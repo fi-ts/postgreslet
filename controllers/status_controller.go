@@ -121,6 +121,6 @@ func deriveOwnerData(instanceName string) (types.UID, error) {
 	if len(result) < 2 {
 		return "", fmt.Errorf("Could not derive owner reference")
 	}
-	ownerUID := types.UID(strings.Join(result[1:], ""))
+	ownerUID := types.UID(result[1])
 	return ownerUID, nil
 }
