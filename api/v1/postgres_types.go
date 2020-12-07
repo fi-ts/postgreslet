@@ -151,8 +151,8 @@ func (p *Postgres) ToZalandoPostgres() *ZalandoPostgres {
 	return &ZalandoPostgres{
 		TypeMeta: ZalandoPostgresTypeMeta,
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      p.Spec.ProjectID + "-" + p.Name, // todo: Need another rule of naming. UID is not allowed by the operator.
-			Namespace: p.Namespace,                     // todo: Use Spec.ProjectID once ns creation is implemented.
+			Name:      p.Spec.ProjectID + "." + string(p.UID), // todo: Need another rule of naming. UID is not allowed by the operator.
+			Namespace: p.Namespace,                            // todo: Use Spec.ProjectID once ns creation is implemented.
 		},
 		Spec: ZalandoPostgresSpec{
 			MaintenanceWindows: func() []MaintenanceWindow {
