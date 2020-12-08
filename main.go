@@ -26,12 +26,10 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	databasev1 "github.com/fi-ts/postgres-controller/api/v1"
 	"github.com/fi-ts/postgres-controller/controllers"
-	yaml "github.com/fi-ts/postgres-controller/pkg/externalyaml"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -72,18 +70,17 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Use no-cache client to avoid waiting.
-	newClient, err := client.New(conf, client.Options{})
-	if err != nil {
-		setupLog.Error(err, "unable to create a new client")
-		os.Exit(1)
-	}
-	objs, err := yaml.InstallExternalYAML("./external.yaml", "example-partition", newClient, scheme)
-	if err != nil {
-		setupLog.Error(err, "unable to install external YAML")
-		os.Exit(1)
-	}
-	defer yaml.UninstallExternalYaml(objs, newClient)
+	// y, err := yamlmanager.NewYAMLManager(conf, scheme)
+	// if err != nil {
+	// 	setupLog.Error(err, "unable to create a new external YAML manager")
+	// 	os.Exit(1)
+	// }
+	// objs, err := y.InstallYAML("./external.yaml", "default")
+	// if err != nil {
+	// 	setupLog.Error(err, "unable to install external YAML")
+	// 	os.Exit(1)
+	// }
+	// defer y.UninstallYAML(objs)
 
 	if err = (&controllers.PostgresReconciler{
 		Client: mgr.GetClient(),

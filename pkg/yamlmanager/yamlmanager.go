@@ -1,9 +1,8 @@
-package externalyaml
+package yamlmanager
 
 import (
 	"context"
 	"io/ioutil"
-	"log"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -13,10 +12,28 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func InstallExternalYAML(fileName, namespace string, k8sClient client.Client, scheme *runtime.Scheme) (objs []runtime.Object, err error) {
+type YAMLManager struct {
+	client.Client
+	*runtime.Scheme
+}
+
+func NewYAMLManager(conf *rest.Config, scheme *runtime.Scheme) (*YAMLManager, error) {
+	// Use no-cache client to avoid waiting for cashing.
+	client, err := client.New(conf, client.Options{})
+	if err != nil {
+		return nil, err
+	}
+	return &YAMLManager{
+		Client: client,
+		Scheme: scheme,
+	}, nil
+}
+
+func (y *YAMLManager) InstallYAML(fileName, namespace string) (objs []runtime.Object, err error) {
 	bb, err := ioutil.ReadFile(fileName)
 	if err != nil {
 		return
@@ -25,7 +42,7 @@ func InstallExternalYAML(fileName, namespace string, k8sClient client.Client, sc
 	ctx := context.Background()
 
 	// Make sure the namespace `partitionID` exists.
-	if err = k8sClient.Get(ctx, client.ObjectKey{Name: namespace}, &corev1.Namespace{}); err != nil {
+	if err = y.Client.Get(ctx, client.ObjectKey{Name: namespace}, &corev1.Namespace{}); err != nil {
 		// errors other than `not found`
 		if !errors.IsNotFound(err) {
 			return
@@ -34,7 +51,7 @@ func InstallExternalYAML(fileName, namespace string, k8sClient client.Client, sc
 		// Create the namespace.
 		ns := &corev1.Namespace{}
 		ns.Name = namespace
-		if err = k8sClient.Create(ctx, ns); err != nil {
+		if err = y.Create(ctx, ns); err != nil {
 			return
 		}
 
@@ -43,7 +60,7 @@ func InstallExternalYAML(fileName, namespace string, k8sClient client.Client, sc
 	}
 
 	// Convert to a list of YAMLs.
-	deserializer := serializer.NewCodecFactory(scheme).UniversalDeserializer()
+	deserializer := serializer.NewCodecFactory(y.Scheme).UniversalDeserializer()
 	list := &corev1.List{}
 	if _, _, err = deserializer.Decode(bb, nil, list); err != nil {
 		return
@@ -62,33 +79,33 @@ func InstallExternalYAML(fileName, namespace string, k8sClient client.Client, sc
 			return
 		}
 
-		if err = setNamespace(obj, namespace, accessor); err != nil {
+		if err = y.setNamespace(obj, namespace, accessor); err != nil {
 			return
 		}
 
-		if err = k8sClient.Create(ctx, obj); err != nil {
+		if err = y.Create(ctx, obj); err != nil {
 			return
 		}
 		objs = append(objs, obj)
 	}
 
-	if err = waitTillZalandoPostgresOperatorReady(ctx, time.Minute, time.Second, k8sClient); err != nil {
+	if err = y.waitTillZalandoPostgresOperatorReady(ctx, time.Minute, time.Second); err != nil {
 		return
 	}
 
 	return
 }
 
-func UninstallExternalYaml(objs []runtime.Object, k8sClient client.Client) error {
+func (y *YAMLManager) UninstallYAML(objs []runtime.Object) error {
 	for _, obj := range objs {
-		if err := k8sClient.Delete(context.Background(), obj); err != nil {
+		if err := y.Delete(context.Background(), obj); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func setNamespace(obj runtime.Object, namespace string, accessor meta.MetadataAccessor) error {
+func (*YAMLManager) setNamespace(obj runtime.Object, namespace string, accessor meta.MetadataAccessor) error {
 	if err := accessor.SetNamespace(obj, namespace); err != nil {
 		return err
 	}
@@ -100,13 +117,12 @@ func setNamespace(obj runtime.Object, namespace string, accessor meta.MetadataAc
 				v.Subjects[i].Namespace = namespace
 			}
 		}
-		log.Println("clusterrolebinding", v)
 	}
 
 	return nil
 }
 
-func waitTillZalandoPostgresOperatorReady(ctx context.Context, timeout time.Duration, period time.Duration, k8sClient client.Client) (err error) {
+func (y *YAMLManager) waitTillZalandoPostgresOperatorReady(ctx context.Context, timeout time.Duration, period time.Duration) (err error) {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
@@ -114,7 +130,7 @@ func waitTillZalandoPostgresOperatorReady(ctx context.Context, timeout time.Dura
 	if err = wait.Poll(period, timeout, func() (bool, error) {
 		// Fetch the pods with the matching labels.
 		pods := &corev1.PodList{}
-		if err := k8sClient.List(ctx, pods, client.MatchingLabels{"name": "postgres-operator"}); err != nil {
+		if err := y.List(ctx, pods, client.MatchingLabels{"name": "postgres-operator"}); err != nil {
 			// `Not found` isn't an error.
 			return false, client.IgnoreNotFound(err)
 		}
@@ -125,7 +141,7 @@ func waitTillZalandoPostgresOperatorReady(ctx context.Context, timeout time.Dura
 		// Roll the list to examine the status.
 		for _, pod := range pods.Items {
 			newPod := &corev1.Pod{}
-			if err := k8sClient.Get(ctx, client.ObjectKey{Namespace: pod.Namespace, Name: pod.Name}, newPod); err != nil {
+			if err := y.Get(ctx, client.ObjectKey{Namespace: pod.Namespace, Name: pod.Name}, newPod); err != nil {
 				return false, err
 			}
 			if newPod.Status.Phase == corev1.PodRunning {
