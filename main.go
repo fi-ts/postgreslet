@@ -30,6 +30,7 @@ import (
 
 	databasev1 "github.com/fi-ts/postgres-controller/api/v1"
 	"github.com/fi-ts/postgres-controller/controllers"
+	"github.com/fi-ts/postgres-controller/pkg/yamlmanager"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -70,17 +71,17 @@ func main() {
 		os.Exit(1)
 	}
 
-	// y, err := yamlmanager.NewYAMLManager(conf, scheme)
-	// if err != nil {
-	// 	setupLog.Error(err, "unable to create a new external YAML manager")
-	// 	os.Exit(1)
-	// }
-	// objs, err := y.InstallYAML("./external.yaml", "default")
-	// if err != nil {
-	// 	setupLog.Error(err, "unable to install external YAML")
-	// 	os.Exit(1)
-	// }
-	// defer y.UninstallYAML(objs)
+	y, err := yamlmanager.NewYAMLManager(conf, scheme)
+	if err != nil {
+		setupLog.Error(err, "unable to create a new external YAML manager")
+		os.Exit(1)
+	}
+	objs, err := y.InstallYAML("./external.yaml", "default")
+	if err != nil {
+		setupLog.Error(err, "unable to install external YAML")
+		os.Exit(1)
+	}
+	defer y.UninstallYAML(objs)
 
 	if err = (&controllers.PostgresReconciler{
 		Client: mgr.GetClient(),
