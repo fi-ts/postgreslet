@@ -76,7 +76,7 @@ func main() {
 		setupLog.Error(err, "unable to create a new external YAML manager")
 		os.Exit(1)
 	}
-	objs, err := y.InstallYAML("./external.yaml", "default")
+	objs, err := y.InstallYAML("./external.yaml", "example-partition")
 	if err != nil {
 		setupLog.Error(err, "unable to install external YAML")
 		os.Exit(1)
