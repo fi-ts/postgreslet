@@ -7,7 +7,8 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/rbac/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
@@ -24,12 +25,21 @@ func InstallExternalYAML(fileName, namespace string, k8sClient client.Client, sc
 	ctx := context.Background()
 
 	// Make sure the namespace `partitionID` exists.
-	ns := &corev1.Namespace{}
 	if err = k8sClient.Get(ctx, client.ObjectKey{Name: namespace}, &corev1.Namespace{}); err != nil {
+		// errors other than `not found`
+		if !errors.IsNotFound(err) {
+			return
+		}
+
+		// Create the namespace.
+		ns := &corev1.Namespace{}
 		ns.Name = namespace
 		if err = k8sClient.Create(ctx, ns); err != nil {
 			return
 		}
+
+		// Append the created namespace to the list of the created `runtime.Object`s.
+		objs = append(objs, ns)
 	}
 
 	// Convert to a list of YAMLs.
@@ -84,7 +94,7 @@ func setNamespace(obj runtime.Object, namespace string, accessor meta.MetadataAc
 	}
 
 	// Add the namespace to the `ServiceAccount` in the `ClusterRoleBinding`
-	if v, ok := obj.(*v1.ClusterRoleBinding); ok {
+	if v, ok := obj.(*rbacv1.ClusterRoleBinding); ok {
 		for i, s := range v.Subjects {
 			if s.Kind == "ServiceAccount" {
 				v.Subjects[i].Namespace = namespace
