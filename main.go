@@ -34,6 +34,8 @@ import (
 	// +kubebuilder:scaffold:imports
 )
 
+const partitionID = "example-partition"
+
 var (
 	scheme   = runtime.NewScheme()
 	setupLog = ctrl.Log.WithName("setup")
@@ -76,7 +78,7 @@ func main() {
 		setupLog.Error(err, "unable to create a new external YAML manager")
 		os.Exit(1)
 	}
-	objs, err := y.InstallYAML("./external.yaml", "example-partition")
+	objs, err := y.InstallYAML("./external.yaml", partitionID)
 	if err != nil {
 		setupLog.Error(err, "unable to install external YAML")
 		os.Exit(1)

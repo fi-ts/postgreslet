@@ -41,7 +41,7 @@ func (y *YAMLManager) InstallYAML(fileName, namespace string) (objs []runtime.Ob
 
 	ctx := context.Background()
 
-	// Make sure the namespace `partitionID` exists.
+	// Make sure the namespace exists.
 	if err = y.Client.Get(ctx, client.ObjectKey{Name: namespace}, &corev1.Namespace{}); err != nil {
 		// errors other than `not found`
 		if !errors.IsNotFound(err) {
@@ -122,12 +122,12 @@ func (*YAMLManager) setNamespace(obj runtime.Object, namespace string, accessor 
 	return nil
 }
 
-func (y *YAMLManager) waitTillZalandoPostgresOperatorReady(ctx context.Context, timeout time.Duration, period time.Duration) (err error) {
+func (y *YAMLManager) waitTillZalandoPostgresOperatorReady(ctx context.Context, timeout time.Duration, period time.Duration) error {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	// Wait till there's at least one `postgres-operator` pod with status `running`.
-	if err = wait.Poll(period, timeout, func() (bool, error) {
+	if err := wait.Poll(period, timeout, func() (bool, error) {
 		// Fetch the pods with the matching labels.
 		pods := &corev1.PodList{}
 		if err := y.List(ctx, pods, client.MatchingLabels{"name": "postgres-operator"}); err != nil {
@@ -152,8 +152,8 @@ func (y *YAMLManager) waitTillZalandoPostgresOperatorReady(ctx context.Context, 
 		// Nothing found. Poll after the period.
 		return false, nil
 	}); err != nil {
-		return
+		return err
 	}
 
-	return
+	return nil
 }
