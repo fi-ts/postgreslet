@@ -81,7 +81,11 @@ func main() {
 		setupLog.Error(err, "unable to install external YAML")
 		os.Exit(1)
 	}
-	defer y.UninstallYAML(objs)
+	defer func() {
+		if err := y.UninstallYAML(objs); err != nil {
+			setupLog.Error(err, "unable to uninstall external YAML")
+		}
+	}()
 
 	if err = (&controllers.PostgresReconciler{
 		Client: mgr.GetClient(),
