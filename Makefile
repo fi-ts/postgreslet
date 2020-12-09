@@ -23,6 +23,7 @@ all: manager
 test: generate fmt vet manifests
 	go test ./... -coverprofile cover.out
 
+# todo: Modify Dockerfile to include the version magic
 # Build manager binary
 manager: generate fmt vet
 	go build -a -ldflags "-extldflags '-static' \
@@ -94,3 +95,7 @@ CONTROLLER_GEN=$(GOBIN)/controller-gen
 else
 CONTROLLER_GEN=$(shell which controller-gen)
 endif
+
+copy-external-yaml:
+	kubectl apply -k github.com/zalando/postgres-operator/manifests --dry-run=client -o yaml > external.yaml
+	sed 's/resourceVersion/# resourceVersion/' -i ./external.yaml
