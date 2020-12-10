@@ -1,11 +1,18 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: sample-tenant-sample-project
+---
 apiVersion: database.fits.cloud/v1
 kind: Postgres
 metadata:
-  namespace: default
+  namespace: sample-tenant-sample-project
   name: sample-name
 spec:
   numberOfInstances: 2
-  version: "12"
-  projectID: fits
+  partitionID: sample-partition
+  projectName: sample-project
   size:
     storageSize: 1Gi
+  tenant: sample-tenant
+  version: "12"

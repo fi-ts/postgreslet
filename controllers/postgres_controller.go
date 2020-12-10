@@ -23,6 +23,7 @@ import (
 
 	"github.com/go-logr/logr"
 	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -30,6 +31,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	pg "github.com/fi-ts/postgres-controller/api/v1"
+	"github.com/fi-ts/postgres-controller/pkg/pgletconf"
 )
 
 // requeue defines in how many seconds a requeue should happen
@@ -43,6 +45,7 @@ type PostgresReconciler struct {
 	client.Client
 	Log    logr.Logger
 	Scheme *runtime.Scheme
+	*pgletconf.PostgresletConf
 }
 
 // Reconcile is the entry point for postgres reconciliation.
@@ -62,7 +65,7 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	log.Info("postgres fetched", "postgres", instance)
 
 	if !r.isManagedByUs(instance) {
-		log.Info("object should be manage by another controller, ignoring event.")
+		log.Info("object should be managed by another postgreslet, ignored.")
 		return ctrl.Result{}, nil
 	}
 
@@ -144,22 +147,31 @@ func (r *PostgresReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 func (r *PostgresReconciler) isManagedByUs(obj *pg.Postgres) bool {
-	// TODO implement later once postgreslet is in place
+	if obj.Spec.PartitionID != r.PartitionID || obj.Spec.Tenant != r.Tenant {
+		return false
+	}
 
-	// if obj.Spec.PartitionID != myPartition {
-	// 	return false
-	// }
-
-	// if tenantOnly != "" && obj.Spec.Tenant != tenantOnly {
-	// 	return false
-	// }
 	return true
 }
 
 func (r *PostgresReconciler) createZalandoPostgresql(ctx context.Context, z *pg.ZalandoPostgres) (ctrl.Result, error) {
 	log := r.Log.WithValues("zalando postgresql", z.ToKey())
 
-	// todo: Create a ns if none.
+	// Make sure the namespace exists in the worker-cluster. // todo: Make sure it happens in the worker-cluster.
+	ns := z.Namespace
+	if err := r.Get(ctx, client.ObjectKey{Name: ns}, &corev1.Namespace{}); err != nil {
+		// errors other than `not found`
+		if !errors.IsNotFound(err) {
+			return ctrl.Result{}, err
+		}
+
+		// Create the namespace.
+		nsObj := &corev1.Namespace{}
+		nsObj.Name = ns
+		if err = r.Create(ctx, nsObj); err != nil {
+			return ctrl.Result{}, err
+		}
+	}
 
 	u, err := z.ToUnstructured()
 	if err != nil {

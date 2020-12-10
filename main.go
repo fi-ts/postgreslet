@@ -30,15 +30,16 @@ import (
 
 	databasev1 "github.com/fi-ts/postgres-controller/api/v1"
 	"github.com/fi-ts/postgres-controller/controllers"
+	"github.com/fi-ts/postgres-controller/pkg/pgletconf"
 	"github.com/fi-ts/postgres-controller/pkg/yamlmanager"
 	// +kubebuilder:scaffold:imports
 )
 
-const partitionID = "example-partition"
-
 var (
 	scheme   = runtime.NewScheme()
 	setupLog = ctrl.Log.WithName("setup")
+
+	pgletConf = &pgletconf.PostgresletConf{}
 )
 
 func init() {
@@ -56,6 +57,8 @@ func main() {
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
+	flag.StringVar(&(pgletConf.PartitionID), "partition-id", "", "The partition ID of the worker-cluster.")
+	flag.StringVar(&(pgletConf.Tenant), "tenant", "", "The tenant name.")
 	flag.Parse()
 
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
@@ -78,7 +81,7 @@ func main() {
 		setupLog.Error(err, "unable to create a new external YAML manager")
 		os.Exit(1)
 	}
-	objs, err := y.InstallYAML("./external.yaml", partitionID)
+	objs, err := y.InstallYAML("./external.yaml", pgletConf.PartitionID)
 	if err != nil {
 		setupLog.Error(err, "unable to install external YAML")
 		os.Exit(1)
@@ -90,9 +93,10 @@ func main() {
 	}()
 
 	if err = (&controllers.PostgresReconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("Postgres"),
-		Scheme: mgr.GetScheme(),
+		Client:          mgr.GetClient(),
+		Log:             ctrl.Log.WithName("controllers").WithName("Postgres"),
+		Scheme:          mgr.GetScheme(),
+		PostgresletConf: pgletConf,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Postgres")
 		os.Exit(1)
