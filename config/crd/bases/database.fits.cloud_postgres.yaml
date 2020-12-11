@@ -88,7 +88,7 @@ spec:
               description: PartitionID the partition where the database is created
               type: string
             projectID:
-              description: 'ProjectID metal project ID // todo: Remove it if we don''t need it anymore.'
+              description: ProjectID metal project ID
               type: string
             size:
               description: Size of the database

@@ -6,43 +6,12 @@ items:
     annotations:
       kubectl.kubernetes.io/last-applied-configuration: |
         {"apiVersion":"v1","kind":"ServiceAccount","metadata":{"annotations":{},"name":"postgres-operator","namespace":"default"}}
-    creationTimestamp: "2020-12-08T19:02:34Z"
-    managedFields:
-    - apiVersion: v1
-      fieldsType: FieldsV1
-      fieldsV1:
-        f:secrets:
-          .: {}
-          k:{"name":"postgres-operator-token-kjm56"}:
-            .: {}
-            f:name: {}
-      manager: kube-controller-manager
-      operation: Update
-      time: "2020-12-08T19:02:34Z"
-    - apiVersion: v1
-      fieldsType: FieldsV1
-      fieldsV1:
-        f:metadata:
-          f:annotations:
-            .: {}
-            f:kubectl.kubernetes.io/last-applied-configuration: {}
-      manager: kubectl-client-side-apply
-      operation: Update
-      time: "2020-12-08T19:02:34Z"
     name: postgres-operator
     namespace: default
-    # resourceVersion: "539"
-    selfLink: /api/v1/namespaces/default/serviceaccounts/postgres-operator
-    uid: d968af01-d096-40b8-b000-8f1302e9baf5
-  secrets:
-  - name: postgres-operator-token-kjm56
 - apiVersion: rbac.authorization.k8s.io/v1
   kind: ClusterRole
   metadata:
-    annotations:
-      kubectl.kubernetes.io/last-applied-configuration: |
-        {"apiVersion":"rbac.authorization.k8s.io/v1","kind":"ClusterRole","metadata":{"annotations":{},"name":"postgres-operator"},"rules":[{"apiGroups":["acid.zalan.do"],"resources":["postgresqls","postgresqls/status","operatorconfigurations"],"verbs":["create","delete","deletecollection","get","list","patch","update","watch"]},{"apiGroups":["acid.zalan.do"],"resources":["postgresteams"],"verbs":["get","list","watch"]},{"apiGroups":["apiextensions.k8s.io"],"resources":["customresourcedefinitions"],"verbs":["create","get","patch","update"]},{"apiGroups":[""],"resources":["configmaps"],"verbs":["get"]},{"apiGroups":[""],"resources":["events"],"verbs":["create","get","list","patch","update","watch"]},{"apiGroups":[""],"resources":["endpoints"],"verbs":["create","delete","deletecollection","get","list","patch","update","watch"]},{"apiGroups":[""],"resources":["secrets"],"verbs":["create","delete","get","update"]},{"apiGroups":[""],"resources":["nodes"],"verbs":["get","list","watch"]},{"apiGroups":[""],"resources":["persistentvolumeclaims"],"verbs":["delete","get","list","patch","update"]},{"apiGroups":[""],"resources":["persistentvolumes"],"verbs":["get","list","update"]},{"apiGroups":[""],"resources":["pods"],"verbs":["delete","get","list","patch","update","watch"]},{"apiGroups":[""],"resources":["pods/exec"],"verbs":["create"]},{"apiGroups":[""],"resources":["services"],"verbs":["create","delete","get","patch","update"]},{"apiGroups":["apps"],"resources":["statefulsets","deployments"],"verbs":["create","delete","get","list","patch"]},{"apiGroups":["batch"],"resources":["cronjobs"],"verbs":["create","delete","get","list","patch","update"]},{"apiGroups":[""],"resources":["namespaces"],"verbs":["get"]},{"apiGroups":["policy"],"resources":["poddisruptionbudgets"],"verbs":["create","delete","get"]},{"apiGroups":[""],"resources":["serviceaccounts"],"verbs":["get","create"]},{"apiGroups":["rbac.authorization.k8s.io"],"resources":["rolebindings"],"verbs":["get","create"]},{"apiGroups":["extensions"],"resourceNames":["privileged"],"resources":["podsecuritypolicies"],"verbs":["use"]}]}
-    creationTimestamp: "2020-12-08T19:02:34Z"
+    creationTimestamp: "2020-12-11T12:54:58Z"
     managedFields:
     - apiVersion: rbac.authorization.k8s.io/v1
       fieldsType: FieldsV1
@@ -51,14 +20,20 @@ items:
           f:annotations:
             .: {}
             f:kubectl.kubernetes.io/last-applied-configuration: {}
-        f:rules: {}
       manager: kubectl-client-side-apply
       operation: Update
       time: "2020-12-08T19:02:34Z"
+    - apiVersion: rbac.authorization.k8s.io/v1
+      fieldsType: FieldsV1
+      fieldsV1:
+        f:rules: {}
+      manager: main
+      operation: Update
+      time: "2020-12-11T12:54:58Z"
     name: postgres-operator
-    # resourceVersion: "536"
+    # resourceVersion: "1312"
     selfLink: /apis/rbac.authorization.k8s.io/v1/clusterroles/postgres-operator
-    uid: ac60e835-7a89-4c08-b90c-28d703e2329f
+    uid: 4e39448b-9b86-4ad4-a969-db2b0abeb18f
   rules:
   - apiGroups:
     - acid.zalan.do
@@ -245,10 +220,7 @@ items:
 - apiVersion: rbac.authorization.k8s.io/v1
   kind: ClusterRole
   metadata:
-    annotations:
-      kubectl.kubernetes.io/last-applied-configuration: |
-        {"apiVersion":"rbac.authorization.k8s.io/v1","kind":"ClusterRole","metadata":{"annotations":{},"name":"postgres-pod"},"rules":[{"apiGroups":[""],"resources":["endpoints"],"verbs":["create","delete","deletecollection","get","list","patch","update","watch"]},{"apiGroups":[""],"resources":["pods"],"verbs":["get","list","patch","update","watch"]},{"apiGroups":[""],"resources":["services"],"verbs":["create"]},{"apiGroups":["extensions"],"resourceNames":["privileged"],"resources":["podsecuritypolicies"],"verbs":["use"]}]}
-    creationTimestamp: "2020-12-08T19:02:34Z"
+    creationTimestamp: "2020-12-11T12:54:58Z"
     managedFields:
     - apiVersion: rbac.authorization.k8s.io/v1
       fieldsType: FieldsV1
@@ -257,14 +229,20 @@ items:
           f:annotations:
             .: {}
             f:kubectl.kubernetes.io/last-applied-configuration: {}
-        f:rules: {}
       manager: kubectl-client-side-apply
       operation: Update
       time: "2020-12-08T19:02:34Z"
+    - apiVersion: rbac.authorization.k8s.io/v1
+      fieldsType: FieldsV1
+      fieldsV1:
+        f:rules: {}
+      manager: main
+      operation: Update
+      time: "2020-12-11T12:54:58Z"
     name: postgres-pod
-    # resourceVersion: "538"
+    # resourceVersion: "1313"
     selfLink: /apis/rbac.authorization.k8s.io/v1/clusterroles/postgres-pod
-    uid: 085b852a-8f8d-49af-a142-52ef8d64b9bb
+    uid: 308cce52-62bc-4b60-af10-7e2669502eb5
   rules:
   - apiGroups:
     - ""
@@ -306,10 +284,7 @@ items:
 - apiVersion: rbac.authorization.k8s.io/v1
   kind: ClusterRoleBinding
   metadata:
-    annotations:
-      kubectl.kubernetes.io/last-applied-configuration: |
-        {"apiVersion":"rbac.authorization.k8s.io/v1","kind":"ClusterRoleBinding","metadata":{"annotations":{},"name":"postgres-operator"},"roleRef":{"apiGroup":"rbac.authorization.k8s.io","kind":"ClusterRole","name":"postgres-operator"},"subjects":[{"kind":"ServiceAccount","name":"postgres-operator","namespace":"default"}]}
-    creationTimestamp: "2020-12-08T19:02:34Z"
+    creationTimestamp: "2020-12-11T12:54:58Z"
     managedFields:
     - apiVersion: rbac.authorization.k8s.io/v1
       fieldsType: FieldsV1
@@ -318,18 +293,24 @@ items:
           f:annotations:
             .: {}
             f:kubectl.kubernetes.io/last-applied-configuration: {}
+      manager: kubectl-client-side-apply
+      operation: Update
+      time: "2020-12-08T19:02:34Z"
+    - apiVersion: rbac.authorization.k8s.io/v1
+      fieldsType: FieldsV1
+      fieldsV1:
         f:roleRef:
           f:apiGroup: {}
           f:kind: {}
           f:name: {}
         f:subjects: {}
-      manager: kubectl-client-side-apply
+      manager: main
       operation: Update
-      time: "2020-12-08T19:02:34Z"
+      time: "2020-12-11T12:54:58Z"
     name: postgres-operator
-    # resourceVersion: "540"
+    # resourceVersion: "1316"
     selfLink: /apis/rbac.authorization.k8s.io/v1/clusterrolebindings/postgres-operator
-    uid: acb5c621-1c8b-4c23-b426-44fd68e13bbe
+    uid: a726e890-78dc-4a6c-83ed-1d40c89793cb
   roleRef:
     apiGroup: rbac.authorization.k8s.io
     kind: ClusterRole
@@ -337,7 +318,7 @@ items:
   subjects:
   - kind: ServiceAccount
     name: postgres-operator
-    namespace: default
+    namespace: sample-partition
 - apiVersion: v1
   data:
     api_port: "8080"
@@ -386,233 +367,36 @@ items:
     annotations:
       kubectl.kubernetes.io/last-applied-configuration: |
         {"apiVersion":"v1","data":{"api_port":"8080","aws_region":"eu-central-1","cluster_domain":"cluster.local","cluster_history_entries":"1000","cluster_labels":"application:spilo","cluster_name_label":"cluster-name","connection_pooler_image":"registry.opensource.zalan.do/acid/pgbouncer:master-11","db_hosted_zone":"db.example.com","debug_logging":"true","docker_image":"registry.opensource.zalan.do/acid/spilo-12:1.6-p5","enable_master_load_balancer":"false","enable_replica_load_balancer":"false","enable_teams_api":"false","external_traffic_policy":"Cluster","logical_backup_docker_image":"registry.opensource.zalan.do/acid/logical-backup","logical_backup_s3_bucket":"my-bucket-url","logical_backup_s3_sse":"AES256","logical_backup_schedule":"30 00 * * *","master_dns_name_format":"{cluster}.{team}.{hostedzone}","pdb_name_format":"postgres-{cluster}-pdb","pod_deletion_wait_timeout":"10m","pod_label_wait_timeout":"10m","pod_management_policy":"ordered_ready","pod_role_label":"spilo-role","pod_service_account_name":"postgres-pod","pod_terminate_grace_period":"5m","ready_wait_interval":"3s","ready_wait_timeout":"30s","repair_period":"5m","replica_dns_name_format":"{cluster}-repl.{team}.{hostedzone}","replication_username":"standby","resource_check_interval":"3s","resource_check_timeout":"10m","resync_period":"30m","ring_log_lines":"100","secret_name_template":"{username}.{cluster}.credentials","spilo_privileged":"false","storage_resize_mode":"pvc","super_username":"postgres","watched_namespace":"*","workers":"8"},"kind":"ConfigMap","metadata":{"annotations":{},"name":"postgres-operator","namespace":"default"}}
-    creationTimestamp: "2020-12-08T19:02:34Z"
-    managedFields:
-    - apiVersion: v1
-      fieldsType: FieldsV1
-      fieldsV1:
-        f:data:
-          .: {}
-          f:api_port: {}
-          f:aws_region: {}
-          f:cluster_domain: {}
-          f:cluster_history_entries: {}
-          f:cluster_labels: {}
-          f:cluster_name_label: {}
-          f:connection_pooler_image: {}
-          f:db_hosted_zone: {}
-          f:debug_logging: {}
-          f:docker_image: {}
-          f:enable_master_load_balancer: {}
-          f:enable_replica_load_balancer: {}
-          f:enable_teams_api: {}
-          f:external_traffic_policy: {}
-          f:logical_backup_docker_image: {}
-          f:logical_backup_s3_bucket: {}
-          f:logical_backup_s3_sse: {}
-          f:logical_backup_schedule: {}
-          f:master_dns_name_format: {}
-          f:pdb_name_format: {}
-          f:pod_deletion_wait_timeout: {}
-          f:pod_label_wait_timeout: {}
-          f:pod_management_policy: {}
-          f:pod_role_label: {}
-          f:pod_service_account_name: {}
-          f:pod_terminate_grace_period: {}
-          f:ready_wait_interval: {}
-          f:ready_wait_timeout: {}
-          f:repair_period: {}
-          f:replica_dns_name_format: {}
-          f:replication_username: {}
-          f:resource_check_interval: {}
-          f:resource_check_timeout: {}
-          f:resync_period: {}
-          f:ring_log_lines: {}
-          f:secret_name_template: {}
-          f:spilo_privileged: {}
-          f:storage_resize_mode: {}
-          f:super_username: {}
-          f:watched_namespace: {}
-          f:workers: {}
-        f:metadata:
-          f:annotations:
-            .: {}
-            f:kubectl.kubernetes.io/last-applied-configuration: {}
-      manager: kubectl-client-side-apply
-      operation: Update
-      time: "2020-12-08T19:02:34Z"
     name: postgres-operator
     namespace: default
-    # resourceVersion: "541"
-    selfLink: /api/v1/namespaces/default/configmaps/postgres-operator
-    uid: 43c96ad1-fbc2-4eee-8fe5-151218758a6c
 - apiVersion: v1
   kind: Service
   metadata:
     annotations:
       kubectl.kubernetes.io/last-applied-configuration: |
         {"apiVersion":"v1","kind":"Service","metadata":{"annotations":{},"name":"postgres-operator","namespace":"default"},"spec":{"ports":[{"port":8080,"protocol":"TCP","targetPort":8080}],"selector":{"name":"postgres-operator"},"type":"ClusterIP"}}
-    creationTimestamp: "2020-12-08T19:02:34Z"
-    managedFields:
-    - apiVersion: v1
-      fieldsType: FieldsV1
-      fieldsV1:
-        f:metadata:
-          f:annotations:
-            .: {}
-            f:kubectl.kubernetes.io/last-applied-configuration: {}
-        f:spec:
-          f:ports:
-            .: {}
-            k:{"port":8080,"protocol":"TCP"}:
-              .: {}
-              f:port: {}
-              f:protocol: {}
-              f:targetPort: {}
-          f:selector:
-            .: {}
-            f:name: {}
-          f:sessionAffinity: {}
-          f:type: {}
-      manager: kubectl-client-side-apply
-      operation: Update
-      time: "2020-12-08T19:02:34Z"
     name: postgres-operator
     namespace: default
-    # resourceVersion: "543"
-    selfLink: /api/v1/namespaces/default/services/postgres-operator
-    uid: 5cfefb44-8e87-4539-aac6-00fe0edde7c8
   spec:
-    clusterIP: 10.108.53.202
     ports:
     - port: 8080
       protocol: TCP
       targetPort: 8080
     selector:
       name: postgres-operator
-    sessionAffinity: None
     type: ClusterIP
-  status:
-    loadBalancer: {}
 - apiVersion: apps/v1
   kind: Deployment
   metadata:
     annotations:
-      deployment.kubernetes.io/revision: "1"
       kubectl.kubernetes.io/last-applied-configuration: |
         {"apiVersion":"apps/v1","kind":"Deployment","metadata":{"annotations":{},"labels":{"application":"postgres-operator"},"name":"postgres-operator","namespace":"default"},"spec":{"replicas":1,"selector":{"matchLabels":{"name":"postgres-operator"}},"strategy":{"type":"Recreate"},"template":{"metadata":{"labels":{"name":"postgres-operator"}},"spec":{"containers":[{"env":[{"name":"CONFIG_MAP_NAME","value":"postgres-operator"}],"image":"registry.opensource.zalan.do/acid/postgres-operator:v1.5.0","imagePullPolicy":"IfNotPresent","name":"postgres-operator","resources":{"limits":{"cpu":"500m","memory":"500Mi"},"requests":{"cpu":"100m","memory":"250Mi"}},"securityContext":{"readOnlyRootFilesystem":true,"runAsNonRoot":true,"runAsUser":1000}}],"serviceAccountName":"postgres-operator"}}}}
-    creationTimestamp: "2020-12-08T19:02:34Z"
-    generation: 1
     labels:
       application: postgres-operator
-    managedFields:
-    - apiVersion: apps/v1
-      fieldsType: FieldsV1
-      fieldsV1:
-        f:metadata:
-          f:annotations:
-            .: {}
-            f:kubectl.kubernetes.io/last-applied-configuration: {}
-          f:labels:
-            .: {}
-            f:application: {}
-        f:spec:
-          f:progressDeadlineSeconds: {}
-          f:replicas: {}
-          f:revisionHistoryLimit: {}
-          f:selector:
-            f:matchLabels:
-              .: {}
-              f:name: {}
-          f:strategy:
-            f:type: {}
-          f:template:
-            f:metadata:
-              f:labels:
-                .: {}
-                f:name: {}
-            f:spec:
-              f:containers:
-                k:{"name":"postgres-operator"}:
-                  .: {}
-                  f:env:
-                    .: {}
-                    k:{"name":"CONFIG_MAP_NAME"}:
-                      .: {}
-                      f:name: {}
-                      f:value: {}
-                  f:image: {}
-                  f:imagePullPolicy: {}
-                  f:name: {}
-                  f:resources:
-                    .: {}
-                    f:limits:
-                      .: {}
-                      f:cpu: {}
-                      f:memory: {}
-                    f:requests:
-                      .: {}
-                      f:cpu: {}
-                      f:memory: {}
-                  f:securityContext:
-                    .: {}
-                    f:readOnlyRootFilesystem: {}
-                    f:runAsNonRoot: {}
-                    f:runAsUser: {}
-                  f:terminationMessagePath: {}
-                  f:terminationMessagePolicy: {}
-              f:dnsPolicy: {}
-              f:restartPolicy: {}
-              f:schedulerName: {}
-              f:securityContext: {}
-              f:serviceAccount: {}
-              f:serviceAccountName: {}
-              f:terminationGracePeriodSeconds: {}
-      manager: kubectl-client-side-apply
-      operation: Update
-      time: "2020-12-08T19:02:34Z"
-    - apiVersion: apps/v1
-      fieldsType: FieldsV1
-      fieldsV1:
-        f:metadata:
-          f:annotations:
-            f:deployment.kubernetes.io/revision: {}
-        f:status:
-          f:availableReplicas: {}
-          f:conditions:
-            .: {}
-            k:{"type":"Available"}:
-              .: {}
-              f:lastTransitionTime: {}
-              f:lastUpdateTime: {}
-              f:message: {}
-              f:reason: {}
-              f:status: {}
-              f:type: {}
-            k:{"type":"Progressing"}:
-              .: {}
-              f:lastTransitionTime: {}
-              f:lastUpdateTime: {}
-              f:message: {}
-              f:reason: {}
-              f:status: {}
-              f:type: {}
-          f:observedGeneration: {}
-          f:readyReplicas: {}
-          f:replicas: {}
-          f:updatedReplicas: {}
-      manager: kube-controller-manager
-      operation: Update
-      time: "2020-12-08T19:02:39Z"
     name: postgres-operator
     namespace: default
-    # resourceVersion: "584"
-    selfLink: /apis/apps/v1/namespaces/default/deployments/postgres-operator
-    uid: d113f2c7-01a0-46a9-acd8-87a1125cb9f9
   spec:
-    progressDeadlineSeconds: 600
     replicas: 1
-    revisionHistoryLimit: 10
     selector:
       matchLabels:
         name: postgres-operator
@@ -620,7 +404,6 @@ items:
       type: Recreate
     template:
       metadata:
-        creationTimestamp: null
         labels:
           name: postgres-operator
       spec:
@@ -642,33 +425,6 @@ items:
             readOnlyRootFilesystem: true
             runAsNonRoot: true
             runAsUser: 1000
-          terminationMessagePath: /dev/termination-log
-          terminationMessagePolicy: File
-        dnsPolicy: ClusterFirst
-        restartPolicy: Always
-        schedulerName: default-scheduler
-        securityContext: {}
-        serviceAccount: postgres-operator
         serviceAccountName: postgres-operator
-        terminationGracePeriodSeconds: 30
-  status:
-    availableReplicas: 1
-    conditions:
-    - lastTransitionTime: "2020-12-08T19:02:39Z"
-      lastUpdateTime: "2020-12-08T19:02:39Z"
-      message: Deployment has minimum availability.
-      reason: MinimumReplicasAvailable
-      status: "True"
-      type: Available
-    - lastTransitionTime: "2020-12-08T19:02:34Z"
-      lastUpdateTime: "2020-12-08T19:02:39Z"
-      message: ReplicaSet "postgres-operator-59bb89464c" has successfully progressed.
-      reason: NewReplicaSetAvailable
-      status: "True"
-      type: Progressing
-    observedGeneration: 1
-    readyReplicas: 1
-    replicas: 1
-    updatedReplicas: 1
 kind: List
 metadata: {}
