@@ -47,7 +47,7 @@ type PostgresSpec struct {
 
 	// Description
 	Description string `json:"description,omitempty"`
-	// ProjectID metal project ID // todo: Remove it if we don't need it anymore.
+	// ProjectID metal project ID
 	ProjectID string `json:"projectID,omitempty"`
 	// Tenant metal tenant
 	Tenant string `json:"tenant,omitempty"`
