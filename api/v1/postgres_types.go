@@ -49,8 +49,6 @@ type PostgresSpec struct {
 	Description string `json:"description,omitempty"`
 	// ProjectID metal project ID // todo: Remove it if we don't need it anymore.
 	ProjectID string `json:"projectID,omitempty"`
-	// ProjectName
-	ProjectName string `json:"projectName,omitempty"`
 	// Tenant metal tenant
 	Tenant string `json:"tenant,omitempty"`
 	// PartitionID the partition where the database is created
@@ -151,11 +149,10 @@ func (p *Postgres) ToKey() *types.NamespacedName {
 }
 
 func (p *Postgres) ToZalandoPostgres() *ZalandoPostgres {
-	teamID := p.Spec.ProjectName
 	return &ZalandoPostgres{
 		TypeMeta: ZalandoPostgresTypeMeta,
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      teamID + "--" + string(p.UID), // todo: "." used to work but not anymore. Make sure the rule is well-documented.
+			Name:      p.Spec.ProjectID + "--" + string(p.UID), // todo: "." used to work but not anymore. Make sure the rule is well-documented.
 			Namespace: p.Namespace,
 		},
 		Spec: ZalandoPostgresSpec{
@@ -190,7 +187,7 @@ func (p *Postgres) ToZalandoPostgres() *ZalandoPostgres {
 					ResourceLimits: &ResourceDescription{}, // todo: Fill it out.
 				}
 			}(),
-			TeamID: teamID,
+			TeamID: p.Spec.ProjectID,
 			Volume: Volume{Size: p.Spec.Size.StorageSize},
 		},
 	}

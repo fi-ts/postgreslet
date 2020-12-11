@@ -28,10 +28,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	pg "github.com/fi-ts/postgres-controller/api/v1"
-	"github.com/fi-ts/postgres-controller/pkg/pgletconf"
 )
 
 // requeue defines in how many seconds a requeue should happen
@@ -43,9 +41,9 @@ var requeue = ctrl.Result{
 // PostgresReconciler reconciles a Postgres object
 type PostgresReconciler struct {
 	client.Client
-	Log    logr.Logger
-	Scheme *runtime.Scheme
-	*pgletconf.PostgresletConf
+	Log                 logr.Logger
+	Scheme              *runtime.Scheme
+	PartitionID, Tenant string
 }
 
 // Reconcile is the entry point for postgres reconciliation.
@@ -96,11 +94,6 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		return ctrl.Result{}, nil
 	}
 
-	// Add `instance` (owner) to the metadata of `z` (owned).
-	err := controllerutil.SetControllerReference(instance, z, r.Scheme)
-	if err != nil {
-		return requeue, err
-	}
 	// Get zalando postgresql and create one if none.
 	rawZ := &zalando.Postgresql{}
 	if err := r.Client.Get(ctx, *k, rawZ); err != nil {
@@ -142,7 +135,6 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 func (r *PostgresReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&pg.Postgres{}).
-		Owns(&zalando.Postgresql{}).
 		Complete(r)
 }
 
