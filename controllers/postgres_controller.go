@@ -147,7 +147,12 @@ func (r *PostgresReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 func (r *PostgresReconciler) isManagedByUs(obj *pg.Postgres) bool {
-	if obj.Spec.PartitionID != r.PartitionID || obj.Spec.Tenant != r.Tenant {
+	if obj.Spec.PartitionID != r.PartitionID {
+		return false
+	}
+
+	// if this partition is only for one tenant
+	if r.Tenant != "" && obj.Spec.Tenant != r.Tenant {
 		return false
 	}
 
