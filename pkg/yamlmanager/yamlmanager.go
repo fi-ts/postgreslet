@@ -6,13 +6,14 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/apimachinery/pkg/util/wait"
-	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -21,25 +22,62 @@ type YAMLManager struct {
 	*runtime.Scheme
 }
 
-func NewYAMLManager(conf *rest.Config, scheme *runtime.Scheme) (*YAMLManager, error) {
-	// Use no-cache client to avoid waiting for cashing.
-	client, err := client.New(conf, client.Options{})
-	if err != nil {
-		return nil, err
-	}
+func NewYAMLManager(client client.Client, scheme *runtime.Scheme) *YAMLManager {
 	return &YAMLManager{
 		Client: client,
 		Scheme: scheme,
-	}, nil
+	}
 }
 
-func (y *YAMLManager) InstallYAML(fileName, namespace string) (objs []runtime.Object, err error) {
+func (y *YAMLManager) InstallYAML(fileName, namespace, s3BucketURL string) (objs []runtime.Object, err error) {
+	ctx := context.Background()
+	if objs, err = y.installYAML(ctx, fileName, namespace, s3BucketURL); err != nil {
+		return
+	}
+	return
+}
+
+func (y *YAMLManager) InstallYAMLAndWaitTillReady(fileName, namespace, s3BucketURL string) (objs []runtime.Object, err error) {
+	ctx := context.Background()
+	if objs, err = y.installYAML(ctx, fileName, namespace, s3BucketURL); err != nil {
+		return
+	}
+
+	if err = y.waitTillZalandoPostgresOperatorReady(ctx, time.Minute, time.Second); err != nil {
+		return
+	}
+
+	return
+}
+
+// todo: Consider ctx.
+func (y *YAMLManager) UninstallYAML(objs []runtime.Object) error {
+	for _, obj := range objs {
+		if err := y.Delete(context.Background(), obj); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// todo: Consider ctx.
+func (y *YAMLManager) UninstallUnstructured(u *unstructured.Unstructured) error {
+	if err := y.Delete(context.Background(), u); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (y *YAMLManager) handleConfigMap(cm *v1.ConfigMap, namespace, s3BucketURL string) {
+	cm.Data["logical_backup_s3_bucket"] = s3BucketURL
+	cm.Data["watched_namespace"] = namespace
+}
+
+func (y *YAMLManager) installYAML(ctx context.Context, fileName, namespace, s3BucketURL string) (objs []runtime.Object, err error) {
 	bb, err := ioutil.ReadFile(fileName)
 	if err != nil {
 		return
 	}
-
-	ctx := context.Background()
 
 	// Make sure the namespace exists.
 	if err = y.Client.Get(ctx, client.ObjectKey{Name: namespace}, &corev1.Namespace{}); err != nil {
@@ -49,14 +87,14 @@ func (y *YAMLManager) InstallYAML(fileName, namespace string) (objs []runtime.Ob
 		}
 
 		// Create the namespace.
-		ns := &corev1.Namespace{}
-		ns.Name = namespace
-		if err = y.Create(ctx, ns); err != nil {
+		nsObj := &corev1.Namespace{}
+		nsObj.Name = namespace
+		if err = y.Create(ctx, nsObj); err != nil {
 			return
 		}
 
 		// Append the created namespace to the list of the created `runtime.Object`s.
-		objs = append(objs, ns)
+		objs = append(objs, nsObj)
 	}
 
 	// Convert to a list of YAMLs.
@@ -83,26 +121,17 @@ func (y *YAMLManager) InstallYAML(fileName, namespace string) (objs []runtime.Ob
 			return
 		}
 
+		if v, ok := obj.(*v1.ConfigMap); ok {
+			y.handleConfigMap(v, namespace, s3BucketURL)
+		}
+
 		if err = y.Create(ctx, obj); err != nil {
 			return
 		}
 		objs = append(objs, obj)
 	}
 
-	if err = y.waitTillZalandoPostgresOperatorReady(ctx, time.Minute, time.Second); err != nil {
-		return
-	}
-
 	return
-}
-
-func (y *YAMLManager) UninstallYAML(objs []runtime.Object) error {
-	for _, obj := range objs {
-		if err := y.Delete(context.Background(), obj); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 func (*YAMLManager) setNamespace(obj runtime.Object, namespace string, accessor meta.MetadataAccessor) error {
@@ -156,4 +185,9 @@ func (y *YAMLManager) waitTillZalandoPostgresOperatorReady(ctx context.Context, 
 	}
 
 	return nil
+}
+
+type Config struct {
+	S3BucketURL string
+	WatchedNS   string
 }

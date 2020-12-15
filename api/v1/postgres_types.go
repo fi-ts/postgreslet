@@ -20,6 +20,7 @@ import (
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
 )
 
@@ -65,6 +66,8 @@ type PostgresSpec struct {
 	Backup *Backup `json:"backup,omitempty"`
 	// AccessList defines access restrictions
 	AccessList *AccessList `json:"accessList,omitempty"`
+	// ZalandoDependencies define all the Zalando dependencies
+	ZalandoDependencies *unstructured.Unstructured `json:"zalandoDependencies,omitempty"`
 }
 
 // AccessList defines the type of restrictions to access the database
@@ -76,6 +79,8 @@ type AccessList struct {
 
 // Backup configure parametes of the database backup
 type Backup struct {
+	// S3BucketURL defines the URL of the S3 bucket for backup
+	S3BucketURL string `json:"s3BucketURL,omitempty"`
 	// Retention defines how many days a backup will persist
 	Retention int32 `json:"retention,omitempty"`
 	// Schedule defines how often a backup should be made, in cron format

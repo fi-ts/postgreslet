@@ -26,6 +26,7 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	databasev1 "github.com/fi-ts/postgres-controller/api/v1"
@@ -73,12 +74,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	y, err := yamlmanager.NewYAMLManager(conf, scheme)
+	// Use no-cache client to avoid waiting for cashing.
+	client, err := client.New(conf, client.Options{})
 	if err != nil {
-		setupLog.Error(err, "unable to create a new external YAML manager")
-		os.Exit(1)
+		setupLog.Error(err, "unable to craete a new client")
 	}
-	objs, err := y.InstallYAML("./external.yaml", partitionID)
+	y := yamlmanager.NewYAMLManager(client, scheme)
+	objs, err := y.InstallYAMLAndWaitTillReady("./external.yaml", partitionID, "")
 	if err != nil {
 		setupLog.Error(err, "unable to install external YAML")
 		os.Exit(1)
@@ -95,6 +97,7 @@ func main() {
 		Scheme:      mgr.GetScheme(),
 		PartitionID: partitionID,
 		Tenant:      tenant,
+		YAMLManager: yamlmanager.NewYAMLManager(mgr.GetClient(), mgr.GetScheme()),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Postgres")
 		os.Exit(1)
