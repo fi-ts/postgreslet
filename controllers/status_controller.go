@@ -117,7 +117,7 @@ func (r *StatusReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 func deriveOwnerData(instanceName string) (types.UID, error) {
-	result := strings.SplitN(instanceName, ".", 2)
+	result := strings.SplitN(instanceName, "--", 2)
 	if len(result) < 2 {
 		return "", fmt.Errorf("Could not derive owner reference")
 	}

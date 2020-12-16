@@ -23,11 +23,11 @@ import (
 
 	"github.com/go-logr/logr"
 	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	pg "github.com/fi-ts/postgres-controller/api/v1"
 )
@@ -41,8 +41,9 @@ var requeue = ctrl.Result{
 // PostgresReconciler reconciles a Postgres object
 type PostgresReconciler struct {
 	client.Client
-	Log    logr.Logger
-	Scheme *runtime.Scheme
+	Log                 logr.Logger
+	Scheme              *runtime.Scheme
+	PartitionID, Tenant string
 }
 
 // Reconcile is the entry point for postgres reconciliation.
@@ -62,7 +63,7 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	log.Info("postgres fetched", "postgres", instance)
 
 	if !r.isManagedByUs(instance) {
-		log.Info("object should be manage by another controller, ignoring event.")
+		log.Info("object should be managed by another postgreslet, ignored.")
 		return ctrl.Result{}, nil
 	}
 
@@ -93,11 +94,6 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		return ctrl.Result{}, nil
 	}
 
-	// Add `instance` (owner) to the metadata of `z` (owned).
-	err := controllerutil.SetControllerReference(instance, z, r.Scheme)
-	if err != nil {
-		return requeue, err
-	}
 	// Get zalando postgresql and create one if none.
 	rawZ := &zalando.Postgresql{}
 	if err := r.Client.Get(ctx, *k, rawZ); err != nil {
@@ -139,27 +135,40 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 func (r *PostgresReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&pg.Postgres{}).
-		Owns(&zalando.Postgresql{}).
 		Complete(r)
 }
 
 func (r *PostgresReconciler) isManagedByUs(obj *pg.Postgres) bool {
-	// TODO implement later once postgreslet is in place
+	if obj.Spec.PartitionID != r.PartitionID {
+		return false
+	}
 
-	// if obj.Spec.PartitionID != myPartition {
-	// 	return false
-	// }
+	// if this partition is only for one tenant
+	if r.Tenant != "" && obj.Spec.Tenant != r.Tenant {
+		return false
+	}
 
-	// if tenantOnly != "" && obj.Spec.Tenant != tenantOnly {
-	// 	return false
-	// }
 	return true
 }
 
 func (r *PostgresReconciler) createZalandoPostgresql(ctx context.Context, z *pg.ZalandoPostgres) (ctrl.Result, error) {
 	log := r.Log.WithValues("zalando postgresql", z.ToKey())
 
-	// todo: Create a ns if none.
+	// Make sure the namespace exists in the worker-cluster. // todo: Make sure it happens in the worker-cluster.
+	ns := z.Namespace
+	if err := r.Get(ctx, client.ObjectKey{Name: ns}, &corev1.Namespace{}); err != nil {
+		// errors other than `not found`
+		if !errors.IsNotFound(err) {
+			return ctrl.Result{}, err
+		}
+
+		// Create the namespace.
+		nsObj := &corev1.Namespace{}
+		nsObj.Name = ns
+		if err = r.Create(ctx, nsObj); err != nil {
+			return ctrl.Result{}, err
+		}
+	}
 
 	u, err := z.ToUnstructured()
 	if err != nil {

@@ -34,8 +34,6 @@ import (
 	// +kubebuilder:scaffold:imports
 )
 
-const partitionID = "example-partition"
-
 var (
 	scheme   = runtime.NewScheme()
 	setupLog = ctrl.Log.WithName("setup")
@@ -50,12 +48,14 @@ func init() {
 }
 
 func main() {
-	var metricsAddr string
+	var metricsAddr, partitionID, tenant string
 	var enableLeaderElection bool
 	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
+	flag.StringVar(&partitionID, "partition-id", "", "The partition ID of the worker-cluster.")
+	flag.StringVar(&tenant, "tenant", "", "The tenant name.")
 	flag.Parse()
 
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
@@ -90,9 +90,11 @@ func main() {
 	}()
 
 	if err = (&controllers.PostgresReconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("Postgres"),
-		Scheme: mgr.GetScheme(),
+		Client:      mgr.GetClient(),
+		Log:         ctrl.Log.WithName("controllers").WithName("Postgres"),
+		Scheme:      mgr.GetScheme(),
+		PartitionID: partitionID,
+		Tenant:      tenant,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Postgres")
 		os.Exit(1)
