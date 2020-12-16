@@ -20,26 +20,32 @@ import (
 type YAMLManager struct {
 	client.Client
 	*runtime.Scheme
+	yaml []byte
 }
 
-func NewYAMLManager(client client.Client, scheme *runtime.Scheme) *YAMLManager {
+func NewYAMLManager(client client.Client, fileName string, scheme *runtime.Scheme) (*YAMLManager, error) {
+	bb, err := ioutil.ReadFile(fileName)
+	if err != nil {
+		return nil, err
+	}
+
 	return &YAMLManager{
 		Client: client,
 		Scheme: scheme,
-	}
+		yaml:   bb,
+	}, nil
 }
 
-func (y *YAMLManager) InstallYAML(fileName, namespace, s3BucketURL string) (objs []runtime.Object, err error) {
-	ctx := context.Background()
-	if objs, err = y.installYAML(ctx, fileName, namespace, s3BucketURL); err != nil {
+func (y *YAMLManager) InstallYAML(ctx context.Context, namespace, s3BucketURL string) (objs []runtime.Object, err error) {
+	if objs, err = y.installYAML(ctx, namespace, s3BucketURL); err != nil {
 		return
 	}
 	return
 }
 
-func (y *YAMLManager) InstallYAMLAndWaitTillReady(fileName, namespace, s3BucketURL string) (objs []runtime.Object, err error) {
+func (y *YAMLManager) InstallYAMLAndWaitTillReady(namespace, s3BucketURL string) (objs []runtime.Object, err error) {
 	ctx := context.Background()
-	if objs, err = y.installYAML(ctx, fileName, namespace, s3BucketURL); err != nil {
+	if objs, err = y.installYAML(ctx, namespace, s3BucketURL); err != nil {
 		return
 	}
 
@@ -68,17 +74,12 @@ func (y *YAMLManager) UninstallUnstructured(u *unstructured.Unstructured) error 
 	return nil
 }
 
-func (y *YAMLManager) handleConfigMap(cm *v1.ConfigMap, namespace, s3BucketURL string) {
+func (y *YAMLManager) editConfigMap(cm *v1.ConfigMap, namespace, s3BucketURL string) {
 	cm.Data["logical_backup_s3_bucket"] = s3BucketURL
 	cm.Data["watched_namespace"] = namespace
 }
 
-func (y *YAMLManager) installYAML(ctx context.Context, fileName, namespace, s3BucketURL string) (objs []runtime.Object, err error) {
-	bb, err := ioutil.ReadFile(fileName)
-	if err != nil {
-		return
-	}
-
+func (y *YAMLManager) installYAML(ctx context.Context, namespace, s3BucketURL string) (objs []runtime.Object, err error) {
 	// Make sure the namespace exists.
 	if err = y.Client.Get(ctx, client.ObjectKey{Name: namespace}, &corev1.Namespace{}); err != nil {
 		// errors other than `not found`
@@ -100,7 +101,7 @@ func (y *YAMLManager) installYAML(ctx context.Context, fileName, namespace, s3Bu
 	// Convert to a list of YAMLs.
 	deserializer := serializer.NewCodecFactory(y.Scheme).UniversalDeserializer()
 	list := &corev1.List{}
-	if _, _, err = deserializer.Decode(bb, nil, list); err != nil {
+	if _, _, err = deserializer.Decode(y.yaml, nil, list); err != nil {
 		return
 	}
 
@@ -122,7 +123,7 @@ func (y *YAMLManager) installYAML(ctx context.Context, fileName, namespace, s3Bu
 		}
 
 		if v, ok := obj.(*v1.ConfigMap); ok {
-			y.handleConfigMap(v, namespace, s3BucketURL)
+			y.editConfigMap(v, namespace, s3BucketURL)
 		}
 
 		if err = y.Create(ctx, obj); err != nil {

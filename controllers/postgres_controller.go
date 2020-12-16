@@ -25,7 +25,6 @@ import (
 	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -101,6 +100,7 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		return ctrl.Result{}, nil
 	}
 
+	// Check if zalando dependencies are installed. If not, install them.
 	if err := r.ensureZalandoDependencies(ctx, instance); err != nil {
 		return ctrl.Result{}, fmt.Errorf("error while ensuring Zalando dependencies: %v", err)
 	}
@@ -185,23 +185,18 @@ func (r *PostgresReconciler) createZalandoPostgresql(ctx context.Context, z *pg.
 // todo: Make sure it takes effect in the service-node.
 // ensureZalandoDependencies makes sure Zalando resources are installed in the service-node.
 func (r *PostgresReconciler) ensureZalandoDependencies(ctx context.Context, pg *pg.Postgres) error {
-	isInstalled, err := r.isZalandoResourcesInstalled(ctx, pg.Spec.ProjectID)
+	namespace := pg.Spec.ProjectID
+	isInstalled, err := r.isZalandoDependenciesInstalled(ctx, namespace)
 	if err != nil {
-		return fmt.Errorf("error while querying if zalando resources are installed: %v", err)
+		return fmt.Errorf("error while querying if zalando dependencies are installed: %v", err)
 	}
 	if !isInstalled {
-		objs, err := r.YAMLManager.InstallYAML("./external.yaml", pg.Namespace, pg.Spec.Backup.S3BucketURL)
+		objs, err := r.InstallYAML(ctx, namespace, pg.Spec.Backup.S3BucketURL)
 		if err != nil {
-			return fmt.Errorf("error while install zalando dependencies: %v", err)
+			return fmt.Errorf("error while installing zalando dependencies: %v", err)
 		}
-		patch := client.MergeFrom(pg.DeepCopy())
-		u, err := toUnstructured(objs)
-		if err != nil {
-			return fmt.Errorf("error while converting to Unstructured: %v", err)
-		}
-		pg.Spec.ZalandoDependencies = u
-		if err := r.Patch(ctx, pg, patch); err != nil {
-			return fmt.Errorf("error while patching postgres: %v", err)
+		if err := r.patchZalandoDependencies(ctx, pg, objs); err != nil {
+			return fmt.Errorf("error while patching zalando dependencies in postgres: %v", err)
 		}
 	}
 
@@ -221,11 +216,11 @@ func (r *PostgresReconciler) isManagedByUs(obj *pg.Postgres) bool {
 	return true
 }
 
-func (r *PostgresReconciler) isZalandoResourcesInstalled(ctx context.Context, namespace string) (bool, error) {
+func (r *PostgresReconciler) isZalandoDependenciesInstalled(ctx context.Context, namespace string) (bool, error) {
 	pods := &corev1.PodList{}
 	opts := []client.ListOption{
 		client.InNamespace(namespace),
-		client.MatchingLabels{"name": "postgres-operator"},
+		client.MatchingLabels{"name": "postgres-operator"}, // todo: Fetch labels programmatically.
 	}
 	if err := r.List(ctx, pods, opts...); err != nil {
 		return false, client.IgnoreNotFound(err)
@@ -233,6 +228,18 @@ func (r *PostgresReconciler) isZalandoResourcesInstalled(ctx context.Context, na
 	return true, nil
 }
 
+func (r *PostgresReconciler) patchZalandoDependencies(ctx context.Context, pg *pg.Postgres, objs []runtime.Object) error {
+	patch := client.MergeFrom(pg.DeepCopy())
+	if err := pg.SetZalandoDependencies(objs); err != nil {
+		return fmt.Errorf("error while setting zalando dependencies: %v", err)
+	}
+	if err := r.Patch(ctx, pg, patch); err != nil {
+		return fmt.Errorf("error while patching postgres: %v", err)
+	}
+	return nil
+}
+
+// todo: shift the logic to postgresql.
 func patchRawZ(out *zalando.Postgresql, in *pg.Postgres) {
 	out.Spec.NumberOfInstances = in.Spec.NumberOfInstances
 
@@ -265,15 +272,4 @@ func patchRawZ(out *zalando.Postgresql, in *pg.Postgres) {
 	}()
 
 	// todo: in.Spec.Backup, in.Spec.AccessList
-}
-
-// todo: duplicate
-func toUnstructured(objs []runtime.Object) (*unstructured.Unstructured, error) {
-	u, err := runtime.DefaultUnstructuredConverter.ToUnstructured(objs)
-	if err != nil {
-		return nil, err
-	}
-	return &unstructured.Unstructured{
-		Object: u,
-	}, nil
 }

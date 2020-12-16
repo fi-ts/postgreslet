@@ -77,10 +77,15 @@ func main() {
 	// Use no-cache client to avoid waiting for cashing.
 	client, err := client.New(conf, client.Options{})
 	if err != nil {
-		setupLog.Error(err, "unable to craete a new client")
+		setupLog.Error(err, "unable to create a new client")
+		os.Exit(1)
 	}
-	y := yamlmanager.NewYAMLManager(client, scheme)
-	objs, err := y.InstallYAMLAndWaitTillReady("./external.yaml", partitionID, "")
+	y, err := yamlmanager.NewYAMLManager(client, "./external.yaml", scheme)
+	if err != nil {
+		setupLog.Error(err, "unable to create a new zalando YAML manager")
+		os.Exit(1)
+	}
+	objs, err := y.InstallYAMLAndWaitTillReady(partitionID, "")
 	if err != nil {
 		setupLog.Error(err, "unable to install external YAML")
 		os.Exit(1)
@@ -91,13 +96,18 @@ func main() {
 		}
 	}()
 
+	yamlMgr, err := yamlmanager.NewYAMLManager(mgr.GetClient(), "./external.yaml", mgr.GetScheme())
+	if err != nil {
+		setupLog.Error(err, "unable to create a new zalando YAML manager for PostgresReconciler")
+		os.Exit(1)
+	}
 	if err = (&controllers.PostgresReconciler{
 		Client:      mgr.GetClient(),
 		Log:         ctrl.Log.WithName("controllers").WithName("Postgres"),
 		Scheme:      mgr.GetScheme(),
 		PartitionID: partitionID,
 		Tenant:      tenant,
-		YAMLManager: yamlmanager.NewYAMLManager(mgr.GetClient(), mgr.GetScheme()),
+		YAMLManager: yamlMgr,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Postgres")
 		os.Exit(1)

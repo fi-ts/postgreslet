@@ -17,10 +17,12 @@ limitations under the License.
 package v1
 
 import (
+	"fmt"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 )
 
@@ -146,6 +148,15 @@ func (p *Postgres) IsBeingDeleted() bool {
 	return !p.ObjectMeta.DeletionTimestamp.IsZero()
 }
 
+func (p *Postgres) SetZalandoDependencies(objs []runtime.Object) error {
+	u, err := toUnstructured(objs)
+	if err != nil {
+		return fmt.Errorf("error while converting to Unstructured: %v", err)
+	}
+	p.Spec.ZalandoDependencies = u
+	return nil
+}
+
 func (p *Postgres) ToKey() *types.NamespacedName {
 	return &types.NamespacedName{
 		Namespace: p.Namespace,
@@ -229,6 +240,17 @@ func removeElem(ss []string, s string) (out []string) {
 		out = append(out, elem)
 	}
 	return
+}
+
+// todo: duplicate
+func toUnstructured(objs []runtime.Object) (*unstructured.Unstructured, error) {
+	u, err := runtime.DefaultUnstructuredConverter.ToUnstructured(objs)
+	if err != nil {
+		return nil, err
+	}
+	return &unstructured.Unstructured{
+		Object: u,
+	}, nil
 }
 
 func init() {
