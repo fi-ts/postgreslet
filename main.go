@@ -25,6 +25,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
+	"k8s.io/client-go/tools/clientcmd"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
@@ -48,7 +49,7 @@ func init() {
 }
 
 func main() {
-	var metricsAddr, partitionID, tenant string
+	var metricsAddr, partitionID, tenant, ctrlClusterKubeconfig string
 	var enableLeaderElection bool
 	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", false,
@@ -56,12 +57,13 @@ func main() {
 			"Enabling this will ensure there is only one active controller manager.")
 	flag.StringVar(&partitionID, "partition-id", "", "The partition ID of the worker-cluster.")
 	flag.StringVar(&tenant, "tenant", "", "The tenant name.")
+	flag.StringVar(&ctrlClusterKubeconfig, "controlplane-kubeconfig", "", "The path to the kubeconfig to talk to the control plane")
 	flag.Parse()
 
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 
-	conf := ctrl.GetConfigOrDie()
-	mgr, err := ctrl.NewManager(conf, ctrl.Options{
+	svcClusterConf := ctrl.GetConfigOrDie()
+	svcClusterMgr, err := ctrl.NewManager(svcClusterConf, ctrl.Options{
 		Scheme:             scheme,
 		MetricsBindAddress: metricsAddr,
 		Port:               9443,
@@ -69,11 +71,31 @@ func main() {
 		LeaderElectionID:   "908dd13e.fits.cloud",
 	})
 	if err != nil {
-		setupLog.Error(err, "unable to start manager")
+		setupLog.Error(err, "unable to start service cluster manager")
 		os.Exit(1)
 	}
 
-	y, err := yamlmanager.NewYAMLManager(conf, scheme)
+	ctrlPlaneClusterConf, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
+		&clientcmd.ClientConfigLoadingRules{ExplicitPath: ctrlClusterKubeconfig},
+		&clientcmd.ConfigOverrides{},
+	).ClientConfig()
+	if err != nil {
+		setupLog.Error(err, "unable to get control cluster kubeconfig")
+		os.Exit(1)
+	}
+	ctrlPlaneClusterMgr, err := ctrl.NewManager(ctrlPlaneClusterConf, ctrl.Options{
+		Scheme:             scheme,
+		MetricsBindAddress: metricsAddr,
+		Port:               9443,
+		LeaderElection:     enableLeaderElection,
+		LeaderElectionID:   "4d69ceab.fits.cloud",
+	})
+	if err != nil {
+		setupLog.Error(err, "unable to start control plane cluster manager")
+		os.Exit(1)
+	}
+
+	y, err := yamlmanager.NewYAMLManager(svcClusterConf, scheme)
 	if err != nil {
 		setupLog.Error(err, "unable to create a new external YAML manager")
 		os.Exit(1)
@@ -90,12 +112,13 @@ func main() {
 	}()
 
 	if err = (&controllers.PostgresReconciler{
-		Client:      mgr.GetClient(),
+		Client:      ctrlPlaneClusterMgr.GetClient(),
+		Service:     svcClusterMgr.GetClient(),
 		Log:         ctrl.Log.WithName("controllers").WithName("Postgres"),
-		Scheme:      mgr.GetScheme(),
+		Scheme:      ctrlPlaneClusterMgr.GetScheme(),
 		PartitionID: partitionID,
 		Tenant:      tenant,
-	}).SetupWithManager(mgr); err != nil {
+	}).SetupWithManager(ctrlPlaneClusterMgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Postgres")
 		os.Exit(1)
 	}
@@ -106,18 +129,25 @@ func main() {
 	// }
 
 	if err = (&controllers.StatusReconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("Status"),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
+		Client:  svcClusterMgr.GetClient(),
+		Control: ctrlPlaneClusterMgr.GetClient(),
+		Log:     ctrl.Log.WithName("controllers").WithName("Status"),
+		Scheme:  svcClusterMgr.GetScheme(),
+	}).SetupWithManager(svcClusterMgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Status")
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder
 
-	setupLog.Info("starting manager", "version", v.V)
-	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
-		setupLog.Error(err, "problem running manager")
+	setupLog.Info("starting service cluster manager", "version", v.V)
+	if err := svcClusterMgr.Start(ctrl.SetupSignalHandler()); err != nil {
+		setupLog.Error(err, "problem running service cluster manager")
+		os.Exit(1)
+	}
+
+	setupLog.Info("starting control plane cluster manager", "version", v.V)
+	if err := ctrlPlaneClusterMgr.Start(ctrl.SetupSignalHandler()); err != nil {
+		setupLog.Error(err, "problem running control plane cluster manager")
 		os.Exit(1)
 	}
 }
