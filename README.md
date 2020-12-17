@@ -1,6 +1,6 @@
 # postgres-controller
 
-A small controller which act as a bridge between the zalando-postgres-operator and our postgres Resource.
+A small controller which acts as a bridge between the zalando-postgres-operator and our postgres Resource.
 
 ## Run an example on kind-cluster
 
