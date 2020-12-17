@@ -2,12 +2,18 @@ package yamlmanager
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"io/ioutil"
 	"time"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
@@ -23,7 +29,9 @@ type YAMLManager struct {
 
 func NewYAMLManager(conf *rest.Config, scheme *runtime.Scheme) (*YAMLManager, error) {
 	// Use no-cache client to avoid waiting for cashing.
-	client, err := client.New(conf, client.Options{})
+	client, err := client.New(conf, client.Options{
+		Scheme: scheme,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -31,6 +39,45 @@ func NewYAMLManager(conf *rest.Config, scheme *runtime.Scheme) (*YAMLManager, er
 		Client: client,
 		Scheme: scheme,
 	}, nil
+}
+
+func (y *YAMLManager) InstallCRD(fileName string) error {
+	bytes, err := ioutil.ReadFile(fileName)
+	if err != nil {
+		return fmt.Errorf("error while reading a file: %v", err)
+	}
+
+	obj, _, err := serializer.NewCodecFactory(y.Scheme).UniversalDeserializer().Decode(bytes, nil, nil)
+	if err != nil {
+		return fmt.Errorf("error while deserializing bytes: %v", err)
+	}
+
+	crdRead, ok := obj.(*apiextensionsv1.CustomResourceDefinition)
+	if !ok {
+		return errors.New("no CustomResourceDefition")
+	}
+
+	ctx := context.Background()
+	name := crdRead.Name
+
+	// Remove redundant info.
+	crdRead.ObjectMeta = metav1.ObjectMeta{Name: name}
+	crdRead.Status = apiextensionsv1.CustomResourceDefinitionStatus{}
+
+	// Fetch the CRD and create one if not found.
+	crdFetched := &apiextensionsv1.CustomResourceDefinition{}
+	if err := y.Get(ctx, client.ObjectKey{Name: name}, crdFetched); err != nil {
+		if !apierrors.IsNotFound(err) {
+			return fmt.Errorf("error while fetching CRD Postgresql: %v", err)
+		}
+
+		if err := y.Create(ctx, crdRead); err != nil {
+			return fmt.Errorf("error while creating CRD Postgresql: %v", err)
+		}
+		return nil
+	}
+
+	return nil
 }
 
 func (y *YAMLManager) InstallYAML(fileName, namespace string) (objs []runtime.Object, err error) {
@@ -44,7 +91,7 @@ func (y *YAMLManager) InstallYAML(fileName, namespace string) (objs []runtime.Ob
 	// Make sure the namespace exists.
 	if err = y.Client.Get(ctx, client.ObjectKey{Name: namespace}, &corev1.Namespace{}); err != nil {
 		// errors other than `not found`
-		if !errors.IsNotFound(err) {
+		if !apierrors.IsNotFound(err) {
 			return
 		}
 

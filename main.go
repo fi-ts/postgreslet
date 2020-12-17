@@ -31,6 +31,7 @@ import (
 	databasev1 "github.com/fi-ts/postgres-controller/api/v1"
 	"github.com/fi-ts/postgres-controller/controllers"
 	"github.com/fi-ts/postgres-controller/pkg/yamlmanager"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -40,8 +41,8 @@ var (
 )
 
 func init() {
+	_ = apiextensionsv1.AddToScheme(scheme)
 	_ = clientgoscheme.AddToScheme(scheme)
-
 	_ = databasev1.AddToScheme(scheme)
 	_ = zalando.AddToScheme(scheme)
 	// +kubebuilder:scaffold:scheme
@@ -78,16 +79,10 @@ func main() {
 		setupLog.Error(err, "unable to create a new external YAML manager")
 		os.Exit(1)
 	}
-	objs, err := y.InstallYAML("./external.yaml", partitionID)
-	if err != nil {
-		setupLog.Error(err, "unable to install external YAML")
+	if err := y.InstallCRD("./crd-postgresql.yaml"); err != nil {
+		setupLog.Error(err, "unable to install CRD Postgresql")
 		os.Exit(1)
 	}
-	defer func() {
-		if err := y.UninstallYAML(objs); err != nil {
-			setupLog.Error(err, "unable to uninstall external YAML")
-		}
-	}()
 
 	if err = (&controllers.PostgresReconciler{
 		Client:      mgr.GetClient(),

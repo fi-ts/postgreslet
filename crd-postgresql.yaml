@@ -1,0 +1,896 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  creationTimestamp: "2020-12-17T19:17:34Z"
+  generation: 1
+  managedFields:
+  - apiVersion: apiextensions.k8s.io/v1
+    fieldsType: FieldsV1
+    fieldsV1:
+      f:status:
+        f:acceptedNames:
+          f:kind: {}
+          f:listKind: {}
+          f:plural: {}
+          f:shortNames: {}
+          f:singular: {}
+        f:conditions: {}
+    manager: kube-apiserver
+    operation: Update
+    time: "2020-12-17T19:17:34Z"
+  - apiVersion: apiextensions.k8s.io/v1beta1
+    fieldsType: FieldsV1
+    fieldsV1:
+      f:spec:
+        f:additionalPrinterColumns: {}
+        f:conversion:
+          .: {}
+          f:strategy: {}
+        f:group: {}
+        f:names:
+          f:kind: {}
+          f:listKind: {}
+          f:plural: {}
+          f:shortNames: {}
+          f:singular: {}
+        f:preserveUnknownFields: {}
+        f:scope: {}
+        f:subresources:
+          .: {}
+          f:status: {}
+        f:validation:
+          .: {}
+          f:openAPIV3Schema:
+            .: {}
+            f:properties:
+              .: {}
+              f:apiVersion:
+                .: {}
+                f:enum: {}
+                f:type: {}
+              f:kind:
+                .: {}
+                f:enum: {}
+                f:type: {}
+              f:spec:
+                .: {}
+                f:properties:
+                  .: {}
+                  f:additionalVolumes:
+                    .: {}
+                    f:items: {}
+                    f:type: {}
+                  f:allowedSourceRanges:
+                    .: {}
+                    f:items: {}
+                    f:nullable: {}
+                    f:type: {}
+                  f:clone:
+                    .: {}
+                    f:properties:
+                      .: {}
+                      f:cluster:
+                        .: {}
+                        f:type: {}
+                      f:s3_access_key_id:
+                        .: {}
+                        f:type: {}
+                      f:s3_endpoint:
+                        .: {}
+                        f:type: {}
+                      f:s3_force_path_style:
+                        .: {}
+                        f:type: {}
+                      f:s3_secret_access_key:
+                        .: {}
+                        f:type: {}
+                      f:s3_wal_path:
+                        .: {}
+                        f:type: {}
+                      f:timestamp:
+                        .: {}
+                        f:description: {}
+                        f:pattern: {}
+                        f:type: {}
+                      f:uid:
+                        .: {}
+                        f:format: {}
+                        f:type: {}
+                    f:required: {}
+                    f:type: {}
+                  f:connectionPooler:
+                    .: {}
+                    f:properties:
+                      .: {}
+                      f:dockerImage:
+                        .: {}
+                        f:type: {}
+                      f:maxDBConnections:
+                        .: {}
+                        f:type: {}
+                      f:mode:
+                        .: {}
+                        f:enum: {}
+                        f:type: {}
+                      f:numberOfInstances:
+                        .: {}
+                        f:minimum: {}
+                        f:type: {}
+                      f:resources:
+                        .: {}
+                        f:properties:
+                          .: {}
+                          f:limits:
+                            .: {}
+                            f:properties:
+                              .: {}
+                              f:cpu:
+                                .: {}
+                                f:description: {}
+                                f:pattern: {}
+                                f:type: {}
+                              f:memory:
+                                .: {}
+                                f:description: {}
+                                f:pattern: {}
+                                f:type: {}
+                            f:required: {}
+                            f:type: {}
+                          f:requests:
+                            .: {}
+                            f:properties:
+                              .: {}
+                              f:cpu:
+                                .: {}
+                                f:description: {}
+                                f:pattern: {}
+                                f:type: {}
+                              f:memory:
+                                .: {}
+                                f:description: {}
+                                f:pattern: {}
+                                f:type: {}
+                            f:required: {}
+                            f:type: {}
+                        f:required: {}
+                        f:type: {}
+                      f:schema:
+                        .: {}
+                        f:type: {}
+                      f:user:
+                        .: {}
+                        f:type: {}
+                    f:type: {}
+                  f:databases:
+                    .: {}
+                    f:additionalProperties: {}
+                    f:type: {}
+                  f:dockerImage:
+                    .: {}
+                    f:type: {}
+                  f:enableConnectionPooler:
+                    .: {}
+                    f:type: {}
+                  f:enableLogicalBackup:
+                    .: {}
+                    f:type: {}
+                  f:enableMasterLoadBalancer:
+                    .: {}
+                    f:type: {}
+                  f:enableReplicaLoadBalancer:
+                    .: {}
+                    f:type: {}
+                  f:enableShmVolume:
+                    .: {}
+                    f:type: {}
+                  f:init_containers:
+                    .: {}
+                    f:description: {}
+                    f:items: {}
+                    f:type: {}
+                  f:initContainers:
+                    .: {}
+                    f:items: {}
+                    f:type: {}
+                  f:logicalBackupSchedule:
+                    .: {}
+                    f:pattern: {}
+                    f:type: {}
+                  f:maintenanceWindows:
+                    .: {}
+                    f:items: {}
+                    f:type: {}
+                  f:numberOfInstances:
+                    .: {}
+                    f:minimum: {}
+                    f:type: {}
+                  f:patroni:
+                    .: {}
+                    f:properties:
+                      .: {}
+                      f:initdb:
+                        .: {}
+                        f:additionalProperties: {}
+                        f:type: {}
+                      f:loop_wait:
+                        .: {}
+                        f:type: {}
+                      f:maximum_lag_on_failover:
+                        .: {}
+                        f:type: {}
+                      f:pg_hba:
+                        .: {}
+                        f:items: {}
+                        f:type: {}
+                      f:retry_timeout:
+                        .: {}
+                        f:type: {}
+                      f:slots:
+                        .: {}
+                        f:additionalProperties: {}
+                        f:type: {}
+                      f:synchronous_mode:
+                        .: {}
+                        f:type: {}
+                      f:synchronous_mode_strict:
+                        .: {}
+                        f:type: {}
+                      f:ttl:
+                        .: {}
+                        f:type: {}
+                    f:type: {}
+                  f:pod_priority_class_name:
+                    .: {}
+                    f:description: {}
+                    f:type: {}
+                  f:podAnnotations:
+                    .: {}
+                    f:additionalProperties: {}
+                    f:type: {}
+                  f:podPriorityClassName:
+                    .: {}
+                    f:type: {}
+                  f:postgresql:
+                    .: {}
+                    f:properties:
+                      .: {}
+                      f:parameters:
+                        .: {}
+                        f:additionalProperties: {}
+                        f:type: {}
+                      f:version:
+                        .: {}
+                        f:enum: {}
+                        f:type: {}
+                    f:required: {}
+                    f:type: {}
+                  f:preparedDatabases:
+                    .: {}
+                    f:additionalProperties: {}
+                    f:type: {}
+                  f:replicaLoadBalancer:
+                    .: {}
+                    f:description: {}
+                    f:type: {}
+                  f:resources:
+                    .: {}
+                    f:properties:
+                      .: {}
+                      f:limits:
+                        .: {}
+                        f:properties:
+                          .: {}
+                          f:cpu:
+                            .: {}
+                            f:description: {}
+                            f:pattern: {}
+                            f:type: {}
+                          f:memory:
+                            .: {}
+                            f:description: {}
+                            f:pattern: {}
+                            f:type: {}
+                        f:required: {}
+                        f:type: {}
+                      f:requests:
+                        .: {}
+                        f:properties:
+                          .: {}
+                          f:cpu:
+                            .: {}
+                            f:description: {}
+                            f:pattern: {}
+                            f:type: {}
+                          f:memory:
+                            .: {}
+                            f:description: {}
+                            f:pattern: {}
+                            f:type: {}
+                        f:required: {}
+                        f:type: {}
+                    f:required: {}
+                    f:type: {}
+                  f:serviceAnnotations:
+                    .: {}
+                    f:additionalProperties: {}
+                    f:type: {}
+                  f:sidecars:
+                    .: {}
+                    f:items: {}
+                    f:type: {}
+                  f:spiloFSGroup:
+                    .: {}
+                    f:type: {}
+                  f:standby:
+                    .: {}
+                    f:properties:
+                      .: {}
+                      f:s3_wal_path:
+                        .: {}
+                        f:type: {}
+                    f:required: {}
+                    f:type: {}
+                  f:teamId:
+                    .: {}
+                    f:type: {}
+                  f:tls:
+                    .: {}
+                    f:properties:
+                      .: {}
+                      f:caFile:
+                        .: {}
+                        f:type: {}
+                      f:caSecretName:
+                        .: {}
+                        f:type: {}
+                      f:certificateFile:
+                        .: {}
+                        f:type: {}
+                      f:privateKeyFile:
+                        .: {}
+                        f:type: {}
+                      f:secretName:
+                        .: {}
+                        f:type: {}
+                    f:required: {}
+                    f:type: {}
+                  f:tolerations:
+                    .: {}
+                    f:items: {}
+                    f:type: {}
+                  f:useLoadBalancer:
+                    .: {}
+                    f:description: {}
+                    f:type: {}
+                  f:users:
+                    .: {}
+                    f:additionalProperties: {}
+                    f:type: {}
+                  f:volume:
+                    .: {}
+                    f:properties:
+                      .: {}
+                      f:size:
+                        .: {}
+                        f:description: {}
+                        f:pattern: {}
+                        f:type: {}
+                      f:storageClass:
+                        .: {}
+                        f:type: {}
+                      f:subPath:
+                        .: {}
+                        f:type: {}
+                    f:required: {}
+                    f:type: {}
+                f:required: {}
+                f:type: {}
+              f:status:
+                .: {}
+                f:additionalProperties: {}
+                f:type: {}
+            f:required: {}
+            f:type: {}
+        f:version: {}
+        f:versions: {}
+      f:status:
+        f:storedVersions: {}
+    manager: postgres-operator
+    operation: Update
+    time: "2020-12-17T19:17:34Z"
+  name: postgresqls.acid.zalan.do
+  resourceVersion: "608"
+  selfLink: /apis/apiextensions.k8s.io/v1/customresourcedefinitions/postgresqls.acid.zalan.do
+  uid: ac75769b-b1e4-4fb0-9f6a-9bc850802d57
+spec:
+  conversion:
+    strategy: None
+  group: acid.zalan.do
+  names:
+    kind: postgresql
+    listKind: postgresqlList
+    plural: postgresqls
+    shortNames:
+    - pg
+    singular: postgresql
+  preserveUnknownFields: true
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - description: Team responsible for Postgres cluster
+      jsonPath: .spec.teamId
+      name: Team
+      type: string
+    - description: PostgreSQL version
+      jsonPath: .spec.postgresql.version
+      name: Version
+      type: string
+    - description: Number of Pods per Postgres cluster
+      jsonPath: .spec.numberOfInstances
+      name: Pods
+      type: integer
+    - description: Size of the bound volume
+      jsonPath: .spec.volume.size
+      name: Volume
+      type: string
+    - description: Requested CPU for Postgres containers
+      jsonPath: .spec.resources.requests.cpu
+      name: CPU-Request
+      type: string
+    - description: Requested memory for Postgres containers
+      jsonPath: .spec.resources.requests.memory
+      name: Memory-Request
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    - description: Current sync status of postgresql resource
+      jsonPath: .status.PostgresClusterStatus
+      name: Status
+      type: string
+    name: v1
+    schema:
+      openAPIV3Schema:
+        properties:
+          apiVersion:
+            enum:
+            - acid.zalan.do/v1
+            type: string
+          kind:
+            enum:
+            - postgresql
+            type: string
+          spec:
+            properties:
+              additionalVolumes:
+                items:
+                  properties:
+                    mountPath:
+                      type: string
+                    name:
+                      type: string
+                    subPath:
+                      type: string
+                    targetContainers:
+                      items:
+                        type: string
+                      type: array
+                    volumeSource:
+                      type: object
+                  required:
+                  - name
+                  - mountPath
+                  - volumeSource
+                  type: object
+                type: array
+              allowedSourceRanges:
+                items:
+                  pattern: ^(\d|[1-9]\d|1\d\d|2[0-4]\d|25[0-5])\.(\d|[1-9]\d|1\d\d|2[0-4]\d|25[0-5])\.(\d|[1-9]\d|1\d\d|2[0-4]\d|25[0-5])\.(\d|[1-9]\d|1\d\d|2[0-4]\d|25[0-5])\/(\d|[1-2]\d|3[0-2])$
+                  type: string
+                nullable: true
+                type: array
+              clone:
+                properties:
+                  cluster:
+                    type: string
+                  s3_access_key_id:
+                    type: string
+                  s3_endpoint:
+                    type: string
+                  s3_force_path_style:
+                    type: boolean
+                  s3_secret_access_key:
+                    type: string
+                  s3_wal_path:
+                    type: string
+                  timestamp:
+                    description: Date-time format that specifies a timezone as an
+                      offset relative to UTC e.g. 1996-12-19T16:39:57-08:00
+                    pattern: ^([0-9]+)-(0[1-9]|1[012])-(0[1-9]|[12][0-9]|3[01])[Tt]([01][0-9]|2[0-3]):([0-5][0-9]):([0-5][0-9]|60)(\.[0-9]+)?(([Zz])|([+-]([01][0-9]|2[0-3]):[0-5][0-9]))$
+                    type: string
+                  uid:
+                    format: uuid
+                    type: string
+                required:
+                - cluster
+                type: object
+              connectionPooler:
+                properties:
+                  dockerImage:
+                    type: string
+                  maxDBConnections:
+                    type: integer
+                  mode:
+                    enum:
+                    - session
+                    - transaction
+                    type: string
+                  numberOfInstances:
+                    minimum: 2
+                    type: integer
+                  resources:
+                    properties:
+                      limits:
+                        properties:
+                          cpu:
+                            description: Decimal natural followed by m, or decimal
+                              natural followed by dot followed by up to three decimal
+                              digits (precision used by Kubernetes). Must be greater
+                              than 0
+                            pattern: ^(\d+m|\d+(\.\d{1,3})?)$
+                            type: string
+                          memory:
+                            description: 'Plain integer or fixed-point integer using
+                              one of these suffixes: E, P, T, G, M, k (with or without
+                              a tailing i). Must be greater than 0'
+                            pattern: ^(\d+(e\d+)?|\d+(\.\d+)?(e\d+)?[EPTGMK]i?)$
+                            type: string
+                        required:
+                        - cpu
+                        - memory
+                        type: object
+                      requests:
+                        properties:
+                          cpu:
+                            description: Decimal natural followed by m, or decimal
+                              natural followed by dot followed by up to three decimal
+                              digits (precision used by Kubernetes). Must be greater
+                              than 0
+                            pattern: ^(\d+m|\d+(\.\d{1,3})?)$
+                            type: string
+                          memory:
+                            description: 'Plain integer or fixed-point integer using
+                              one of these suffixes: E, P, T, G, M, k (with or without
+                              a tailing i). Must be greater than 0'
+                            pattern: ^(\d+(e\d+)?|\d+(\.\d+)?(e\d+)?[EPTGMK]i?)$
+                            type: string
+                        required:
+                        - cpu
+                        - memory
+                        type: object
+                    required:
+                    - requests
+                    - limits
+                    type: object
+                  schema:
+                    type: string
+                  user:
+                    type: string
+                type: object
+              databases:
+                additionalProperties:
+                  description: User names specified here as database owners must be
+                    declared in the users key of the spec key
+                  type: string
+                type: object
+              dockerImage:
+                type: string
+              enableConnectionPooler:
+                type: boolean
+              enableLogicalBackup:
+                type: boolean
+              enableMasterLoadBalancer:
+                type: boolean
+              enableReplicaLoadBalancer:
+                type: boolean
+              enableShmVolume:
+                type: boolean
+              init_containers:
+                description: Deprecated
+                items:
+                  additionalProperties: true
+                  type: object
+                type: array
+              initContainers:
+                items:
+                  additionalProperties: true
+                  type: object
+                type: array
+              logicalBackupSchedule:
+                pattern: ^(\d+|\*)(/\d+)?(\s+(\d+|\*)(/\d+)?){4}$
+                type: string
+              maintenanceWindows:
+                items:
+                  pattern: ^\ *((Mon|Tue|Wed|Thu|Fri|Sat|Sun):(2[0-3]|[01]?\d):([0-5]?\d)|(2[0-3]|[01]?\d):([0-5]?\d))-((Mon|Tue|Wed|Thu|Fri|Sat|Sun):(2[0-3]|[01]?\d):([0-5]?\d)|(2[0-3]|[01]?\d):([0-5]?\d))\
+                    *$
+                  type: string
+                type: array
+              numberOfInstances:
+                minimum: 0
+                type: integer
+              patroni:
+                properties:
+                  initdb:
+                    additionalProperties:
+                      type: string
+                    type: object
+                  loop_wait:
+                    type: integer
+                  maximum_lag_on_failover:
+                    type: integer
+                  pg_hba:
+                    items:
+                      type: string
+                    type: array
+                  retry_timeout:
+                    type: integer
+                  slots:
+                    additionalProperties:
+                      additionalProperties:
+                        type: string
+                      type: object
+                    type: object
+                  synchronous_mode:
+                    type: boolean
+                  synchronous_mode_strict:
+                    type: boolean
+                  ttl:
+                    type: integer
+                type: object
+              pod_priority_class_name:
+                description: Deprecated
+                type: string
+              podAnnotations:
+                additionalProperties:
+                  type: string
+                type: object
+              podPriorityClassName:
+                type: string
+              postgresql:
+                properties:
+                  parameters:
+                    additionalProperties:
+                      type: string
+                    type: object
+                  version:
+                    enum:
+                    - "9.3"
+                    - "9.4"
+                    - "9.5"
+                    - "9.6"
+                    - "10"
+                    - "11"
+                    - "12"
+                    type: string
+                required:
+                - version
+                type: object
+              preparedDatabases:
+                additionalProperties:
+                  properties:
+                    defaultUsers:
+                      type: boolean
+                    extensions:
+                      additionalProperties:
+                        type: string
+                      type: object
+                    schemas:
+                      additionalProperties:
+                        properties:
+                          defaultRoles:
+                            type: boolean
+                          defaultUsers:
+                            type: boolean
+                        type: object
+                      type: object
+                  type: object
+                type: object
+              replicaLoadBalancer:
+                description: Deprecated
+                type: boolean
+              resources:
+                properties:
+                  limits:
+                    properties:
+                      cpu:
+                        description: Decimal natural followed by m, or decimal natural
+                          followed by dot followed by up to three decimal digits (precision
+                          used by Kubernetes). Must be greater than 0
+                        pattern: ^(\d+m|\d+(\.\d{1,3})?)$
+                        type: string
+                      memory:
+                        description: 'Plain integer or fixed-point integer using one
+                          of these suffixes: E, P, T, G, M, k (with or without a tailing
+                          i). Must be greater than 0'
+                        pattern: ^(\d+(e\d+)?|\d+(\.\d+)?(e\d+)?[EPTGMK]i?)$
+                        type: string
+                    required:
+                    - cpu
+                    - memory
+                    type: object
+                  requests:
+                    properties:
+                      cpu:
+                        description: Decimal natural followed by m, or decimal natural
+                          followed by dot followed by up to three decimal digits (precision
+                          used by Kubernetes). Must be greater than 0
+                        pattern: ^(\d+m|\d+(\.\d{1,3})?)$
+                        type: string
+                      memory:
+                        description: 'Plain integer or fixed-point integer using one
+                          of these suffixes: E, P, T, G, M, k (with or without a tailing
+                          i). Must be greater than 0'
+                        pattern: ^(\d+(e\d+)?|\d+(\.\d+)?(e\d+)?[EPTGMK]i?)$
+                        type: string
+                    required:
+                    - cpu
+                    - memory
+                    type: object
+                required:
+                - requests
+                - limits
+                type: object
+              serviceAnnotations:
+                additionalProperties:
+                  type: string
+                type: object
+              sidecars:
+                items:
+                  additionalProperties: true
+                  type: object
+                type: array
+              spiloFSGroup:
+                type: integer
+              standby:
+                properties:
+                  s3_wal_path:
+                    type: string
+                required:
+                - s3_wal_path
+                type: object
+              teamId:
+                type: string
+              tls:
+                properties:
+                  caFile:
+                    type: string
+                  caSecretName:
+                    type: string
+                  certificateFile:
+                    type: string
+                  privateKeyFile:
+                    type: string
+                  secretName:
+                    type: string
+                required:
+                - secretName
+                type: object
+              tolerations:
+                items:
+                  properties:
+                    effect:
+                      enum:
+                      - NoExecute
+                      - NoSchedule
+                      - PreferNoSchedule
+                      type: string
+                    key:
+                      type: string
+                    operator:
+                      enum:
+                      - Equal
+                      - Exists
+                      type: string
+                    tolerationSeconds:
+                      type: integer
+                    value:
+                      type: string
+                  required:
+                  - key
+                  - operator
+                  - effect
+                  type: object
+                type: array
+              useLoadBalancer:
+                description: Deprecated
+                type: boolean
+              users:
+                additionalProperties:
+                  description: Role flags specified here must not contradict each
+                    other
+                  items:
+                    enum:
+                    - bypassrls
+                    - BYPASSRLS
+                    - nobypassrls
+                    - NOBYPASSRLS
+                    - createdb
+                    - CREATEDB
+                    - nocreatedb
+                    - NOCREATEDB
+                    - createrole
+                    - CREATEROLE
+                    - nocreaterole
+                    - NOCREATEROLE
+                    - inherit
+                    - INHERIT
+                    - noinherit
+                    - NOINHERIT
+                    - login
+                    - LOGIN
+                    - nologin
+                    - NOLOGIN
+                    - replication
+                    - REPLICATION
+                    - noreplication
+                    - NOREPLICATION
+                    - superuser
+                    - SUPERUSER
+                    - nosuperuser
+                    - NOSUPERUSER
+                    type: string
+                  nullable: true
+                  type: array
+                type: object
+              volume:
+                properties:
+                  size:
+                    description: Value must not be zero
+                    pattern: ^(\d+(e\d+)?|\d+(\.\d+)?(e\d+)?[EPTGMK]i?)$
+                    type: string
+                  storageClass:
+                    type: string
+                  subPath:
+                    type: string
+                required:
+                - size
+                type: object
+            required:
+            - numberOfInstances
+            - teamId
+            - postgresql
+            type: object
+          status:
+            additionalProperties:
+              type: string
+            type: object
+        required:
+        - kind
+        - apiVersion
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: postgresql
+    listKind: postgresqlList
+    plural: postgresqls
+    shortNames:
+    - pg
+    singular: postgresql
+  conditions:
+  - lastTransitionTime: "2020-12-17T19:17:34Z"
+    message: no conflicts found
+    reason: NoConflicts
+    status: "True"
+    type: NamesAccepted
+  - lastTransitionTime: "2020-12-17T19:17:34Z"
+    message: the initial names have been accepted
+    reason: InitialNamesAccepted
+    status: "True"
+    type: Established
+  storedVersions:
+  - v1
