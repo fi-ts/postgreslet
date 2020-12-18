@@ -26,7 +26,6 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	databasev1 "github.com/fi-ts/postgres-controller/api/v1"
@@ -74,29 +73,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Use no-cache client to avoid waiting for cashing.
-	client, err := client.New(conf, client.Options{})
-	if err != nil {
-		setupLog.Error(err, "unable to create a new client")
-		os.Exit(1)
-	}
-	y, err := yamlmanager.NewYAMLManager(client, "./external.yaml", scheme)
-	if err != nil {
-		setupLog.Error(err, "unable to create a new zalando YAML manager")
-		os.Exit(1)
-	}
-	objs, err := y.InstallYAMLAndWaitTillReady(partitionID, "")
-	if err != nil {
-		setupLog.Error(err, "unable to install external YAML")
-		os.Exit(1)
-	}
-	defer func() {
-		if err := y.UninstallYAML(objs); err != nil {
-			setupLog.Error(err, "unable to uninstall external YAML")
-		}
-	}()
-
-	yamlMgr, err := yamlmanager.NewYAMLManager(mgr.GetClient(), "./external.yaml", mgr.GetScheme())
+	yamlMgr, err := yamlmanager.NewYAMLManager(mgr.GetClient(), "./svc-postgres-operator.yaml", mgr.GetScheme())
 	if err != nil {
 		setupLog.Error(err, "unable to create a new zalando YAML manager for PostgresReconciler")
 		os.Exit(1)

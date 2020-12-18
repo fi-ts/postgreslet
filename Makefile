@@ -96,6 +96,5 @@ else
 CONTROLLER_GEN=$(shell which controller-gen)
 endif
 
-copy-external-yaml:
+copy-svc-postgres-operator-yaml:
 	kubectl apply -k github.com/zalando/postgres-operator/manifests --dry-run=client -o yaml > external.yaml
-	sed 's/resourceVersion/# resourceVersion/' -i ./external.yaml

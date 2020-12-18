@@ -36,6 +36,7 @@ func NewYAMLManager(client client.Client, fileName string, scheme *runtime.Schem
 	}, nil
 }
 
+// todo: Add logger to exported functions.
 func (y *YAMLManager) InstallYAML(ctx context.Context, namespace, s3BucketURL string) (objs []runtime.Object, err error) {
 	if objs, err = y.installYAML(ctx, namespace, s3BucketURL); err != nil {
 		return
@@ -118,6 +119,11 @@ func (y *YAMLManager) installYAML(ctx context.Context, namespace, s3BucketURL st
 			return
 		}
 
+		// Remove resourceVersion.
+		if err = accessor.SetResourceVersion(obj, ""); err != nil {
+			return
+		}
+
 		if err = y.setNamespace(obj, namespace, accessor); err != nil {
 			return
 		}
@@ -186,9 +192,4 @@ func (y *YAMLManager) waitTillZalandoPostgresOperatorReady(ctx context.Context, 
 	}
 
 	return nil
-}
-
-type Config struct {
-	S3BucketURL string
-	WatchedNS   string
 }
