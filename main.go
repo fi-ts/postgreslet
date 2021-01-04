@@ -19,6 +19,8 @@ package main
 import (
 	"flag"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/metal-stack/v"
 	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
@@ -65,7 +67,7 @@ func main() {
 	svcClusterConf := ctrl.GetConfigOrDie()
 	svcClusterMgr, err := ctrl.NewManager(svcClusterConf, ctrl.Options{
 		Scheme:             scheme,
-		MetricsBindAddress: metricsAddr,
+		MetricsBindAddress: "0", // todo: Figure it out.
 		Port:               9443,
 		LeaderElection:     enableLeaderElection,
 		LeaderElectionID:   "908dd13e.fits.cloud",
@@ -85,7 +87,7 @@ func main() {
 	}
 	ctrlPlaneClusterMgr, err := ctrl.NewManager(ctrlPlaneClusterConf, ctrl.Options{
 		Scheme:             scheme,
-		MetricsBindAddress: metricsAddr,
+		MetricsBindAddress: "0", // todo: Figure it out.
 		Port:               9443,
 		LeaderElection:     enableLeaderElection,
 		LeaderElectionID:   "4d69ceab.fits.cloud",
@@ -140,13 +142,29 @@ func main() {
 	// +kubebuilder:scaffold:builder
 
 	setupLog.Info("starting service cluster manager", "version", v.V)
-	if err := svcClusterMgr.Start(ctrl.SetupSignalHandler()); err != nil {
-		setupLog.Error(err, "problem running service cluster manager")
-		os.Exit(1)
-	}
+	go func() {
+		if err := svcClusterMgr.Start(ctrl.SetupSignalHandler()); err != nil {
+			setupLog.Error(err, "problem running service cluster manager")
+			os.Exit(1)
+		}
+	}()
 
 	setupLog.Info("starting control plane cluster manager", "version", v.V)
-	if err := ctrlPlaneClusterMgr.Start(ctrl.SetupSignalHandler()); err != nil {
+	if err := ctrlPlaneClusterMgr.Start(
+		func() <-chan struct{} {
+			stop := make(chan struct{})
+			c := make(chan os.Signal, 2)
+			signal.Notify(c, []os.Signal{os.Interrupt, syscall.SIGTERM}...)
+			go func() {
+				<-c
+				close(stop)
+				<-c
+				// Exit upon the second signal.
+				os.Exit(1)
+			}()
+
+			return stop
+		}()); err != nil {
 		setupLog.Error(err, "problem running control plane cluster manager")
 		os.Exit(1)
 	}
