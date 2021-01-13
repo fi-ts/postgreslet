@@ -25,3 +25,7 @@ bin
 
 # control-plane kubeconfig file
 kubeconfig
+
+# todo: Remove this.
+# configmap of postgreslet, which contains kubeconfig at the moment
+configmap.yaml

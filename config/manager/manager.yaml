@@ -23,18 +23,26 @@ spec:
         control-plane: controller-manager
     spec:
       containers:
-      - command:
-        - /manager
-        args:
-        - --enable-leader-election --partition-id sample-partition --tenant sample-tenant
-        image: controller:latest
-        imagePullPolicy: IfNotPresent
-        name: manager
-        resources:
-          limits:
-            cpu: 100m
-            memory: 30Mi
-          requests:
-            cpu: 100m
-            memory: 20Mi
+        - command:
+            - /manager
+          args:
+            - --controlplane-kubeconfig $(CONTROLPLANE_KUBECONFIG)
+            - --enable-leader-election $(ENABLE_LEADER_ELECTION)
+            - --metrics-addr-ctrl-mgr $(METRICS_ADDR_CTRL_MGR)
+            - --metrics-addr-svc-mgr $(METRICS_ADDR_SVC_MGR)
+            - --partition-id $(PARTITION-ID)
+            - --tenant $(TENANT)
+          image: controller:latest
+          imagePullPolicy: IfNotPresent
+          name: manager
+          resources:
+            limits:
+              cpu: 100m
+              memory: 30Mi
+            requests:
+              cpu: 100m
+              memory: 20Mi
+          envFrom:
+            - configMapRef:
+                name: controller-manager-configmap
       terminationGracePeriodSeconds: 10
