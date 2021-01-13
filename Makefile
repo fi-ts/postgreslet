@@ -100,13 +100,14 @@ copy-external-yaml:
 	kubectl apply -k github.com/zalando/postgres-operator/manifests --dry-run=client -o yaml > external.yaml
 	sed 's/resourceVersion/# resourceVersion/' -i ./external.yaml
 
+# Todo: Fix two metrics-addr. Not read right now.
 configmap:
 	kubectl create configmap -n system controller-manager-configmap \
-		--from-literal=controlplane-kubeconfig=kubeconfig \
-		--from-literal=enable-leader-election=false \
-		--from-literal=metrics-addr-ctrl-mgr=8082 \
-		--from-literal=metrics-addr-svc-mgr=8081 \
-		--from-literal=partition-id=sample-partition \
-		--from-literal=tenant=sample-tenant \
+		--from-literal=CONTROLPLANE_KUBECONFIG=kubeconfig \
+		--from-literal=ENABLE_LEADER_ELECTION=false \
+		--from-literal=METRICS_ADDR_CTRL_MGR=8081 \
+		--from-literal=METRICS_ADDR_SVC_MGR=8082 \
+		--from-literal=PARTITION_ID=sample-partition \
+		--from-literal=TENANT=sample-tenant \
 		--dry-run=client -o=yaml \
 		> config/manager/configmap.yaml

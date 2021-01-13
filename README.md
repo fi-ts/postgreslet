@@ -26,3 +26,15 @@ kubectl --kubeconfig kubeconfig delete -f config/samples/database_v1_postgres.ya
 # Uninstall the dependencies of this project from the remote control-cluster.
 make uninstall
 ```
+
+## Two clusters. Postgreslet is a k8s Deployment.
+
+```bash
+kind create cluster
+make configmap
+k apply -f https://github.com/jetstack/cert-manager/releases/download/v1.1.0/cert-manager.yaml
+make docker-build
+make kind-load-image
+make deploy
+k get pod -A --watch
+```

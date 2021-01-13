@@ -26,12 +26,12 @@ spec:
         - command:
             - /manager
           args:
-            - --controlplane-kubeconfig $(CONTROLPLANE_KUBECONFIG)
-            - --enable-leader-election $(ENABLE_LEADER_ELECTION)
-            - --metrics-addr-ctrl-mgr $(METRICS_ADDR_CTRL_MGR)
-            - --metrics-addr-svc-mgr $(METRICS_ADDR_SVC_MGR)
-            - --partition-id $(PARTITION-ID)
-            - --tenant $(TENANT)
+            - "--controlplane-kubeconfig=$(CONTROLPLANE_KUBECONFIG)"
+            - "--enable-leader-election=$(ENABLE_LEADER_ELECTION)"
+            # - "--metrics-addr-ctrl-mgr=$(METRICS_ADDR_CTRL_MGR)"
+            # - "--metrics-addr-svc-mgr=$(METRICS_ADDR_SVC_MGR)"
+            - "--partition-id=$(PARTITION_ID)"
+            - "--tenant=$(TENANT)"
           image: controller:latest
           imagePullPolicy: IfNotPresent
           name: manager
