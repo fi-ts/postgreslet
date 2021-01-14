@@ -37,8 +37,9 @@ import (
 // StatusReconciler reconciles a Postgresql object
 type StatusReconciler struct {
 	client.Client
-	Log    logr.Logger
-	Scheme *runtime.Scheme
+	Control client.Client
+	Log     logr.Logger
+	Scheme  *runtime.Scheme
 }
 
 // Reconcile updates the status of the remote Postgres object based on the status of the local zalando object.
@@ -61,7 +62,7 @@ func (r *StatusReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 	log.Info("fetching all owners")
 	owners := &pg.PostgresList{}
-	if err := r.Client.List(ctx, owners); err != nil {
+	if err := r.Control.List(ctx, owners); err != nil {
 		log.Info("error fetching all owners")
 		return ctrl.Result{}, err
 	}
@@ -74,7 +75,6 @@ func (r *StatusReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	ownerFound := false
 	for _, o := range owners.Items {
 		if o.UID != derivedOwnerUID {
-			log.Info("owner not a match", "remote", o)
 			continue
 		}
 
@@ -90,12 +90,12 @@ func (r *StatusReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		// get a fresh copy of the owner object
-		if err := r.Client.Get(ctx, types.NamespacedName{Name: owner.Name, Namespace: owner.Namespace}, &owner); err != nil {
+		if err := r.Control.Get(ctx, types.NamespacedName{Name: owner.Name, Namespace: owner.Namespace}, &owner); err != nil {
 			return err
 		}
-		log.Info("Updating owner", "owner", owner)
 		owner.Status.Description = instance.Status.PostgresClusterStatus
-		if err := r.Client.Update(ctx, &owner); err != nil {
+		log.Info("Updating owner", "owner", owner)
+		if err := r.Control.Status().Update(ctx, &owner); err != nil {
 			log.Error(err, "failed to update owner object")
 			return err
 		}
