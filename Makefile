@@ -35,15 +35,15 @@ manager: generate fmt vet
 
 # Run against the configured Kubernetes cluster in ~/.kube/config
 run: generate fmt vet manifests
-	go run ./main.go -partition-id sample-partition -tenant sample-tenant
+	go run ./main.go -partition-id sample-partition -tenant sample-tenant -controlplane-kubeconfig "./kubeconfig"
 
 # Install CRDs into a cluster
 install: manifests
-	kustomize build config/crd | kubectl apply -f -
+	kustomize build config/crd | kubectl --kubeconfig kubeconfig apply -f -
 
 # Uninstall CRDs from a cluster
 uninstall: manifests
-	kustomize build config/crd | kubectl delete -f -
+	kustomize build config/crd | kubectl --kubeconfig kubeconfig delete -f -
 
 # Deploy controller in the configured Kubernetes cluster in ~/.kube/config
 deploy: manifests
