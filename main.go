@@ -34,6 +34,7 @@ import (
 	databasev1 "github.com/fi-ts/postgres-controller/api/v1"
 	"github.com/fi-ts/postgres-controller/controllers"
 	"github.com/fi-ts/postgres-controller/pkg/yamlmanager"
+	"github.com/fi-ts/postgres-controller/pkg/yamlmanagerinmain"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -103,6 +104,17 @@ func main() {
 		setupLog.Error(err, "unable to create a new zalando YAML manager for PostgresReconciler")
 		os.Exit(1)
 	}
+
+	y, err := yamlmanagerinmain.NewYAMLManager(svcClusterConf, scheme)
+	if err != nil {
+		setupLog.Error(err, "unable to create a new external YAML manager")
+		os.Exit(1)
+	}
+	if err := y.InstallCRD("./crd-postgresql.yaml"); err != nil {
+		setupLog.Error(err, "unable to install CRD Postgresql")
+		os.Exit(1)
+	}
+
 	if err = (&controllers.PostgresReconciler{
 		Client:      ctrlPlaneClusterMgr.GetClient(),
 		Service:     svcClusterMgr.GetClient(),

@@ -98,3 +98,8 @@ endif
 
 copy-svc-postgres-operator-yaml:
 	kubectl apply -k github.com/zalando/postgres-operator/manifests --dry-run=client -o yaml > external.yaml
+
+generate-crd-postgresql-yaml:
+	kubectl apply -k github.com/zalando/postgres-operator/manifests
+	kubectl wait --for=condition=ready pod -l name=postgres-operator
+	kubectl get crd postgresqls.acid.zalan.do -o yaml > crd-postgresql.yaml
