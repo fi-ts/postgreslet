@@ -182,11 +182,11 @@ func (r *PostgresReconciler) createZalandoPostgresql(ctx context.Context, z *pg.
 func (r *PostgresReconciler) deleteZPostgresql(ctx context.Context, k *types.NamespacedName) error {
 	log := r.Log.WithValues("zalando postgrsql", k)
 	rawZ := &zalando.Postgresql{}
-	if err := r.Get(ctx, *k, rawZ); err != nil {
+	if err := r.Service.Get(ctx, *k, rawZ); err != nil {
 		return fmt.Errorf("error while fetching zalando postgresql to delete: %v", err)
 	}
 
-	if err := r.Delete(ctx, rawZ); err != nil {
+	if err := r.Service.Delete(ctx, rawZ); err != nil {
 		return fmt.Errorf("error while deleting zalando postgresql: %v", err)
 	}
 
