@@ -25,6 +25,3 @@ bin
 
 # control-plane kubeconfig file
 kubeconfig
-
-# configmap of postgreslet
-configmap.yaml
