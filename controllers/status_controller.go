@@ -95,7 +95,7 @@ func (r *StatusReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		}
 		owner.Status.Description = instance.Status.PostgresClusterStatus
 		log.Info("Updating owner", "owner", owner)
-		if err := r.Control.Update(ctx, &owner); err != nil {
+		if err := r.Control.Status().Update(ctx, &owner); err != nil {
 			log.Error(err, "failed to update owner object")
 			return err
 		}
