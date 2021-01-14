@@ -41,6 +41,7 @@ var requeue = ctrl.Result{
 // PostgresReconciler reconciles a Postgres object
 type PostgresReconciler struct {
 	client.Client
+	Service             client.Client
 	Log                 logr.Logger
 	Scheme              *runtime.Scheme
 	PartitionID, Tenant string
@@ -96,7 +97,7 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 	// Get zalando postgresql and create one if none.
 	rawZ := &zalando.Postgresql{}
-	if err := r.Client.Get(ctx, *k, rawZ); err != nil {
+	if err := r.Service.Get(ctx, *k, rawZ); err != nil {
 		log.Info("unable to fetch zalando postgresql", "error", err)
 		// errors other than `NotFound`
 		if !errors.IsNotFound(err) {
@@ -112,21 +113,14 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		log.Info("updating zalando postgresql", "ns/name", k)
 		patch := client.MergeFrom(rawZ.DeepCopy())
 		patchRawZ(rawZ, instance)
-		if err := r.Client.Patch(ctx, rawZ, patch); err != nil {
+		if err := r.Service.Patch(ctx, rawZ, patch); err != nil {
 			log.Error(err, "error while updating zalando postgresql ", "ns/name", k)
 			return requeue, err
 		}
 		log.Info("zalando postgresql updated", "ns/name", k)
 	}
 
-	// Update status.
-	newStatus := rawZ.Status.PostgresClusterStatus
-	instance.Status.Description = newStatus
-	if err := r.Status().Update(ctx, instance); err != nil {
-		log.Error(err, "error while updating postgres status")
-		return ctrl.Result{}, err
-	}
-	log.Info("postgres status updated successfully", "status", newStatus)
+	// Update status will be handled by the StatusReconciler, based on the Zalando Status
 
 	return ctrl.Result{}, nil
 }
@@ -156,7 +150,7 @@ func (r *PostgresReconciler) createZalandoPostgresql(ctx context.Context, z *pg.
 
 	// Make sure the namespace exists in the worker-cluster. // todo: Make sure it happens in the worker-cluster.
 	ns := z.Namespace
-	if err := r.Get(ctx, client.ObjectKey{Name: ns}, &corev1.Namespace{}); err != nil {
+	if err := r.Service.Get(ctx, client.ObjectKey{Name: ns}, &corev1.Namespace{}); err != nil {
 		// errors other than `not found`
 		if !errors.IsNotFound(err) {
 			return ctrl.Result{}, err
@@ -165,7 +159,7 @@ func (r *PostgresReconciler) createZalandoPostgresql(ctx context.Context, z *pg.
 		// Create the namespace.
 		nsObj := &corev1.Namespace{}
 		nsObj.Name = ns
-		if err = r.Create(ctx, nsObj); err != nil {
+		if err = r.Service.Create(ctx, nsObj); err != nil {
 			return ctrl.Result{}, err
 		}
 	}
@@ -176,7 +170,7 @@ func (r *PostgresReconciler) createZalandoPostgresql(ctx context.Context, z *pg.
 		return ctrl.Result{}, err
 	}
 
-	if err := r.Client.Create(ctx, u); err != nil {
+	if err := r.Service.Create(ctx, u); err != nil {
 		log.Error(err, "error while creating zalando postgresql")
 		return ctrl.Result{}, err
 	}
