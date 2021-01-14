@@ -75,7 +75,6 @@ func (r *StatusReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	ownerFound := false
 	for _, o := range owners.Items {
 		if o.UID != derivedOwnerUID {
-			log.Info("owner not a match", "remote", o)
 			continue
 		}
 
@@ -94,8 +93,8 @@ func (r *StatusReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		if err := r.Control.Get(ctx, types.NamespacedName{Name: owner.Name, Namespace: owner.Namespace}, &owner); err != nil {
 			return err
 		}
-		log.Info("Updating owner", "owner", owner)
 		owner.Status.Description = instance.Status.PostgresClusterStatus
+		log.Info("Updating owner", "owner", owner)
 		if err := r.Control.Update(ctx, &owner); err != nil {
 			log.Error(err, "failed to update owner object")
 			return err
