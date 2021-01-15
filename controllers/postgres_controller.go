@@ -76,7 +76,7 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	if instance.IsBeingDeleted() {
 		log.Info("deleting owned zalando postgresql")
 		if err := r.deleteZPostgresql(ctx, k); err != nil {
-			return ctrl.Result{Requeue: false}, err
+			return ctrl.Result{}, err
 		}
 
 		instance.RemoveFinalizer(pg.PostgresFinalizerName)
