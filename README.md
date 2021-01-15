@@ -38,3 +38,15 @@ kubectl --kubeconfig kubeconfig delete -f config/samples/database_v1_postgres.ya
 # Uninstall the dependencies of this project from the remote control-cluster.
 make uninstall
 ```
+
+## Install a local kubeconfig as secret in the cluster
+
+The following steps will create a _Secret_ called `postgreslet`, and add all files in the folder as keys to that secret.
+
+As we only copy one file, the secret will contain only one key named `controlplane-kubeconfig` which will contain the control plane kube config.
+
+```sh
+mkdir postgreslet-secret
+cp kubeconfig postgreslet-secret/controlplane-kubeconfig
+kubectl create secret generic postgreslet --from-file postgreslet-secret/ --dry-run=client -o yaml | kubectl apply -n postgres-controller-system -f -
+```
