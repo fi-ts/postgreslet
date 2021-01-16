@@ -26,6 +26,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -76,8 +77,9 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	// Delete
 	if instance.IsBeingDeleted() {
 		log.Info("deleting owned zalando postgresql")
-
-		// r.deleteZPostgrsql(ctx, k)
+		if err := r.deleteZPostgresql(ctx, k); err != nil {
+			return ctrl.Result{}, err
+		}
 
 		if err := r.UninstallUnstructured(instance.Spec.ZalandoDependencies); err != nil {
 			return ctrl.Result{}, fmt.Errorf("error while uninstalling zalando dependencies: %v", err)
@@ -234,6 +236,21 @@ func (r *PostgresReconciler) patchZalandoDependencies(ctx context.Context, pg *p
 }
 
 // todo: shift the logic to postgresql.
+func (r *PostgresReconciler) deleteZPostgresql(ctx context.Context, k *types.NamespacedName) error {
+	log := r.Log.WithValues("zalando postgrsql", k)
+	rawZ := &zalando.Postgresql{}
+	if err := r.Service.Get(ctx, *k, rawZ); err != nil {
+		return fmt.Errorf("error while fetching zalando postgresql to delete: %v", err)
+	}
+
+	if err := r.Service.Delete(ctx, rawZ); err != nil {
+		return fmt.Errorf("error while deleting zalando postgresql: %v", err)
+	}
+
+	log.Info("zalando postgresql deleted")
+	return nil
+}
+
 func patchRawZ(out *zalando.Postgresql, in *pg.Postgres) {
 	out.Spec.NumberOfInstances = in.Spec.NumberOfInstances
 
