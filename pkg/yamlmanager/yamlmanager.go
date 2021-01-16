@@ -3,8 +3,10 @@ package yamlmanager
 import (
 	"context"
 	"io/ioutil"
+	"log"
 	"time"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -23,7 +25,7 @@ type YAMLManager struct {
 	yaml []byte
 }
 
-func NewYAMLManager(client client.Client, fileName string, scheme *runtime.Scheme) (*YAMLManager, error) {
+func New(client client.Client, fileName string, scheme *runtime.Scheme) (*YAMLManager, error) {
 	bb, err := ioutil.ReadFile(fileName)
 	if err != nil {
 		return nil, err
@@ -36,51 +38,9 @@ func NewYAMLManager(client client.Client, fileName string, scheme *runtime.Schem
 	}, nil
 }
 
+// todo: refactor
 // todo: Add logger to exported functions.
 func (y *YAMLManager) InstallYAML(ctx context.Context, namespace, s3BucketURL string) (objs []runtime.Object, err error) {
-	if objs, err = y.installYAML(ctx, namespace, s3BucketURL); err != nil {
-		return
-	}
-	return
-}
-
-func (y *YAMLManager) InstallYAMLAndWaitTillReady(namespace, s3BucketURL string) (objs []runtime.Object, err error) {
-	ctx := context.Background()
-	if objs, err = y.installYAML(ctx, namespace, s3BucketURL); err != nil {
-		return
-	}
-
-	if err = y.waitTillZalandoPostgresOperatorReady(ctx, time.Minute, time.Second); err != nil {
-		return
-	}
-
-	return
-}
-
-// todo: Consider ctx.
-func (y *YAMLManager) UninstallYAML(objs []runtime.Object) error {
-	for _, obj := range objs {
-		if err := y.Delete(context.Background(), obj); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// todo: Consider ctx.
-func (y *YAMLManager) UninstallUnstructured(u *unstructured.Unstructured) error {
-	if err := y.Delete(context.Background(), u); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (y *YAMLManager) editConfigMap(cm *v1.ConfigMap, namespace, s3BucketURL string) {
-	cm.Data["logical_backup_s3_bucket"] = s3BucketURL
-	cm.Data["watched_namespace"] = namespace
-}
-
-func (y *YAMLManager) installYAML(ctx context.Context, namespace, s3BucketURL string) (objs []runtime.Object, err error) {
 	// Make sure the namespace exists.
 	if err = y.Client.Get(ctx, client.ObjectKey{Name: namespace}, &corev1.Namespace{}); err != nil {
 		// errors other than `not found`
@@ -124,7 +84,7 @@ func (y *YAMLManager) installYAML(ctx context.Context, namespace, s3BucketURL st
 			return
 		}
 
-		if err = y.setNamespace(obj, namespace, accessor); err != nil {
+		if err = setNamespace(obj, namespace, accessor); err != nil {
 			return
 		}
 
@@ -132,16 +92,78 @@ func (y *YAMLManager) installYAML(ctx context.Context, namespace, s3BucketURL st
 			y.editConfigMap(v, namespace, s3BucketURL)
 		}
 
-		if err = y.Create(ctx, obj); err != nil {
-			return
+		name, er := accessor.Name(obj)
+		if er != nil {
+			return objs, er
+		}
+		key := client.ObjectKey{
+			Namespace: namespace,
+			Name:      name,
+		}
+
+		switch v := obj.(type) {
+		case *v1.ServiceAccount:
+			err = y.Get(ctx, key, &v1.ServiceAccount{})
+		case *rbacv1.ClusterRole:
+			key.Namespace = ""
+			err = y.Get(ctx, key, &rbacv1.ClusterRole{})
+		case *rbacv1.ClusterRoleBinding:
+			key.Namespace = ""
+			got := &rbacv1.ClusterRoleBinding{}
+			err = y.Get(ctx, key, got)
+			if err == nil {
+				patch := client.MergeFrom(got.DeepCopy())
+				got.Subjects = append(got.Subjects, v.Subjects[0])
+				if err = y.Patch(ctx, got, patch); err != nil {
+					return
+				}
+			}
+		case *v1.ConfigMap:
+			err = y.Get(ctx, key, &v1.ConfigMap{})
+		case *v1.Service:
+			err = y.Get(ctx, key, &v1.Service{})
+		case *appsv1.Deployment:
+			err = y.Get(ctx, key, &appsv1.Deployment{})
+		}
+		if err != nil {
+			if errors.IsNotFound(err) {
+				if err = y.Create(ctx, obj); err != nil {
+					return
+				}
+			}
 		}
 		objs = append(objs, obj)
+	}
+
+	if err = y.waitTillZalandoPostgresOperatorReady(ctx, time.Minute, time.Second); err != nil {
+		return
 	}
 
 	return
 }
 
-func (*YAMLManager) setNamespace(obj runtime.Object, namespace string, accessor meta.MetadataAccessor) error {
+func (y *YAMLManager) UninstallYAML(ctx context.Context, objs []runtime.Object) error {
+	for _, obj := range objs {
+		if err := y.Delete(ctx, obj); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (y *YAMLManager) UninstallUnstructured(ctx context.Context, u *unstructured.Unstructured) error {
+	if err := y.Delete(ctx, u); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (y *YAMLManager) editConfigMap(cm *v1.ConfigMap, namespace, s3BucketURL string) {
+	cm.Data["logical_backup_s3_bucket"] = s3BucketURL
+	cm.Data["watched_namespace"] = namespace
+}
+
+func setNamespace(obj runtime.Object, namespace string, accessor meta.MetadataAccessor) error {
 	if err := accessor.SetNamespace(obj, namespace); err != nil {
 		return err
 	}

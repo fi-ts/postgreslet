@@ -245,7 +245,13 @@ func removeElem(ss []string, s string) (out []string) {
 
 // todo: duplicate
 func toUnstructured(objs []runtime.Object) (*unstructured.Unstructured, error) {
-	u, err := runtime.DefaultUnstructuredConverter.ToUnstructured(objs)
+	u, err := runtime.DefaultUnstructuredConverter.ToUnstructured(
+		&map[string]interface{}{
+			"kind":       "List",
+			"apiVersion": "v1",
+			"items":      objs,
+		},
+	)
 	if err != nil {
 		return nil, err
 	}

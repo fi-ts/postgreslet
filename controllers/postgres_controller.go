@@ -81,7 +81,7 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			return ctrl.Result{}, err
 		}
 
-		if err := r.UninstallUnstructured(instance.Spec.ZalandoDependencies); err != nil {
+		if err := r.UninstallUnstructured(ctx, instance.Spec.ZalandoDependencies); err != nil {
 			return ctrl.Result{}, fmt.Errorf("error while uninstalling zalando dependencies: %v", err)
 		}
 
@@ -191,8 +191,10 @@ func (r *PostgresReconciler) ensureZalandoDependencies(ctx context.Context, pg *
 		if err != nil {
 			return fmt.Errorf("error while installing zalando dependencies: %v", err)
 		}
-		if err := r.patchZalandoDependencies(ctx, pg, objs); err != nil {
-			return fmt.Errorf("error while patching zalando dependencies in postgres: %v", err)
+		if len(objs) >= 0 {
+			if err := r.patchZalandoDependencies(ctx, pg, objs); err != nil {
+				return fmt.Errorf("error while patching zalando dependencies in postgres: %v", err)
+			}
 		}
 	}
 
@@ -218,8 +220,12 @@ func (r *PostgresReconciler) isZalandoDependenciesInstalled(ctx context.Context,
 		client.InNamespace(namespace),
 		client.MatchingLabels{"name": "postgres-operator"}, // todo: Fetch labels programmatically.
 	}
-	if err := r.List(ctx, pods, opts...); err != nil {
+	// todo: Do we need `ignorenotfound`?
+	if err := r.Service.List(ctx, pods, opts...); err != nil {
 		return false, client.IgnoreNotFound(err)
+	}
+	if len(pods.Items) == 0 {
+		return false, nil
 	}
 	return true, nil
 }

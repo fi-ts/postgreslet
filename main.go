@@ -33,8 +33,9 @@ import (
 
 	databasev1 "github.com/fi-ts/postgres-controller/api/v1"
 	"github.com/fi-ts/postgres-controller/controllers"
+	"github.com/fi-ts/postgres-controller/pkg/crdinstaller"
 	"github.com/fi-ts/postgres-controller/pkg/yamlmanager"
-	"github.com/fi-ts/postgres-controller/pkg/yamlmanagerinmain"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -44,8 +45,8 @@ var (
 )
 
 func init() {
+	_ = apiextensionsv1.AddToScheme(scheme)
 	_ = clientgoscheme.AddToScheme(scheme)
-
 	_ = databasev1.AddToScheme(scheme)
 	_ = zalando.AddToScheme(scheme)
 	// +kubebuilder:scaffold:scheme
@@ -67,6 +68,16 @@ func main() {
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 
 	svcClusterConf := ctrl.GetConfigOrDie()
+	i, err := crdinstaller.New(svcClusterConf, scheme)
+	if err != nil {
+		setupLog.Error(err, "unable to create a new external YAML manager")
+		os.Exit(1)
+	}
+	if err := i.Install("./crd-postgresql.yaml"); err != nil {
+		setupLog.Error(err, "unable to install CRD Postgresql")
+		os.Exit(1)
+	}
+
 	svcClusterMgr, err := ctrl.NewManager(svcClusterConf, ctrl.Options{
 		Scheme:             scheme,
 		MetricsBindAddress: metricsAddrSvcMgr,
@@ -99,19 +110,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	yamlMgr, err := yamlmanager.NewYAMLManager(svcClusterMgr.GetClient(), "./svc-postgres-operator.yaml", scheme)
+	yamlMgr, err := yamlmanager.New(svcClusterMgr.GetClient(), "./svc-postgres-operator.yaml", scheme)
 	if err != nil {
 		setupLog.Error(err, "unable to create a new zalando YAML manager for PostgresReconciler")
-		os.Exit(1)
-	}
-
-	y, err := yamlmanagerinmain.NewYAMLManager(svcClusterConf, scheme)
-	if err != nil {
-		setupLog.Error(err, "unable to create a new external YAML manager")
-		os.Exit(1)
-	}
-	if err := y.InstallCRD("./crd-postgresql.yaml"); err != nil {
-		setupLog.Error(err, "unable to install CRD Postgresql")
 		os.Exit(1)
 	}
 
