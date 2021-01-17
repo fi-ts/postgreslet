@@ -81,9 +81,9 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			return ctrl.Result{}, err
 		}
 
-		if err := r.UninstallUnstructured(ctx, instance.Spec.ZalandoDependencies); err != nil {
-			return ctrl.Result{}, fmt.Errorf("error while uninstalling zalando dependencies: %v", err)
-		}
+		// if err := r.UninstallUnstructured(ctx, instance.Spec.ZalandoDependencies); err != nil {
+		// 	return ctrl.Result{}, fmt.Errorf("error while uninstalling zalando dependencies: %v", err)
+		// }
 
 		instance.RemoveFinalizer(pg.PostgresFinalizerName)
 		if err := r.Update(ctx, instance); err != nil {
@@ -187,15 +187,16 @@ func (r *PostgresReconciler) ensureZalandoDependencies(ctx context.Context, pg *
 		return fmt.Errorf("error while querying if zalando dependencies are installed: %v", err)
 	}
 	if !isInstalled {
-		objs, err := r.InstallYAML(ctx, namespace, pg.Spec.Backup.S3BucketURL)
+		_, err := r.InstallYAML(ctx, namespace, pg.Spec.Backup.S3BucketURL)
 		if err != nil {
 			return fmt.Errorf("error while installing zalando dependencies: %v", err)
 		}
-		if len(objs) >= 0 {
-			if err := r.patchZalandoDependencies(ctx, pg, objs); err != nil {
-				return fmt.Errorf("error while patching zalando dependencies in postgres: %v", err)
-			}
-		}
+		// todo: rethink the mechanism of the deletion of svc-operator
+		// if len(objs) >= 0 {
+		// 	if err := r.patchZalandoDependencies(ctx, pg, objs); err != nil {
+		// 		return fmt.Errorf("error while patching zalando dependencies in postgres: %v", err)
+		// 	}
+		// }
 	}
 
 	return nil

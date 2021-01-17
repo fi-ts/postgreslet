@@ -13,7 +13,7 @@ spec:
     s3BucketURL: ""
   numberOfInstances: 2
   partitionID: sample-partition
-  projectID: project-id-a
+  projectID: projectid-a
   size:
     storageSize: 1Gi
   tenant: sample-tenant
@@ -29,7 +29,7 @@ spec:
     s3BucketURL: ""
   numberOfInstances: 2
   partitionID: sample-partition
-  projectID: project-id-b
+  projectID: projectid-b
   size:
     storageSize: 1Gi
   tenant: sample-tenant

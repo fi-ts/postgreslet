@@ -3,7 +3,6 @@ package yamlmanager
 import (
 	"context"
 	"io/ioutil"
-	"log"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -88,10 +87,6 @@ func (y *YAMLManager) InstallYAML(ctx context.Context, namespace, s3BucketURL st
 			return
 		}
 
-		if v, ok := obj.(*v1.ConfigMap); ok {
-			y.editConfigMap(v, namespace, s3BucketURL)
-		}
-
 		name, er := accessor.Name(obj)
 		if er != nil {
 			return objs, er
@@ -108,7 +103,17 @@ func (y *YAMLManager) InstallYAML(ctx context.Context, namespace, s3BucketURL st
 			key.Namespace = ""
 			err = y.Get(ctx, key, &rbacv1.ClusterRole{})
 		case *rbacv1.ClusterRoleBinding:
+			// Set the namespace of the ServiceAccount in the ClusterRoleBinding.
+			for i, s := range v.Subjects {
+				if s.Kind == "ServiceAccount" {
+					v.Subjects[i].Namespace = namespace
+				}
+			}
+
+			// ClusterRoleBinding is not namespaced.
 			key.Namespace = ""
+
+			// If a ClusterRoleBinding already exists, patch it.
 			got := &rbacv1.ClusterRoleBinding{}
 			err = y.Get(ctx, key, got)
 			if err == nil {
@@ -119,6 +124,7 @@ func (y *YAMLManager) InstallYAML(ctx context.Context, namespace, s3BucketURL st
 				}
 			}
 		case *v1.ConfigMap:
+			y.editConfigMap(v, namespace, s3BucketURL)
 			err = y.Get(ctx, key, &v1.ConfigMap{})
 		case *v1.Service:
 			err = y.Get(ctx, key, &v1.Service{})
@@ -166,15 +172,6 @@ func (y *YAMLManager) editConfigMap(cm *v1.ConfigMap, namespace, s3BucketURL str
 func setNamespace(obj runtime.Object, namespace string, accessor meta.MetadataAccessor) error {
 	if err := accessor.SetNamespace(obj, namespace); err != nil {
 		return err
-	}
-
-	// Add the namespace to the `ServiceAccount` in the `ClusterRoleBinding`
-	if v, ok := obj.(*rbacv1.ClusterRoleBinding); ok {
-		for i, s := range v.Subjects {
-			if s.Kind == "ServiceAccount" {
-				v.Subjects[i].Namespace = namespace
-			}
-		}
 	}
 
 	return nil
