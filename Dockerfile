@@ -14,7 +14,6 @@ COPY main.go main.go
 COPY api/ api/
 COPY controllers/ controllers/
 COPY pkg/ pkg/
-COPY svc-postgres-operator.yaml svc-postgres-operator.yaml
 
 # Build
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GO111MODULE=on go build -a -o manager main.go
@@ -24,6 +23,8 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GO111MODULE=on go build -a -o manager 
 FROM gcr.io/distroless/static:nonroot
 WORKDIR /
 COPY --from=builder /workspace/manager .
+COPY svc-postgres-operator.yaml svc-postgres-operator.yaml
+COPY crd-postgresql.yaml crd-postgresql.yaml
 USER nonroot:nonroot
 
 ENTRYPOINT ["/manager"]
