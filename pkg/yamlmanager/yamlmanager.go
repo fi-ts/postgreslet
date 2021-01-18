@@ -66,7 +66,7 @@ func (y *YAMLManager) InstallYAML(ctx context.Context, namespace, s3BucketURL st
 			return
 		}
 
-		if err = setNamespace(obj, namespace, y.MetadataAccessor); err != nil {
+		if err = y.SetNamespace(obj, namespace); err != nil {
 			return
 		}
 
@@ -190,14 +190,6 @@ func (y *YAMLManager) ensureNamespace(ctx context.Context, namespace string, obj
 	}
 
 	return objs, nil
-}
-
-func setNamespace(obj runtime.Object, namespace string, accessor meta.MetadataAccessor) error {
-	if err := accessor.SetNamespace(obj, namespace); err != nil {
-		return err
-	}
-
-	return nil
 }
 
 func (y *YAMLManager) waitTillZalandoPostgresOperatorReady(ctx context.Context, timeout time.Duration, period time.Duration) error {
