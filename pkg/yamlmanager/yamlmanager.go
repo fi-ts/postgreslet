@@ -70,15 +70,10 @@ func (y *YAMLManager) InstallYAML(ctx context.Context, namespace, s3BucketURL st
 			return
 		}
 
-		name, er := y.MetadataAccessor.Name(obj)
+		key, er := y.toObjectKey(obj, namespace)
 		if er != nil {
 			return objs, er
 		}
-		key := client.ObjectKey{
-			Namespace: namespace,
-			Name:      name,
-		}
-
 		switch v := obj.(type) {
 		case *v1.ServiceAccount:
 			err = y.Get(ctx, key, &v1.ServiceAccount{})
@@ -190,6 +185,17 @@ func (y *YAMLManager) ensureNamespace(ctx context.Context, namespace string, obj
 	}
 
 	return objs, nil
+}
+
+func (y *YAMLManager) toObjectKey(obj runtime.Object, namespace string) (client.ObjectKey, error) {
+	name, err := y.MetadataAccessor.Name(obj)
+	if err != nil {
+		return client.ObjectKey{}, err
+	}
+	return client.ObjectKey{
+		Namespace: namespace,
+		Name:      name,
+	}, nil
 }
 
 func (y *YAMLManager) waitTillZalandoPostgresOperatorReady(ctx context.Context, timeout time.Duration, period time.Duration) error {
