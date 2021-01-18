@@ -43,21 +43,9 @@ func New(client client.Client, fileName string, scheme *runtime.Scheme) (*YAMLMa
 // todo: Add logger to exported functions.
 func (y *YAMLManager) InstallYAML(ctx context.Context, namespace, s3BucketURL string) (objs []runtime.Object, err error) {
 	// Make sure the namespace exists.
-	if err = y.Client.Get(ctx, client.ObjectKey{Name: namespace}, &corev1.Namespace{}); err != nil {
-		// errors other than `not found`
-		if !errors.IsNotFound(err) {
-			return
-		}
-
-		// Create the namespace.
-		nsObj := &corev1.Namespace{}
-		nsObj.Name = namespace
-		if err = y.Create(ctx, nsObj); err != nil {
-			return
-		}
-
-		// Append the created namespace to the list of the created `runtime.Object`s.
-		objs = append(objs, nsObj)
+	objs, err = y.ensureNamespace(ctx, namespace, objs)
+	if err != nil {
+		return
 	}
 
 	// Convert to a list of YAMLs.
@@ -176,12 +164,34 @@ func (y *YAMLManager) ensureCleanMetadata(obj runtime.Object) error {
 	}
 
 	// Remove uid.
-	if err := y.MetadataAccessor.SetUID(obj,""); err != nil {
+	if err := y.MetadataAccessor.SetUID(obj, ""); err != nil {
 		return err
 	}
 
 	return nil
 }
+
+func (y *YAMLManager) ensureNamespace(ctx context.Context, namespace string, objs []runtime.Object) ([]runtime.Object, error) {
+	if err := y.Get(ctx, client.ObjectKey{Name: namespace}, &corev1.Namespace{}); err != nil {
+		// errors other than `not found`
+		if !errors.IsNotFound(err) {
+			return nil, err
+		}
+
+		// Create the namespace.
+		nsObj := &corev1.Namespace{}
+		nsObj.Name = namespace
+		if err := y.Create(ctx, nsObj); err != nil {
+			return nil, err
+		}
+
+		// Append the created namespace to the list of the created `runtime.Object`s.
+		objs = append(objs, nsObj)
+	}
+
+	return objs, nil
+}
+
 func setNamespace(obj runtime.Object, namespace string, accessor meta.MetadataAccessor) error {
 	if err := accessor.SetNamespace(obj, namespace); err != nil {
 		return err
