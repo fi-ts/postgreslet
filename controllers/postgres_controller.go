@@ -81,9 +81,9 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			return ctrl.Result{}, err
 		}
 
-		// if err := r.UninstallUnstructured(ctx, instance.Spec.ZalandoDependencies); err != nil {
-		// 	return ctrl.Result{}, fmt.Errorf("error while uninstalling zalando dependencies: %v", err)
-		// }
+		if err := r.UninstallYAML(ctx, req.Namespace); err != nil {
+			return ctrl.Result{}, fmt.Errorf("error while uninstalling operator: %v", err)
+		}
 
 		instance.RemoveFinalizer(pg.PostgresFinalizerName)
 		if err := r.Update(ctx, instance); err != nil {
