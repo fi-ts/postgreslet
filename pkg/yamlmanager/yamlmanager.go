@@ -11,7 +11,6 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -19,10 +18,11 @@ import (
 )
 
 type YAMLManager struct {
-	meta.MetadataAccessor
 	client.Client
+	runtime.Decoder
+	list *corev1.List
+	meta.MetadataAccessor
 	*runtime.Scheme
-	yaml []byte
 }
 
 func New(client client.Client, fileName string, scheme *runtime.Scheme) (*YAMLManager, error) {
@@ -31,11 +31,19 @@ func New(client client.Client, fileName string, scheme *runtime.Scheme) (*YAMLMa
 		return nil, err
 	}
 
+	// Convert to a list of YAMLs.
+	deserializer := serializer.NewCodecFactory(scheme).UniversalDeserializer()
+	list := &corev1.List{}
+	if _, _, err := deserializer.Decode(bb, nil, list); err != nil {
+		return nil, err
+	}
+
 	return &YAMLManager{
 		MetadataAccessor: meta.NewAccessor(),
 		Client:           client,
+		Decoder:          deserializer,
+		list:             list,
 		Scheme:           scheme,
-		yaml:             bb,
 	}, nil
 }
 
@@ -48,16 +56,9 @@ func (y *YAMLManager) InstallYAML(ctx context.Context, namespace, s3BucketURL st
 		return
 	}
 
-	// Convert to a list of YAMLs.
-	deserializer := serializer.NewCodecFactory(y.Scheme).UniversalDeserializer()
-	list := &corev1.List{}
-	if _, _, err = deserializer.Decode(y.yaml, nil, list); err != nil {
-		return
-	}
-
 	// Decode each YAML to `runtime.Object`, add the namespace to it and install it.
-	for _, item := range list.Items {
-		obj, _, er := deserializer.Decode(item.Raw, nil, nil)
+	for _, item := range y.list.Items {
+		obj, _, er := y.Decoder.Decode(item.Raw, nil, nil)
 		if er != nil {
 			return objs, er
 		}
@@ -74,19 +75,33 @@ func (y *YAMLManager) InstallYAML(ctx context.Context, namespace, s3BucketURL st
 	return
 }
 
-func (y *YAMLManager) UninstallYAML(ctx context.Context, objs []runtime.Object) error {
-	for _, obj := range objs {
-		if err := y.Delete(ctx, obj); err != nil {
+func (y *YAMLManager) UninstallYAML(ctx context.Context, namespace string) error {
+	for _, item := range y.list.Items {
+		obj, _, err := y.Decoder.Decode(item.Raw, nil, nil)
+		if err != nil {
 			return err
 		}
-	}
-	return nil
-}
 
-func (y *YAMLManager) UninstallUnstructured(ctx context.Context, u *unstructured.Unstructured) error {
-	if err := y.Delete(ctx, u); err != nil {
-		return err
+		switch v := obj.(type) {
+		case *rbacv1.ClusterRole:
+		case *rbacv1.ClusterRoleBinding:
+			// Remove the ServiceAccount away from ClusterRoleBinding's Subjects and then patch it.
+			for i, s := range v.Subjects {
+				if s.Kind == "ServiceAccount" && s.Namespace == namespace {
+					patch := client.MergeFrom(v.DeepCopy())
+					v.Subjects = append(v.Subjects[:i], v.Subjects[i+1:]...)
+					if err = y.Patch(ctx, v, patch); err != nil {
+						return err
+					}
+				}
+			}
+		default:
+			if err := y.Delete(ctx, obj); err != nil {
+				return err
+			}
+		}
 	}
+
 	return nil
 }
 
