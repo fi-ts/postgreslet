@@ -46,17 +46,7 @@ The following steps will create a _Secret_ called `postgreslet`, and add all fil
 As we only copy one file, the secret will contain only one key named `controlplane-kubeconfig` which will contain the control plane kube config.
 
 ```sh
-make docker-build
-make kind-load-image
-
-kubectl create ns postgres-controller-system
-
 mkdir postgreslet-secret
 cp kubeconfig postgreslet-secret/controlplane-kubeconfig
 kubectl create secret generic postgreslet --from-file postgreslet-secret/ --dry-run=client -o yaml | kubectl apply -n postgres-controller-system -f -
-
-kubectl apply -f https://github.com/jetstack/cert-manager/releases/download/v1.1.0/cert-manager.yaml
-
-# Wait till the pods of cert-manager are ready.
-make deploy
 ```

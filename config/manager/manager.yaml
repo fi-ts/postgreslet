@@ -26,6 +26,9 @@ spec:
       - command:
         - /manager
         args:
+        - --enable-leader-election
+        - --partition-id sample-partition
+        - --tenant sample-tenant
         image: controller:latest
         imagePullPolicy: IfNotPresent
         name: manager

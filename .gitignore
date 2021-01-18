@@ -24,4 +24,4 @@ bin
 *~
 
 # control-plane kubeconfig file
-*kubeconfig
+kubeconfig
