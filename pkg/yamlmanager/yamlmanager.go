@@ -62,61 +62,9 @@ func (y *YAMLManager) InstallYAML(ctx context.Context, namespace, s3BucketURL st
 			return objs, er
 		}
 
-		if err = y.ensureCleanMetadata(obj); err != nil {
+		if objs, err = y.createRuntimeObject(ctx, objs, obj, namespace, s3BucketURL); err != nil {
 			return
 		}
-
-		if err = y.SetNamespace(obj, namespace); err != nil {
-			return
-		}
-
-		key, er := y.toObjectKey(obj, namespace)
-		if er != nil {
-			return objs, er
-		}
-		switch v := obj.(type) {
-		case *v1.ServiceAccount:
-			err = y.Get(ctx, key, &v1.ServiceAccount{})
-		case *rbacv1.ClusterRole:
-			key.Namespace = ""
-			err = y.Get(ctx, key, &rbacv1.ClusterRole{})
-		case *rbacv1.ClusterRoleBinding:
-			// Set the namespace of the ServiceAccount in the ClusterRoleBinding.
-			for i, s := range v.Subjects {
-				if s.Kind == "ServiceAccount" {
-					v.Subjects[i].Namespace = namespace
-				}
-			}
-
-			// ClusterRoleBinding is not namespaced.
-			key.Namespace = ""
-
-			// If a ClusterRoleBinding already exists, patch it.
-			got := &rbacv1.ClusterRoleBinding{}
-			err = y.Get(ctx, key, got)
-			if err == nil {
-				patch := client.MergeFrom(got.DeepCopy())
-				got.Subjects = append(got.Subjects, v.Subjects[0])
-				if err = y.Patch(ctx, got, patch); err != nil {
-					return
-				}
-			}
-		case *v1.ConfigMap:
-			y.editConfigMap(v, namespace, s3BucketURL)
-			err = y.Get(ctx, key, &v1.ConfigMap{})
-		case *v1.Service:
-			err = y.Get(ctx, key, &v1.Service{})
-		case *appsv1.Deployment:
-			err = y.Get(ctx, key, &appsv1.Deployment{})
-		}
-		if err != nil {
-			if errors.IsNotFound(err) {
-				if err = y.Create(ctx, obj); err != nil {
-					return
-				}
-			}
-		}
-		objs = append(objs, obj)
 	}
 
 	if err = y.waitTillZalandoPostgresOperatorReady(ctx, time.Minute, time.Second); err != nil {
@@ -140,6 +88,69 @@ func (y *YAMLManager) UninstallUnstructured(ctx context.Context, u *unstructured
 		return err
 	}
 	return nil
+}
+
+func (y *YAMLManager) createRuntimeObject(ctx context.Context, objs []runtime.Object, obj runtime.Object, namespace, s3BucketURL string) ([]runtime.Object, error) {
+	if err := y.ensureCleanMetadata(obj); err != nil {
+		return objs, err
+	}
+
+	if err := y.SetNamespace(obj, namespace); err != nil {
+		return objs, err
+	}
+
+	key, err := y.toObjectKey(obj, namespace)
+	if err != nil {
+		return objs, err
+	}
+	switch v := obj.(type) {
+	case *v1.ServiceAccount:
+		err = y.Get(ctx, key, &v1.ServiceAccount{})
+	case *rbacv1.ClusterRole:
+		// ClusterRole is not namespaced.
+		key.Namespace = ""
+		err = y.Get(ctx, key, &rbacv1.ClusterRole{})
+	case *rbacv1.ClusterRoleBinding:
+		// Set the namespace of the ServiceAccount in the ClusterRoleBinding.
+		for i, s := range v.Subjects {
+			if s.Kind == "ServiceAccount" {
+				v.Subjects[i].Namespace = namespace
+			}
+		}
+
+		// ClusterRoleBinding is not namespaced.
+		key.Namespace = ""
+
+		// If a ClusterRoleBinding already exists, patch it.
+		got := &rbacv1.ClusterRoleBinding{}
+		err = y.Get(ctx, key, got)
+		if err == nil {
+			patch := client.MergeFrom(got.DeepCopy())
+			got.Subjects = append(got.Subjects, v.Subjects[0])
+			if err = y.Patch(ctx, got, patch); err != nil {
+				return objs, err
+			}
+		}
+	case *v1.ConfigMap:
+		y.editConfigMap(v, namespace, s3BucketURL)
+		err = y.Get(ctx, key, &v1.ConfigMap{})
+	case *v1.Service:
+		err = y.Get(ctx, key, &v1.Service{})
+	case *appsv1.Deployment:
+		err = y.Get(ctx, key, &appsv1.Deployment{})
+	}
+	if err != nil {
+		if errors.IsNotFound(err) {
+			if err = y.Create(ctx, obj); err != nil {
+				return objs, err
+			}
+
+			// Append the newly created obj.
+			objs = append(objs, obj)
+		}
+	}
+
+	return objs, nil
 }
 
 func (y *YAMLManager) editConfigMap(cm *v1.ConfigMap, namespace, s3BucketURL string) {
