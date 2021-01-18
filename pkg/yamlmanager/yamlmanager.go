@@ -127,9 +127,9 @@ func (y *YAMLManager) createRuntimeObject(ctx context.Context, objs []runtime.Ob
 		err = y.Get(ctx, key, &rbacv1.ClusterRole{})
 	case *rbacv1.ClusterRoleBinding:
 		// Set the namespace of the ServiceAccount in the ClusterRoleBinding.
-		for _, s := range v.Subjects {
+		for i, s := range v.Subjects {
 			if s.Kind == "ServiceAccount" {
-				s.Namespace = namespace
+				v.Subjects[i].Namespace = namespace
 			}
 		}
 
