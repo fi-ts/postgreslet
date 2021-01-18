@@ -19,6 +19,7 @@ import (
 )
 
 type YAMLManager struct {
+	meta.MetadataAccessor
 	client.Client
 	*runtime.Scheme
 	yaml []byte
@@ -31,9 +32,10 @@ func New(client client.Client, fileName string, scheme *runtime.Scheme) (*YAMLMa
 	}
 
 	return &YAMLManager{
-		Client: client,
-		Scheme: scheme,
-		yaml:   bb,
+		MetadataAccessor: meta.NewAccessor(),
+		Client:           client,
+		Scheme:           scheme,
+		yaml:             bb,
 	}, nil
 }
 
@@ -66,28 +68,21 @@ func (y *YAMLManager) InstallYAML(ctx context.Context, namespace, s3BucketURL st
 	}
 
 	// Decode each YAML to `runtime.Object`, add the namespace to it and install it.
-	accessor := meta.NewAccessor()
 	for _, item := range list.Items {
 		obj, _, er := deserializer.Decode(item.Raw, nil, nil)
 		if er != nil {
 			return objs, er
 		}
 
-		// Remove annotations.
-		if err = accessor.SetAnnotations(obj, nil); err != nil {
+		if err = y.ensureCleanMetadata(obj); err != nil {
 			return
 		}
 
-		// Remove resourceVersion.
-		if err = accessor.SetResourceVersion(obj, ""); err != nil {
+		if err = setNamespace(obj, namespace, y.MetadataAccessor); err != nil {
 			return
 		}
 
-		if err = setNamespace(obj, namespace, accessor); err != nil {
-			return
-		}
-
-		name, er := accessor.Name(obj)
+		name, er := y.MetadataAccessor.Name(obj)
 		if er != nil {
 			return objs, er
 		}
@@ -169,6 +164,24 @@ func (y *YAMLManager) editConfigMap(cm *v1.ConfigMap, namespace, s3BucketURL str
 	cm.Data["watched_namespace"] = namespace
 }
 
+func (y *YAMLManager) ensureCleanMetadata(obj runtime.Object) error {
+	// Remove annotations.
+	if err := y.MetadataAccessor.SetAnnotations(obj, nil); err != nil {
+		return err
+	}
+
+	// Remove resourceVersion.
+	if err := y.MetadataAccessor.SetResourceVersion(obj, ""); err != nil {
+		return err
+	}
+
+	// Remove uid.
+	if err := y.MetadataAccessor.SetUID(obj,""); err != nil {
+		return err
+	}
+
+	return nil
+}
 func setNamespace(obj runtime.Object, namespace string, accessor meta.MetadataAccessor) error {
 	if err := accessor.SetNamespace(obj, namespace); err != nil {
 		return err
