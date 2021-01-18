@@ -73,7 +73,7 @@ func main() {
 		setupLog.Error(err, "unable to create a new external YAML manager")
 		os.Exit(1)
 	}
-	if err := i.Install("./crd-postgresql.yaml"); err != nil {
+	if err := i.Install("external/crd-postgresql.yaml"); err != nil {
 		setupLog.Error(err, "unable to install CRD Postgresql")
 		os.Exit(1)
 	}
@@ -110,7 +110,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	yamlMgr, err := yamlmanager.New(svcClusterMgr.GetClient(), "./svc-postgres-operator.yaml", scheme)
+	yamlMgr, err := yamlmanager.New(svcClusterMgr.GetClient(), "external/svc-postgres-operator.yaml", scheme)
 	if err != nil {
 		setupLog.Error(err, "unable to create a new zalando YAML manager for PostgresReconciler")
 		os.Exit(1)
