@@ -51,10 +51,8 @@ deploy: manifests
 	kustomize build config/default | kubectl apply -f -
 
 # Generate manifests e.g. CRD, RBAC etc.
-# todo: Remove `sed ...` once the bug in `kubebuilder` is fixed
 manifests: controller-gen
 	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=manager-role webhook paths="./..." output:crd:artifacts:config=config/crd/bases
-	sed -z 's#spec:#spec:\n  preserveUnknownFields: false#' -i config/crd/bases/database.fits.cloud_postgres.yaml
 
 # Run go fmt against code
 fmt:
@@ -76,7 +74,7 @@ docker-build:
 docker-push:
 	docker push ${IMG}:${VERSION}
 
-kind-load-image:
+kind-load-image: docker-build
 	kind load docker-image ${IMG}:${VERSION} -v 1
 
 # find or download controller-gen
@@ -104,3 +102,14 @@ crd-postgresql-yaml:
 	kubectl wait --for=condition=ready pod -l name=postgres-operator
 	kubectl get crd postgresqls.acid.zalan.do -o yaml > crd-postgresql.yaml
 	kubectl delete -k github.com/zalando/postgres-operator/manifests
+
+secret:
+	@{ \
+	NS="postgres-controller-system" ;\
+	SECRET_DIR="postgreslet-secret" ;\
+	kubectl create ns $$NS --dry-run=client --save-config -o yaml | kubectl apply -f - ;\
+	if [ -d $$SECRET_DIR ]; then rm -fr $$SECRET_DIR; fi ;\
+	mkdir $$SECRET_DIR ;\
+	cp kubeconfig $$SECRET_DIR/controlplane-kubeconfig ;\
+	kubectl create secret generic postgreslet -n $$NS --from-file $$SECRET_DIR/ --dry-run=client -o yaml | kubectl apply -f - ;\
+	}
