@@ -200,12 +200,6 @@ func (r *PostgresReconciler) ensureZalandoDependencies(ctx context.Context, pg *
 		if err != nil {
 			return fmt.Errorf("error while installing zalando dependencies: %v", err)
 		}
-		// todo: rethink the mechanism of the deletion of svc-operator
-		// if len(objs) >= 0 {
-		// 	if err := r.patchZalandoDependencies(ctx, pg, objs); err != nil {
-		// 		return fmt.Errorf("error while patching zalando dependencies in postgres: %v", err)
-		// 	}
-		// }
 	}
 
 	return nil
@@ -239,18 +233,6 @@ func (r *PostgresReconciler) isZalandoDependenciesInstalled(ctx context.Context,
 	}
 	return true, nil
 }
-
-// todo: rethink the mechanism
-// func (r *PostgresReconciler) patchZalandoDependencies(ctx context.Context, pg *pg.Postgres, objs []runtime.Object) error {
-// 	patch := client.MergeFrom(pg.DeepCopy())
-// 	if err := pg.SetZalandoDependencies(objs); err != nil {
-// 		return fmt.Errorf("error while setting zalando dependencies: %v", err)
-// 	}
-// 	if err := r.Patch(ctx, pg, patch); err != nil {
-// 		return fmt.Errorf("error while patching postgres: %v", err)
-// 	}
-// 	return nil
-// }
 
 // todo: shift the logic to postgresql.
 func (r *PostgresReconciler) deleteZPostgresql(ctx context.Context, k *types.NamespacedName) error {
