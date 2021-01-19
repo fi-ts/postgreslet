@@ -76,7 +76,9 @@ func (y *YAMLManager) InstallYAML(ctx context.Context, namespace, s3BucketURL st
 }
 
 func (y *YAMLManager) UninstallYAML(ctx context.Context, namespace string) error {
-	for _, item := range y.list.Items {
+	items := y.list.Items
+	for i := range items {
+		item := items[len(items)-1-i]
 		obj, _, err := y.Decoder.Decode(item.Raw, nil, nil)
 		if err != nil {
 			return err
