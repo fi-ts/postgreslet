@@ -7,7 +7,7 @@ apiVersion: database.fits.cloud/v1
 kind: Postgres
 metadata:
   namespace: database
-  name: sample-name
+  name: sample-name-a
 spec:
   backup:
     s3BucketURL: ""
