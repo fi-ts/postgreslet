@@ -1,7 +1,7 @@
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
-  creationTimestamp: "2021-01-16T13:03:50Z"
+  creationTimestamp: "2021-01-19T20:09:11Z"
   generation: 1
   managedFields:
   - apiVersion: apiextensions.k8s.io/v1
@@ -10,12 +10,15 @@ metadata:
       f:status:
         f:acceptedNames:
           f:categories: {}
+          f:kind: {}
           f:listKind: {}
+          f:plural: {}
           f:shortNames: {}
           f:singular: {}
+        f:conditions: {}
     manager: kube-apiserver
     operation: Update
-    time: "2021-01-16T13:03:50Z"
+    time: "2021-01-19T20:09:11Z"
   - apiVersion: apiextensions.k8s.io/v1
     fieldsType: FieldsV1
     fieldsV1:
@@ -34,18 +37,14 @@ metadata:
         f:scope: {}
         f:versions: {}
       f:status:
-        f:acceptedNames:
-          f:kind: {}
-          f:plural: {}
-        f:conditions: {}
         f:storedVersions: {}
     manager: postgres-operator
     operation: Update
-    time: "2021-01-16T13:05:46Z"
+    time: "2021-01-19T20:09:11Z"
   name: postgresqls.acid.zalan.do
-  resourceVersion: "2176"
+  resourceVersion: "5847"
   selfLink: /apis/apiextensions.k8s.io/v1/customresourcedefinitions/postgresqls.acid.zalan.do
-  uid: 081716a0-9805-46f9-92cf-f34991ced79b
+  uid: b142abed-0225-493c-b274-450ceff77cef
 spec:
   conversion:
     strategy: None
@@ -586,12 +585,12 @@ status:
     - pg
     singular: postgresql
   conditions:
-  - lastTransitionTime: "2021-01-16T13:03:50Z"
+  - lastTransitionTime: "2021-01-19T20:09:11Z"
     message: no conflicts found
     reason: NoConflicts
     status: "True"
     type: NamesAccepted
-  - lastTransitionTime: "2021-01-16T13:03:50Z"
+  - lastTransitionTime: "2021-01-19T20:09:11Z"
     message: the initial names have been accepted
     reason: InitialNamesAccepted
     status: "True"
