@@ -6,15 +6,16 @@ A small controller which acts as a bridge between the zalando-postgres-operator 
 
 ```bash
 # Create a local control-cluster. This step is optional if you already have a working kubeconfig/cluster
-kind create cluster --name ctrl
+# IMPORTANT: update the apiServerAddress to your needs so the service-cluster from down below can access the control-cluster.
+kind create cluster --name ctrl --kubeconfig ./kubeconfig --config ctrl-cluster-config
 
 # Copy the kubeconfig of the control-cluster to the project folder and name it `kubeconfig`.
-# When using kind as describe above, this file now uses our newly created kind-ctrl Cluster as current-context
-cp ~/.kube/config ./kubeconfig
+# When using kind as describe above, this file was already created
+# cp <EXISTING_KUBECONFIG> ./kubeconfig
 
 # Create a local service-cluster. This step is optional if you already have a working kubeconfig/cluster
-# This step will no set the kind-svc as current context, which is important for the next step
-kind create cluster --name svc
+# This step will now set the kind as current context, which is important for the next step
+kind create cluster
 
 # Build and install our CRD in the control-cluster.
 # This step uses the "external" kubeconfig we copied to ./kubeconfig earlier. This can be configured in the Makefile
@@ -48,8 +49,5 @@ As we only copy one file, the secret will contain only one key named `controlpla
 ```sh
 make kind-load-image
 make secret
-kubectl apply -f https://github.com/jetstack/cert-manager/releases/download/v1.1.0/cert-manager.yaml
-
-# Wait till the pods of cert-manager are ready.
 make deploy
 ```
