@@ -117,12 +117,12 @@ func main() {
 	}
 
 	if err = (&controllers.PostgresReconciler{
-		Client:      ctrlPlaneClusterMgr.GetClient(),
-		Service:     svcClusterMgr.GetClient(),
-		Log:         ctrl.Log.WithName("controllers").WithName("Postgres"),
-		Scheme:      ctrlPlaneClusterMgr.GetScheme(),
-		PartitionID: partitionID,
-		Tenant:      tenant,
+		Client:          ctrlPlaneClusterMgr.GetClient(),
+		Service:         svcClusterMgr.GetClient(),
+		Log:             ctrl.Log.WithName("controllers").WithName("Postgres"),
+		Scheme:          ctrlPlaneClusterMgr.GetScheme(),
+		PartitionID:     partitionID,
+		Tenant:          tenant,
 		OperatorManager: opMgr,
 	}).SetupWithManager(ctrlPlaneClusterMgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Postgres")
