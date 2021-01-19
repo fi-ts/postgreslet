@@ -112,4 +112,9 @@ secret:
 	mkdir $$SECRET_DIR ;\
 	cp kubeconfig $$SECRET_DIR/controlplane-kubeconfig ;\
 	kubectl create secret generic postgreslet -n $$NS --from-file $$SECRET_DIR/ --dry-run=client -o yaml | kubectl apply -f - ;\
-	}
+
+create-postgres:
+	kubectl --kubeconfig kubeconfig apply -f config/samples/database_v1_postgres.yaml
+
+delete-postgres:
+	kubectl --kubeconfig kubeconfig delete -f config/samples/database_v1_postgres.yaml

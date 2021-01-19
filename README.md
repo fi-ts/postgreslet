@@ -47,7 +47,25 @@ The following steps will create a _Secret_ called `postgreslet`, and add all fil
 As we only copy one file, the secret will contain only one key named `controlplane-kubeconfig` which will contain the control plane kube config.
 
 ```sh
-make kind-load-image
 make secret
+```
+
+Deploy _postgrelet_ which consumes the _secret_.
+
+```sh
+make kind-load-image
 make deploy
+```
+
+Create _postgres_ on control-cluster.
+
+```sh
+make install
+make create-postgres
+```
+
+Delete _postgres_ on control-cluster and all the local corresponding resources.
+
+```sh
+make delete-postgres
 ```
