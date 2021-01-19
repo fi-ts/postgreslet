@@ -34,7 +34,7 @@ import (
 	databasev1 "github.com/fi-ts/postgres-controller/api/v1"
 	"github.com/fi-ts/postgres-controller/controllers"
 	"github.com/fi-ts/postgres-controller/pkg/crdinstaller"
-	"github.com/fi-ts/postgres-controller/pkg/yamlmanager"
+	"github.com/fi-ts/postgres-controller/pkg/operatormanager"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	// +kubebuilder:scaffold:imports
 )
@@ -110,7 +110,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	yamlMgr, err := yamlmanager.New(svcClusterMgr.GetClient(), "external/svc-postgres-operator.yaml", scheme)
+	opMgr, err := operatormanager.New(svcClusterMgr.GetClient(), "external/svc-postgres-operator.yaml", scheme)
 	if err != nil {
 		setupLog.Error(err, "unable to create a new zalando YAML manager for PostgresReconciler")
 		os.Exit(1)
@@ -123,7 +123,7 @@ func main() {
 		Scheme:      ctrlPlaneClusterMgr.GetScheme(),
 		PartitionID: partitionID,
 		Tenant:      tenant,
-		YAMLManager: yamlMgr,
+		OperatorManager: opMgr,
 	}).SetupWithManager(ctrlPlaneClusterMgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Postgres")
 		os.Exit(1)

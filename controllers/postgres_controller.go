@@ -31,7 +31,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	pg "github.com/fi-ts/postgres-controller/api/v1"
-	"github.com/fi-ts/postgres-controller/pkg/yamlmanager"
+	"github.com/fi-ts/postgres-controller/pkg/operatormanager"
 )
 
 // requeue defines in how many seconds a requeue should happen
@@ -47,7 +47,7 @@ type PostgresReconciler struct {
 	Log                 logr.Logger
 	Scheme              *runtime.Scheme
 	PartitionID, Tenant string
-	*yamlmanager.YAMLManager
+	*operatormanager.OperatorManager
 }
 
 // Reconcile is the entry point for postgres reconciliation.
@@ -82,7 +82,7 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		}
 
 		namespace := instance.Spec.ProjectID
-		isIdle, err := r.YAMLManager.IsOperatorIdle(ctx, namespace)
+		isIdle, err := r.IsOperatorIdle(ctx, namespace)
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("error while checking if the operator is idle: %v", err)
 		}
@@ -90,7 +90,7 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			log.Info("operator is not idle")
 			return ctrl.Result{Requeue: true}, nil
 		}
-		if err := r.UninstallYAML(ctx, namespace); err != nil {
+		if err := r.UninstallOperator(ctx, namespace); err != nil {
 			return ctrl.Result{}, fmt.Errorf("error while uninstalling operator: %v", err)
 		}
 
@@ -196,7 +196,7 @@ func (r *PostgresReconciler) ensureZalandoDependencies(ctx context.Context, pg *
 		return fmt.Errorf("error while querying if zalando dependencies are installed: %v", err)
 	}
 	if !isInstalled {
-		_, err := r.InstallYAML(ctx, namespace, pg.Spec.Backup.S3BucketURL)
+		_, err := r.InstallOperator(ctx, namespace, pg.Spec.Backup.S3BucketURL)
 		if err != nil {
 			return fmt.Errorf("error while installing zalando dependencies: %v", err)
 		}
