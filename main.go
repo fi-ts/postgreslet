@@ -60,7 +60,7 @@ func main() {
 			"Enabling this will ensure there is only one active controller manager.")
 	flag.StringVar(&partitionID, "partition-id", "", "The partition ID of the worker-cluster.")
 	flag.StringVar(&tenant, "tenant", "", "The tenant name.")
-	flag.StringVar(&ctrlClusterKubeconfig, "controlplane-kubeconfig", "", "The path to the kubeconfig to talk to the control plane")
+	flag.StringVar(&ctrlClusterKubeconfig, "controlplane-kubeconfig", "/var/run/secrets/postgreslet/kube/config", "The path to the kubeconfig to talk to the control plane")
 	flag.Parse()
 
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
