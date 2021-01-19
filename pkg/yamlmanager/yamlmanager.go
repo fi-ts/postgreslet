@@ -78,7 +78,7 @@ func (y *YAMLManager) InstallYAML(ctx context.Context, namespace, s3BucketURL st
 
 func (y *YAMLManager) IsOperatorIdle(ctx context.Context, namespace string) (bool, error) {
 	pods := &corev1.PodList{}
-	if err := y.List(ctx, pods, client.MatchingLabels{"name": "postgres-operator"}); err != nil {
+	if err := y.List(ctx, pods, client.MatchingLabels{"team": namespace}); err != nil {
 		if errors.IsNotFound(err) {
 			return true, nil
 		}
