@@ -3,7 +3,6 @@ package operatormanager
 import (
 	"context"
 	"io/ioutil"
-	"log"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -119,12 +118,10 @@ func (m *OperatorManager) UninstallOperator(ctx context.Context, namespace strin
 		default:
 			if err := m.Delete(ctx, v); err != nil {
 				if errors.IsNotFound(err) {
-					log.Println("==========> not found", v)
 					return nil
 				}
 				return err
 			}
-			log.Println("==========> deleted: ", v)
 		}
 	}
 
