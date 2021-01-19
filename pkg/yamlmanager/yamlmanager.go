@@ -3,6 +3,7 @@ package yamlmanager
 import (
 	"context"
 	"io/ioutil"
+	"log"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -75,12 +76,30 @@ func (y *YAMLManager) InstallYAML(ctx context.Context, namespace, s3BucketURL st
 	return
 }
 
+func (y *YAMLManager) IsOperatorIdle(ctx context.Context, namespace string) (bool, error) {
+	pods := &corev1.PodList{}
+	if err := y.List(ctx, pods, client.MatchingLabels{"name": "postgres-operator"}); err != nil {
+		if errors.IsNotFound(err) {
+			return true, nil
+		}
+		return false, err
+	}
+	if len(pods.Items) == 0 {
+		return true, nil
+	}
+	return false, nil
+}
+
 func (y *YAMLManager) UninstallYAML(ctx context.Context, namespace string) error {
 	items := y.list.Items
 	for i := range items {
 		item := items[len(items)-1-i]
 		obj, _, err := y.Decoder.Decode(item.Raw, nil, nil)
 		if err != nil {
+			return err
+		}
+
+		if err := y.SetNamespace(obj, namespace); err != nil {
 			return err
 		}
 
@@ -98,9 +117,14 @@ func (y *YAMLManager) UninstallYAML(ctx context.Context, namespace string) error
 				}
 			}
 		default:
-			if err := y.Delete(ctx, obj); err != nil {
+			if err := y.Delete(ctx, v); err != nil {
+				if errors.IsNotFound(err) {
+					log.Println("==========> not found", v)
+					return nil
+				}
 				return err
 			}
+			log.Println("==========> deleted: ", v)
 		}
 	}
 

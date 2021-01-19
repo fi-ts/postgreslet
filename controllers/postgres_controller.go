@@ -81,7 +81,16 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			return ctrl.Result{}, err
 		}
 
-		if err := r.UninstallYAML(ctx, req.Namespace); err != nil {
+		namespace := instance.Spec.ProjectID
+		isIdle, err := r.YAMLManager.IsOperatorIdle(ctx, namespace)
+		if err != nil {
+			return ctrl.Result{}, fmt.Errorf("error while checking if the operator is idle: %v", err)
+		}
+		if !isIdle {
+			log.Info("operator is not idle")
+			return ctrl.Result{Requeue: true}, nil
+		}
+		if err := r.UninstallYAML(ctx, namespace); err != nil {
 			return ctrl.Result{}, fmt.Errorf("error while uninstalling operator: %v", err)
 		}
 
@@ -248,6 +257,9 @@ func (r *PostgresReconciler) deleteZPostgresql(ctx context.Context, k *types.Nam
 	log := r.Log.WithValues("zalando postgrsql", k)
 	rawZ := &zalando.Postgresql{}
 	if err := r.Service.Get(ctx, *k, rawZ); err != nil {
+		if errors.IsNotFound(err) {
+			return nil
+		}
 		return fmt.Errorf("error while fetching zalando postgresql to delete: %v", err)
 	}
 
