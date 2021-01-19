@@ -22,6 +22,6 @@ spec:
       - name: manager
 # Todo: Do we need two kube-rbac-proxy? Since we have two metrics-addr.
         args:
-        - "--metrics-addr-svc-mgr=127.0.0.1:8081"
-        - "--metrics-addr-ctrl-mgr=127.0.0.1:8082"
-        - "--enable-leader-election"
+        - "--enable-leader-election=false"
+        - "--partition-id=sample-partition"
+        - "--tenant=sample-tenant"
