@@ -40,7 +40,7 @@ kubectl --kubeconfig kubeconfig delete -f config/samples/database_v1_postgres.ya
 make uninstall
 ```
 
-## Install a local kubeconfig as secret in the local service-cluster
+## Install a local kubeconfig as secret in the service-cluster
 
 The following steps will create a _Secret_ called `postgreslet`, and add all files in the folder as keys to that secret.
 
