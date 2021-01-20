@@ -17,12 +17,9 @@ limitations under the License.
 package v1
 
 import (
-	"fmt"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 )
 
@@ -230,23 +227,6 @@ func removeElem(ss []string, s string) (out []string) {
 		out = append(out, elem)
 	}
 	return
-}
-
-// todo: duplicate
-func toUnstructured(objs []runtime.Object) (*unstructured.Unstructured, error) {
-	u, err := runtime.DefaultUnstructuredConverter.ToUnstructured(
-		&map[string]interface{}{
-			"kind":       "List",
-			"apiVersion": "v1",
-			"items":      objs,
-		},
-	)
-	if err != nil {
-		return nil, err
-	}
-	return &unstructured.Unstructured{
-		Object: u,
-	}, nil
 }
 
 func init() {
