@@ -40,6 +40,11 @@ var requeue = ctrl.Result{
 	RequeueAfter: 30 * time.Second,
 }
 
+// operatorMatchingLabels is for checking the existence of the operator
+var operatorMatchingLabels = map[string]string{
+	"name": "postgres-operator",
+}
+
 // PostgresReconciler reconciles a Postgres object
 type PostgresReconciler struct {
 	client.Client
@@ -190,7 +195,7 @@ func (r *PostgresReconciler) createZalandoPostgresql(ctx context.Context, z *pg.
 // ensureZalandoDependencies makes sure Zalando resources are installed in the service-cluster.
 func (r *PostgresReconciler) ensureZalandoDependencies(ctx context.Context, pg *pg.Postgres) error {
 	namespace := pg.Spec.ProjectID
-	isInstalled, err := r.isZalandoDependenciesInstalled(ctx, namespace)
+	isInstalled, err := r.isOperatorInstalled(ctx, namespace)
 	if err != nil {
 		return fmt.Errorf("error while querying if zalando dependencies are installed: %v", err)
 	}
@@ -217,11 +222,11 @@ func (r *PostgresReconciler) isManagedByUs(obj *pg.Postgres) bool {
 	return true
 }
 
-func (r *PostgresReconciler) isZalandoDependenciesInstalled(ctx context.Context, namespace string) (bool, error) {
+func (r *PostgresReconciler) isOperatorInstalled(ctx context.Context, namespace string) (bool, error) {
 	pods := &corev1.PodList{}
 	opts := []client.ListOption{
 		client.InNamespace(namespace),
-		client.MatchingLabels{"name": "postgres-operator"}, // todo: Fetch labels programmatically.
+		client.MatchingLabels(operatorMatchingLabels),
 	}
 	// todo: Do we need `ignorenotfound`?
 	if err := r.Service.List(ctx, pods, opts...); err != nil {
