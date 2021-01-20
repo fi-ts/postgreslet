@@ -68,8 +68,6 @@ type PostgresSpec struct {
 	Backup *Backup `json:"backup,omitempty"`
 	// AccessList defines access restrictions
 	AccessList *AccessList `json:"accessList,omitempty"`
-	// ZalandoDependencies define all the Zalando dependencies
-	ZalandoDependencies *unstructured.Unstructured `json:"zalandoDependencies,omitempty"`
 }
 
 // AccessList defines the type of restrictions to access the database
@@ -146,15 +144,6 @@ type PostgresList struct {
 // IsBeingDeleted returns true if the deletion-timestamp is set
 func (p *Postgres) IsBeingDeleted() bool {
 	return !p.ObjectMeta.DeletionTimestamp.IsZero()
-}
-
-func (p *Postgres) SetZalandoDependencies(objs []runtime.Object) error {
-	u, err := toUnstructured(objs)
-	if err != nil {
-		return fmt.Errorf("error while converting to Unstructured: %v", err)
-	}
-	p.Spec.ZalandoDependencies = u
-	return nil
 }
 
 func (p *Postgres) ToKey() *types.NamespacedName {

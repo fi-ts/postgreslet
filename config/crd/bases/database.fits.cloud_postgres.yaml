@@ -120,9 +120,6 @@ spec:
             version:
               description: Version is the version of Postgre-as-a-Service
               type: string
-            zalandoDependencies:
-              description: ZalandoDependencies define all the Zalando dependencies
-              type: object
           type: object
         status:
           description: PostgresStatus defines the observed state of Postgres
