@@ -17,6 +17,11 @@ GITVERSION := $(shell git describe --long --all)
 BUILDDATE := $(shell date -Iseconds)
 VERSION := $(or ${DOCKER_TAG},latest)
 
+# Postgres operator variables for YAML download
+POSTGRES_OPERATOR_VERSION ?= v1.6.0
+POSTGRES_OPERATOR_URL ?= https://raw.githubusercontent.com/zalando/postgres-operator/$(POSTGRES_OPERATOR_VERSION)/manifests
+POSTGRES_CRD_URL ?= https://raw.githubusercontent.com/zalando/postgres-operator/$(POSTGRES_OPERATOR_VERSION)/charts/postgres-operator/crds/postgresqls.yaml
+
 all: manager
 
 # Run tests
@@ -95,13 +100,15 @@ CONTROLLER_GEN=$(shell which controller-gen)
 endif
 
 svc-postgres-operator-yaml:
-	kubectl apply -k github.com/zalando/postgres-operator/manifests --dry-run=client -o yaml > external/svc-postgres-operator.yaml
+	kubectl apply \
+	-f $(POSTGRES_OPERATOR_URL)/configmap.yaml \
+	-f $(POSTGRES_OPERATOR_URL)/operator-service-account-rbac.yaml \
+	-f $(POSTGRES_OPERATOR_URL)/postgres-operator.yaml \
+	-f $(POSTGRES_OPERATOR_URL)/api-service.yaml \
+	--dry-run=client -o yaml > external/svc-postgres-operator.yaml
 
 crd-postgresql-yaml:
-	kubectl apply -k github.com/zalando/postgres-operator/manifests
-	kubectl wait --for=condition=ready pod -l name=postgres-operator
-	kubectl get crd postgresqls.acid.zalan.do -o yaml > external/crd-postgresql.yaml
-	kubectl delete -k github.com/zalando/postgres-operator/manifests
+	kubectl apply -f $(POSTGRES_CRD_URL) --dry-run=client -o yaml > external/crd-postgresql.yaml
 
 secret:
 	@{ \
