@@ -157,7 +157,7 @@ func (r *PostgresReconciler) SetupWithManager(mgr ctrl.Manager) error {
 func (r *PostgresReconciler) createZalandoPostgresql(ctx context.Context, z *pg.ZalandoPostgres) (ctrl.Result, error) {
 	log := r.Log.WithValues("zalando postgresql", z.ToKey())
 
-	// Make sure the namespace exists in the worker-cluster. // todo: Make sure it happens in the worker-cluster.
+	// Make sure the namespace exists in the worker-cluster.
 	ns := z.Namespace
 	if err := r.Service.Get(ctx, client.ObjectKey{Name: ns}, &corev1.Namespace{}); err != nil {
 		// errors other than `not found`
@@ -187,8 +187,7 @@ func (r *PostgresReconciler) createZalandoPostgresql(ctx context.Context, z *pg.
 	return ctrl.Result{}, nil
 }
 
-// todo: Make sure it takes effect in the service-node.
-// ensureZalandoDependencies makes sure Zalando resources are installed in the service-node.
+// ensureZalandoDependencies makes sure Zalando resources are installed in the service-cluster.
 func (r *PostgresReconciler) ensureZalandoDependencies(ctx context.Context, pg *pg.Postgres) error {
 	namespace := pg.Spec.ProjectID
 	isInstalled, err := r.isZalandoDependenciesInstalled(ctx, namespace)
