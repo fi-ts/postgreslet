@@ -228,7 +228,6 @@ func (r *PostgresReconciler) isOperatorInstalled(ctx context.Context, namespace 
 		client.InNamespace(namespace),
 		client.MatchingLabels(operatorMatchingLabels),
 	}
-	// todo: Do we need `ignorenotfound`?
 	if err := r.Service.List(ctx, pods, opts...); err != nil {
 		return false, client.IgnoreNotFound(err)
 	}
@@ -238,7 +237,6 @@ func (r *PostgresReconciler) isOperatorInstalled(ctx context.Context, namespace 
 	return true, nil
 }
 
-// todo: shift the logic to postgresql.
 func (r *PostgresReconciler) deleteZPostgresql(ctx context.Context, k *types.NamespacedName) error {
 	log := r.Log.WithValues("zalando postgrsql", k)
 	rawZ := &zalando.Postgresql{}
