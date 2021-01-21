@@ -75,9 +75,10 @@ func (m *OperatorManager) InstallOperator(ctx context.Context, namespace, s3Buck
 	return
 }
 
-func (m *OperatorManager) IsOperatorIdle(ctx context.Context, namespace string) (bool, error) {
+// IsOperatorDeletable returns true when there's no running instance operated by the operator
+func (m *OperatorManager) IsOperatorDeletable(ctx context.Context, namespace string) (bool, error) {
 	pods := &corev1.PodList{}
-	if err := m.List(ctx, pods, client.MatchingLabels{"team": namespace}); err != nil {
+	if err := m.List(ctx, pods, client.InNamespace(namespace), m.toInstanceMatchingLabels(namespace)); err != nil {
 		if errors.IsNotFound(err) {
 			return true, nil
 		}
@@ -234,6 +235,10 @@ func (m *OperatorManager) ensureNamespace(ctx context.Context, namespace string,
 	}
 
 	return objs, nil
+}
+
+func (m *OperatorManager) toInstanceMatchingLabels(namespace string) *client.MatchingLabels {
+	return &client.MatchingLabels{"team": namespace, "application": "spilo"}
 }
 
 func (m *OperatorManager) toObjectKey(obj runtime.Object, namespace string) (client.ObjectKey, error) {

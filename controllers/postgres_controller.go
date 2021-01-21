@@ -87,7 +87,7 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		}
 
 		namespace := instance.Spec.ProjectID
-		isIdle, err := r.IsOperatorIdle(ctx, namespace)
+		isIdle, err := r.IsOperatorDeletable(ctx, namespace)
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("error while checking if the operator is idle: %v", err)
 		}
