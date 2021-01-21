@@ -90,6 +90,21 @@ func (m *OperatorManager) IsOperatorDeletable(ctx context.Context, namespace str
 	return false, nil
 }
 
+func (m *OperatorManager) IsOperatorInstalled(ctx context.Context, namespace string) (bool, error) {
+	pods := &corev1.PodList{}
+	opts := []client.ListOption{
+		client.InNamespace(namespace),
+		client.MatchingLabels{"name": "postgres-operator"},
+	}
+	if err := m.List(ctx, pods, opts...); err != nil {
+		return false, client.IgnoreNotFound(err)
+	}
+	if len(pods.Items) == 0 {
+		return false, nil
+	}
+	return true, nil
+}
+
 func (m *OperatorManager) UninstallOperator(ctx context.Context, namespace string) error {
 	items := m.list.Items
 	for i := range items {
