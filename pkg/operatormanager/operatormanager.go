@@ -119,7 +119,7 @@ func (m *OperatorManager) UninstallOperator(ctx context.Context, namespace strin
 		}
 
 		switch v := obj.(type) {
-		case *rbacv1.ClusterRole:
+		case *rbacv1.ClusterRole: // no-op
 		case *rbacv1.ClusterRoleBinding:
 			// Remove the ServiceAccount away from ClusterRoleBinding's Subjects and then patch it.
 			for i, s := range v.Subjects {
