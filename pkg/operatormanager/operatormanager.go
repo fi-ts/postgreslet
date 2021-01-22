@@ -22,6 +22,7 @@ import (
 
 type OperatorManager struct {
 	client.Client
+	namespace, s3BucketURL string
 	runtime.Decoder
 	list *corev1.List
 	Log  logr.Logger
@@ -30,7 +31,7 @@ type OperatorManager struct {
 }
 
 // New creates a new `OperatorManager`
-func New(client client.Client, fileName string, scheme *runtime.Scheme, log logr.Logger) (*OperatorManager, error) {
+func New(client client.Client, fileName, namespace, s3BucketURL string, scheme *runtime.Scheme, log logr.Logger) (*OperatorManager, error) {
 	bb, err := ioutil.ReadFile(fileName)
 	if err != nil {
 		return nil, fmt.Errorf("error while reading operator yaml file: %v", err)
@@ -46,6 +47,8 @@ func New(client client.Client, fileName string, scheme *runtime.Scheme, log logr
 	log.Info("new `OperatorManager` created")
 	return &OperatorManager{
 		MetadataAccessor: meta.NewAccessor(),
+		namespace:        namespace,
+		s3BucketURL:      s3BucketURL,
 		Client:           client,
 		Decoder:          deserializer,
 		list:             list,
@@ -54,13 +57,13 @@ func New(client client.Client, fileName string, scheme *runtime.Scheme, log logr
 }
 
 // InstallOperator installs the operator Stored in `OperatorManager`
-func (m *OperatorManager) InstallOperator(ctx context.Context, namespace, s3BucketURL string) ([]runtime.Object, error) {
+func (m *OperatorManager) InstallOperator(ctx context.Context) ([]runtime.Object, error) {
 	objs := []runtime.Object{}
 
 	// Make sure the namespace exists.
-	objs, err := m.ensureNamespace(ctx, namespace, objs)
+	objs, err := m.ensureNamespace(ctx, objs)
 	if err != nil {
-		return objs, fmt.Errorf("error while ensuring the existence of namespace %v: %v", namespace, err)
+		return objs, fmt.Errorf("error while ensuring the existence of namespace %v: %v", m.namespace, err)
 	}
 
 	// Decode each YAML to `runtime.Object`, add the namespace to it and install it.
@@ -70,7 +73,7 @@ func (m *OperatorManager) InstallOperator(ctx context.Context, namespace, s3Buck
 			return objs, fmt.Errorf("error while converting yaml to `runtime.Object`: %v", err)
 		}
 
-		if objs, err := m.createNewRuntimeObject(ctx, objs, obj, namespace, s3BucketURL); err != nil {
+		if objs, err := m.createNewRuntimeObject(ctx, objs, obj); err != nil {
 			return objs, fmt.Errorf("error while creating the `runtime.Object`: %v", err)
 		}
 	}
@@ -84,9 +87,9 @@ func (m *OperatorManager) InstallOperator(ctx context.Context, namespace, s3Buck
 }
 
 // IsOperatorDeletable returns true when there's no running instance operated by the operator
-func (m *OperatorManager) IsOperatorDeletable(ctx context.Context, namespace string) (bool, error) {
+func (m *OperatorManager) IsOperatorDeletable(ctx context.Context) (bool, error) {
 	pods := &corev1.PodList{}
-	if err := m.List(ctx, pods, client.InNamespace(namespace), m.toInstanceMatchingLabels(namespace)); err != nil {
+	if err := m.List(ctx, pods, client.InNamespace(m.namespace), m.toInstanceMatchingLabels(m.namespace)); err != nil {
 		if errors.IsNotFound(err) {
 			m.Log.Info("operator is deletable")
 			return true, nil
@@ -101,10 +104,10 @@ func (m *OperatorManager) IsOperatorDeletable(ctx context.Context, namespace str
 }
 
 // IsOperatorInstalled returns true when the operator is installed
-func (m *OperatorManager) IsOperatorInstalled(ctx context.Context, namespace string) (bool, error) {
+func (m *OperatorManager) IsOperatorInstalled(ctx context.Context) (bool, error) {
 	pods := &corev1.PodList{}
 	opts := []client.ListOption{
-		client.InNamespace(namespace),
+		client.InNamespace(m.namespace),
 		client.MatchingLabels{"name": "postgres-operator"},
 	}
 	if err := m.List(ctx, pods, opts...); err != nil {
@@ -118,7 +121,7 @@ func (m *OperatorManager) IsOperatorInstalled(ctx context.Context, namespace str
 }
 
 // UninstallOperator uninstalls the operator
-func (m *OperatorManager) UninstallOperator(ctx context.Context, namespace string) error {
+func (m *OperatorManager) UninstallOperator(ctx context.Context) error {
 	items := m.list.Items
 	for i := range items {
 		item := items[len(items)-1-i]
@@ -127,7 +130,7 @@ func (m *OperatorManager) UninstallOperator(ctx context.Context, namespace strin
 			return fmt.Errorf("error while converting yaml to `runtime.Onject`: %v", err)
 		}
 
-		if err := m.SetNamespace(obj, namespace); err != nil {
+		if err := m.SetNamespace(obj, m.namespace); err != nil {
 			return fmt.Errorf("error while setting the namesapce: %v", err)
 		}
 
@@ -136,7 +139,7 @@ func (m *OperatorManager) UninstallOperator(ctx context.Context, namespace strin
 		case *rbacv1.ClusterRoleBinding:
 			// Remove the ServiceAccount from ClusterRoleBinding's Subjects and then patch it.
 			for i, s := range v.Subjects {
-				if s.Kind == "ServiceAccount" && s.Namespace == namespace {
+				if s.Kind == "ServiceAccount" && s.Namespace == m.namespace {
 					patch := client.MergeFrom(v.DeepCopy())
 					v.Subjects = append(v.Subjects[:i], v.Subjects[i+1:]...)
 					if err = m.Patch(ctx, v, patch); err != nil {
@@ -159,16 +162,16 @@ func (m *OperatorManager) UninstallOperator(ctx context.Context, namespace strin
 }
 
 // createNewRuntimeObject adds namespace to obj and creates or patches it
-func (m *OperatorManager) createNewRuntimeObject(ctx context.Context, objs []runtime.Object, obj runtime.Object, namespace, s3BucketURL string) ([]runtime.Object, error) {
+func (m *OperatorManager) createNewRuntimeObject(ctx context.Context, objs []runtime.Object, obj runtime.Object) ([]runtime.Object, error) {
 	if err := m.ensureCleanMetadata(obj); err != nil {
 		return objs, fmt.Errorf("error while ensuring the metadata of the `runtime.Object` is clean: %v", err)
 	}
 
-	if err := m.SetNamespace(obj, namespace); err != nil {
-		return objs, fmt.Errorf("error while setting the namespace of the `runtime.Object` to %v: %v", namespace, err)
+	if err := m.SetNamespace(obj, m.namespace); err != nil {
+		return objs, fmt.Errorf("error while setting the namespace of the `runtime.Object` to %v: %v", m.namespace, err)
 	}
 
-	key, err := m.toObjectKey(obj, namespace)
+	key, err := m.toObjectKey(obj)
 	if err != nil {
 		return objs, fmt.Errorf("error while making the object key: %v", err)
 	}
@@ -186,7 +189,7 @@ func (m *OperatorManager) createNewRuntimeObject(ctx context.Context, objs []run
 		// Set the namespace of the ServiceAccount in the ClusterRoleBinding.
 		for i, s := range v.Subjects {
 			if s.Kind == "ServiceAccount" {
-				v.Subjects[i].Namespace = namespace
+				v.Subjects[i].Namespace = m.namespace
 			}
 		}
 
@@ -206,7 +209,7 @@ func (m *OperatorManager) createNewRuntimeObject(ctx context.Context, objs []run
 		}
 	case *v1.ConfigMap:
 		m.Log.Info("handling ConfigMap")
-		m.editConfigMap(v, namespace, s3BucketURL)
+		m.editConfigMap(v)
 		err = m.Get(ctx, key, &v1.ConfigMap{})
 	case *v1.Service:
 		m.Log.Info("handling Service")
@@ -235,9 +238,9 @@ func (m *OperatorManager) createNewRuntimeObject(ctx context.Context, objs []run
 }
 
 // editConfigMap adds info to cm
-func (m *OperatorManager) editConfigMap(cm *v1.ConfigMap, namespace, s3BucketURL string) {
-	cm.Data["logical_backup_s3_bucket"] = s3BucketURL
-	cm.Data["watched_namespace"] = namespace
+func (m *OperatorManager) editConfigMap(cm *v1.ConfigMap) {
+	cm.Data["logical_backup_s3_bucket"] = m.s3BucketURL
+	cm.Data["watched_namespace"] = m.namespace
 }
 
 // ensureCleanMetadata ensures obj has clean metadata
@@ -261,18 +264,18 @@ func (m *OperatorManager) ensureCleanMetadata(obj runtime.Object) error {
 }
 
 // ensureNamespace ensures namespace exists
-func (m *OperatorManager) ensureNamespace(ctx context.Context, namespace string, objs []runtime.Object) ([]runtime.Object, error) {
-	if err := m.Get(ctx, client.ObjectKey{Name: namespace}, &corev1.Namespace{}); err != nil {
+func (m *OperatorManager) ensureNamespace(ctx context.Context, objs []runtime.Object) ([]runtime.Object, error) {
+	if err := m.Get(ctx, client.ObjectKey{Name: m.namespace}, &corev1.Namespace{}); err != nil {
 		// errors other than `not found`
 		if !errors.IsNotFound(err) {
-			return nil, fmt.Errorf("error while fetching namespace %v: %v", namespace, err)
+			return nil, fmt.Errorf("error while fetching namespace %v: %v", m.namespace, err)
 		}
 
 		// Create the namespace.
 		nsObj := &corev1.Namespace{}
-		nsObj.Name = namespace
+		nsObj.Name = m.namespace
 		if err := m.Create(ctx, nsObj); err != nil {
-			return nil, fmt.Errorf("error while creating namespace %v: %v", namespace, err)
+			return nil, fmt.Errorf("error while creating namespace %v: %v", m.namespace, err)
 		}
 
 		// Append the created namespace to the list of the created `runtime.Object`s.
@@ -288,13 +291,13 @@ func (m *OperatorManager) toInstanceMatchingLabels(namespace string) *client.Mat
 }
 
 // toObjectKey makes ObjectKey from namespace and the name of obj
-func (m *OperatorManager) toObjectKey(obj runtime.Object, namespace string) (client.ObjectKey, error) {
+func (m *OperatorManager) toObjectKey(obj runtime.Object) (client.ObjectKey, error) {
 	name, err := m.MetadataAccessor.Name(obj)
 	if err != nil {
 		return client.ObjectKey{}, fmt.Errorf("error while extracting the name of the k8s resource: %v", err)
 	}
 	return client.ObjectKey{
-		Namespace: namespace,
+		Namespace: m.namespace,
 		Name:      name,
 	}, nil
 }
