@@ -66,9 +66,8 @@ kind create cluster
 Build the charts
 
 ```sh
-helm package charts/postgreslet-support/
-helm dependency build charts/postgreslet/
-helm package charts/postgreslet/
+make helm-clean
+make helm
 ```
 
 Prepare the control cluster

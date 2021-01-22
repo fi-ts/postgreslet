@@ -108,3 +108,12 @@ secret:
 	cp kubeconfig $$SECRET_DIR/controlplane-kubeconfig ;\
 	kubectl create secret generic postgreslet -n $$NS --from-file $$SECRET_DIR/ --dry-run=client -o yaml | kubectl apply -f - ;\
 	}
+
+helm-clean:
+	rm -f charts/postgreslet/Chart.lock
+	rm -f charts/postgreslet/charts/*
+
+helm:
+	helm package charts/postgreslet-support/
+	helm dependency build charts/postgreslet/
+	helm package charts/postgreslet/
