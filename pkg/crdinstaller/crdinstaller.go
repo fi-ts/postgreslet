@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/ioutil"
 
+	"github.com/go-logr/logr"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -20,26 +21,29 @@ import (
 type CRDInstaller struct {
 	client.Client
 	*runtime.Scheme
+	Log logr.Logger
 }
 
-func New(conf *rest.Config, scheme *runtime.Scheme) (*CRDInstaller, error) {
+func New(conf *rest.Config, scheme *runtime.Scheme, log logr.Logger) (*CRDInstaller, error) {
 	// Use no-cache client to avoid waiting for cashing.
 	client, err := client.New(conf, client.Options{
 		Scheme: scheme,
 	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error while creating new k8s client: %v", err)
 	}
+	log.Info("new `CRDInstaller` created")
 	return &CRDInstaller{
 		Client: client,
 		Scheme: scheme,
+		Log:    log,
 	}, nil
 }
 
 func (i *CRDInstaller) Install(fileName string) error {
 	bytes, err := ioutil.ReadFile(fileName)
 	if err != nil {
-		return fmt.Errorf("error while reading a file: %v", err)
+		return fmt.Errorf("error while reading CRD file: %v", err)
 	}
 
 	obj, _, err := serializer.NewCodecFactory(i.Scheme).UniversalDeserializer().Decode(bytes, nil, nil)
@@ -49,7 +53,7 @@ func (i *CRDInstaller) Install(fileName string) error {
 
 	crdRead, ok := obj.(*apiextensionsv1.CustomResourceDefinition)
 	if !ok {
-		return errors.New("no CustomResourceDefition")
+		return errors.New("no CRD in the file")
 	}
 
 	ctx := context.Background()
@@ -69,8 +73,10 @@ func (i *CRDInstaller) Install(fileName string) error {
 		if err := i.Create(ctx, crdRead); err != nil {
 			return fmt.Errorf("error while creating CRD Postgresql: %v", err)
 		}
+		i.Log.Info("CRD newly installed")
 		return nil
 	}
 
+	i.Log.Info("CRD installed")
 	return nil
 }

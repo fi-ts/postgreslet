@@ -68,7 +68,7 @@ func main() {
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 
 	svcClusterConf := ctrl.GetConfigOrDie()
-	i, err := crdinstaller.New(svcClusterConf, scheme)
+	i, err := crdinstaller.New(svcClusterConf, scheme, ctrl.Log.WithName("CRDInstaller"),)
 	if err != nil {
 		setupLog.Error(err, "unable to create `CRDInstaller`")
 		os.Exit(1)
@@ -110,7 +110,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	opMgr, err := operatormanager.New(svcClusterMgr.GetClient(), "external/svc-postgres-operator.yaml", scheme)
+	opMgr, err := operatormanager.New(svcClusterMgr.GetClient(), "external/svc-postgres-operator.yaml", scheme, ctrl.Log.WithName("OperatorManager"))
 	if err != nil {
 		setupLog.Error(err, "unable to create `OperatorManager`")
 		os.Exit(1)
