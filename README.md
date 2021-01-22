@@ -51,3 +51,38 @@ make kind-load-image
 make secret
 make deploy
 ```
+
+# Local Helm Development
+
+Delete and recreate all existing kind clusters (optional)
+
+```sh
+kind delete cluster --name ctrl
+kind delete cluster
+kind create cluster --name ctrl --kubeconfig ./kubeconfig --config ctrl-cluster-config
+kind create cluster
+```
+
+Build the charts
+
+```sh
+helm package charts/postgreslet-support/
+helm dependency build charts/postgreslet/
+helm package charts/postgreslet/
+```
+
+Prepare the control cluster
+
+```sh
+helm --kubeconfig kubeconfig upgrade --install postgreslet-support postgreslet-support-0.1.0.tgz
+kubectl --kubeconfig kubeconfig get postgres -A
+```
+
+Install the Postgreslet to the service cluster
+
+```sh
+make kind-load-image
+kubectl create namespace postgres-controller-system
+helm upgrade --install postgreslet postgreslet-0.1.0.tgz --namespace postgres-controller-system --set-file controlplaneKubeconfig=kubeconfig
+kubectl get po -A --watch
+```
