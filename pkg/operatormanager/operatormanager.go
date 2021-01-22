@@ -50,6 +50,7 @@ func New(client client.Client, fileName string, scheme *runtime.Scheme, log logr
 		Decoder:          deserializer,
 		list:             list,
 		Scheme:           scheme,
+		Log:              log,
 	}, nil
 }
 
