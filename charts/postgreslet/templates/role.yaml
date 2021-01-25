@@ -2,7 +2,6 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: postgres-controller-leader-election-role
-  namespace: postgres-controller-system
 rules:
 - apiGroups:
   - ""
