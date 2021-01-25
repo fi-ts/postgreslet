@@ -20,6 +20,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+// operatorPodMatchingLabels is for listing operator pods
+var operatorPodMatchingLabels = client.MatchingLabels{"name": "postgres-operator"}
+
 // OperatorManager manages the operator
 type OperatorManager struct {
 	client.Client
@@ -107,7 +110,7 @@ func (m *OperatorManager) IsOperatorInstalled(ctx context.Context, namespace str
 	pods := &corev1.PodList{}
 	opts := []client.ListOption{
 		client.InNamespace(namespace),
-		client.MatchingLabels{"name": "postgres-operator"},
+		operatorPodMatchingLabels,
 	}
 	if err := m.List(ctx, pods, opts...); err != nil {
 		return false, client.IgnoreNotFound(err)
@@ -310,7 +313,7 @@ func (m *OperatorManager) waitTillOperatorReady(ctx context.Context, timeout tim
 	if err := wait.Poll(period, timeout, func() (bool, error) {
 		// Fetch the pods with the matching labels.
 		pods := &corev1.PodList{}
-		if err := m.List(ctx, pods, client.MatchingLabels{"name": "postgres-operator"}); err != nil {
+		if err := m.List(ctx, pods, operatorPodMatchingLabels); err != nil {
 			// `Not found` isn't an error.
 			return false, client.IgnoreNotFound(err)
 		}
