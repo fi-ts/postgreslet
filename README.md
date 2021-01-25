@@ -72,7 +72,7 @@ Delete _postgres_ on control-cluster and all the local corresponding resources.
 make delete-postgres
 ```
 
-# Local Helm Development
+## Local Helm Development
 
 Delete and recreate all existing kind clusters (optional)
 
