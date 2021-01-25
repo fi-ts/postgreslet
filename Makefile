@@ -17,6 +17,11 @@ GITVERSION := $(shell git describe --long --all)
 BUILDDATE := $(shell date -Iseconds)
 VERSION := $(or ${DOCKER_TAG},latest)
 
+# Postgres operator variables for YAML download
+POSTGRES_OPERATOR_VERSION ?= v1.6.0
+POSTGRES_OPERATOR_URL ?= https://raw.githubusercontent.com/zalando/postgres-operator/$(POSTGRES_OPERATOR_VERSION)/manifests
+POSTGRES_CRD_URL ?= https://raw.githubusercontent.com/zalando/postgres-operator/$(POSTGRES_OPERATOR_VERSION)/charts/postgres-operator/crds/postgresqls.yaml
+
 all: manager
 
 # Run tests
@@ -94,9 +99,16 @@ else
 CONTROLLER_GEN=$(shell which controller-gen)
 endif
 
-copy-external-yaml:
-	kubectl apply -k github.com/zalando/postgres-operator/manifests --dry-run=client -o yaml > external.yaml
-	sed 's/resourceVersion/# resourceVersion/' -i ./external.yaml
+svc-postgres-operator-yaml:
+	kubectl apply \
+	-f $(POSTGRES_OPERATOR_URL)/configmap.yaml \
+	-f $(POSTGRES_OPERATOR_URL)/operator-service-account-rbac.yaml \
+	-f $(POSTGRES_OPERATOR_URL)/postgres-operator.yaml \
+	-f $(POSTGRES_OPERATOR_URL)/api-service.yaml \
+	--dry-run=client -o yaml > external/svc-postgres-operator.yaml
+
+crd-postgresql-yaml:
+	kubectl apply -f $(POSTGRES_CRD_URL) --dry-run=client -o yaml > external/crd-postgresql.yaml
 
 secret:
 	@{ \
@@ -108,6 +120,12 @@ secret:
 	cp kubeconfig $$SECRET_DIR/controlplane-kubeconfig ;\
 	kubectl create secret generic postgreslet -n $$NS --from-file $$SECRET_DIR/ --dry-run=client -o yaml | kubectl apply -f - ;\
 	}
+
+create-postgres:
+	kubectl --kubeconfig kubeconfig apply -f config/samples/database_v1_postgres.yaml
+
+delete-postgres:
+	kubectl --kubeconfig kubeconfig delete -f config/samples/database_v1_postgres.yaml
 
 helm-clean:
 	rm -f charts/postgreslet/Chart.lock
