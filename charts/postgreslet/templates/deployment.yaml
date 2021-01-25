@@ -4,7 +4,7 @@ metadata:
   labels:
     control-plane: controller-manager
     {{- include "postgreslet.labels" . | nindent 4 }}
-  name: postgres-controller-controller-manager
+  name: {{ include "postgreslet.fullname" . }}
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
