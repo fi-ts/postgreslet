@@ -20,6 +20,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+// OperatorManager manages the operator
 type OperatorManager struct {
 	client.Client
 	runtime.Decoder

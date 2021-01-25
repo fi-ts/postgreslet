@@ -18,12 +18,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+// CRDInstaller installs CRD
 type CRDInstaller struct {
 	client.Client
 	*runtime.Scheme
 	Log logr.Logger
 }
 
+// New constructs a new CRDInstaller
 func New(conf *rest.Config, scheme *runtime.Scheme, log logr.Logger) (*CRDInstaller, error) {
 	// Use no-cache client to avoid waiting for cashing.
 	client, err := client.New(conf, client.Options{
@@ -40,8 +42,9 @@ func New(conf *rest.Config, scheme *runtime.Scheme, log logr.Logger) (*CRDInstal
 	}, nil
 }
 
-func (i *CRDInstaller) Install(fileName string) error {
-	bytes, err := ioutil.ReadFile(fileName)
+// Install insalls the CRD given in filePath
+func (i *CRDInstaller) Install(filePath string) error {
+	bytes, err := ioutil.ReadFile(filePath)
 	if err != nil {
 		return fmt.Errorf("error while reading CRD file: %v", err)
 	}
