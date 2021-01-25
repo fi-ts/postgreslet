@@ -20,7 +20,7 @@ spec:
       {{- end }}
       labels:
         control-plane: controller-manager
-          {{- include "postgreslet.selectorLabels" . | nindent 8 }}
+        {{- include "postgreslet.selectorLabels" . | nindent 8 }}
     spec:
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
