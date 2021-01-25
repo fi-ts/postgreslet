@@ -76,6 +76,8 @@ type AccessList struct {
 
 // Backup configure parametes of the database backup
 type Backup struct {
+	// S3BucketURL defines the URL of the S3 bucket for backup
+	S3BucketURL string `json:"s3BucketURL,omitempty"`
 	// Retention defines how many days a backup will persist
 	Retention int32 `json:"retention,omitempty"`
 	// Schedule defines how often a backup should be made, in cron format

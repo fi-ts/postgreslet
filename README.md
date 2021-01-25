@@ -40,14 +40,34 @@ kubectl --kubeconfig kubeconfig delete -f config/samples/database_v1_postgres.ya
 make uninstall
 ```
 
-## Install a local kubeconfig as secret in the cluster
+## Install a local kubeconfig as secret in the service-cluster
 
 The following steps will create a _Secret_ called `postgreslet`, and add all files in the folder as keys to that secret.
 
 As we only copy one file, the secret will contain only one key named `controlplane-kubeconfig` which will contain the control plane kube config.
 
 ```sh
-make kind-load-image
 make secret
+```
+
+## Deploy Postgreslet on the local service-cluster and test it
+
+Deploy _postgrelet_ which consumes the _secret_ in the last section.
+
+```sh
+make kind-load-image
 make deploy
+```
+
+Create _postgres_ on control-cluster.
+
+```sh
+make install
+make create-postgres
+```
+
+Delete _postgres_ on control-cluster and all the local corresponding resources.
+
+```sh
+make delete-postgres
 ```
