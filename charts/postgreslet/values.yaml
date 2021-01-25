@@ -53,3 +53,8 @@ affinity: {}
 controlplaneKubeconfig: ""
 
 terminationGracePeriodSeconds: 10
+
+postgreslet:
+  enableLeaderElection: false
+  partitionId: sample-partition
+  tenant: sample-tenant
