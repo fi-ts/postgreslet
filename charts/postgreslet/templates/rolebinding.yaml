@@ -9,5 +9,5 @@ roleRef:
   name: postgres-controller-leader-election-role
 subjects:
 - kind: ServiceAccount
-  name: default
+  name: {{ include "postgreslet.serviceAccountName" . }}
   namespace: postgres-controller-system

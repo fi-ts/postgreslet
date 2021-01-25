@@ -3,46 +3,66 @@ kind: Deployment
 metadata:
   labels:
     control-plane: controller-manager
+    {{- include "postgreslet.labels" . | nindent 4 }}
   name: postgres-controller-controller-manager
   namespace: postgres-controller-system
 spec:
-  replicas: 1
+  replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
       control-plane: controller-manager
+      {{- include "postgreslet.selectorLabels" . | nindent 6 }}
   template:
     metadata:
-      labels:
-        control-plane: controller-manager
       annotations:
         controlplane-kubeconfig-hash:  {{ sha256sum .Values.controlplaneKubeconfig | trunc 63 | trimSuffix "-" }}
+      {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        control-plane: controller-manager
+          {{- include "postgreslet.selectorLabels" . | nindent 8 }}
     spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "postgreslet.serviceAccountName" . }}
       containers:
-      - args:
-        - --enable-leader-election=false
-        - --partition-id=sample-partition
-        - --tenant=sample-tenant
-        command:
-        - /manager
-        image: r.metal-stack.io/extensions/postgreslet:latest
-        imagePullPolicy: IfNotPresent
-        name: manager
-        resources:
-          limits:
-            cpu: 100m
-            memory: 30Mi
-          requests:
-            cpu: 100m
-            memory: 20Mi
-        volumeMounts:
-        - mountPath: /var/run/secrets/postgreslet
-          name: controlplane-kubeconfig
-          readOnly: true
-      terminationGracePeriodSeconds: 10
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - /manager
+          args:
+            - --enable-leader-election=false
+            - --partition-id=sample-partition
+            - --tenant=sample-tenant
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - mountPath: /var/run/secrets/postgreslet
+              name: controlplane-kubeconfig
+              readOnly: true
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
       volumes:
-      - name: controlplane-kubeconfig
-        secret:
-          items:
-          - key: controlplane-kubeconfig
-            path: kube/config
-          secretName: postgreslet
+        - name: controlplane-kubeconfig
+          secret:
+            items:
+              - key: controlplane-kubeconfig
+                path: kube/config
+            secretName: {{ include "postgreslet.fullname" . }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
