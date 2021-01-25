@@ -53,6 +53,9 @@ spec:
                   description: Retention defines how many days a backup will persist
                   format: int32
                   type: integer
+                s3BucketURL:
+                  description: S3BucketURL defines the URL of the S3 bucket for backup
+                  type: string
                 schedule:
                   description: Schedule defines how often a backup should be made, in cron format
                   type: string
