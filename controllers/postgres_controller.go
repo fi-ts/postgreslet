@@ -22,13 +22,20 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	firewall "github.com/metal-stack/firewall-controller/api/v1"
 	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
+	"inet.af/netaddr"
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	pg "github.com/fi-ts/postgres-controller/api/v1"
 	"github.com/fi-ts/postgres-controller/pkg/operatormanager"
@@ -267,4 +274,55 @@ func patchRawZ(out *zalando.Postgresql, in *pg.Postgres) {
 	}()
 
 	// todo: in.Spec.Backup, in.Spec.AccessList
+}
+
+// createCWNP will create a ingress firewall rule on the firewall in front of the k8s cluster
+// based on the spec.AccessList.SourceRanges given.
+// TODO for a kind cluster:
+// - the firewall namespace must be present
+// - the firewall.ClusterwideNetworkPolicy CRD must be deployed in a kind cluster with:
+//   k apply -f https://github.com/metal-stack/firewall-controller/config/crd/bases/metal-stack.io_clusterwidenetworkpolicies.yaml
+// TODO overall:
+// - deleteCWNP
+func createCWNP(ctx context.Context, client client.Client, in *pg.Postgres, port int) error {
+	for _, src := range in.Spec.AccessList.SourceRanges {
+		cp := &firewall.ClusterwideNetworkPolicy{
+			ObjectMeta: metav1.ObjectMeta{
+				// FIXME what is the unique identifier
+				Name:      "allow-to-" + in.ClusterName,
+				Namespace: "firewall",
+			},
+		}
+
+		parsedSrc, err := netaddr.ParseIPPrefix(src)
+		if err != nil {
+			return fmt.Errorf("unable to parse sources:%s %w", src, err)
+		}
+		_, err = controllerutil.CreateOrUpdate(ctx, client, cp, func() error {
+			tcp := corev1.ProtocolTCP
+			portStr := intstr.FromInt(port)
+			cp.Spec.Ingress = []firewall.IngressRule{
+				{
+					Ports: []networkingv1.NetworkPolicyPort{
+						{
+							Port:     &portStr,
+							Protocol: &tcp,
+						},
+					},
+					From: []networkingv1.IPBlock{
+						{
+							CIDR: parsedSrc.String(),
+						},
+					},
+				},
+			}
+
+			return nil
+		})
+
+		if err != nil {
+			return fmt.Errorf("unable to deploy clusterwide network policy for database:%s into firewall namespace:%v", in.ClusterName, err)
+		}
+	}
+	return nil
 }

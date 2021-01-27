@@ -69,8 +69,7 @@ type PostgresSpec struct {
 
 // AccessList defines the type of restrictions to access the database
 type AccessList struct {
-	// SourceRanges defines a list of prefixes in CIDR Notation e.g. 1.2.3.0/24
-	// FIXME implement validation if source is a parsable CIDR
+	// SourceRanges defines a list of prefixes in CIDR Notation e.g. 1.2.3.0/24 or fdaa::/104
 	SourceRanges []string `json:"sourceRanges,omitempty"`
 }
 
