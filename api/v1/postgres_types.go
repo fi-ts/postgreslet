@@ -76,6 +76,8 @@ type AccessList struct {
 
 // Backup configure parametes of the database backup
 type Backup struct {
+	// S3BucketURL defines the URL of the S3 bucket for backup
+	S3BucketURL string `json:"s3BucketURL,omitempty"`
 	// Retention defines how many days a backup will persist
 	Retention int32 `json:"retention,omitempty"`
 	// Schedule defines how often a backup should be made, in cron format
@@ -149,11 +151,12 @@ func (p *Postgres) ToKey() *types.NamespacedName {
 }
 
 func (p *Postgres) ToZalandoPostgres() *ZalandoPostgres {
+	projectID := p.Spec.ProjectID
 	return &ZalandoPostgres{
 		TypeMeta: ZalandoPostgresTypeMeta,
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      p.Spec.ProjectID + "--" + string(p.UID), // todo: "." used to work but not anymore. Make sure the rule is well-documented.
-			Namespace: p.Namespace,
+			Namespace: projectID,                               // todo: Check if the projectID is too long for zalando operator.
 		},
 		Spec: ZalandoPostgresSpec{
 			MaintenanceWindows: func() []MaintenanceWindow {
@@ -187,7 +190,7 @@ func (p *Postgres) ToZalandoPostgres() *ZalandoPostgres {
 					ResourceLimits: &ResourceDescription{}, // todo: Fill it out.
 				}
 			}(),
-			TeamID: p.Spec.ProjectID,
+			TeamID: projectID,
 			Volume: Volume{Size: p.Spec.Size.StorageSize},
 		},
 	}

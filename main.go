@@ -33,7 +33,9 @@ import (
 
 	databasev1 "github.com/fi-ts/postgres-controller/api/v1"
 	"github.com/fi-ts/postgres-controller/controllers"
-	"github.com/fi-ts/postgres-controller/pkg/yamlmanager"
+	"github.com/fi-ts/postgres-controller/pkg/crdinstaller"
+	"github.com/fi-ts/postgres-controller/pkg/operatormanager"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -43,8 +45,8 @@ var (
 )
 
 func init() {
+	_ = apiextensionsv1.AddToScheme(scheme)
 	_ = clientgoscheme.AddToScheme(scheme)
-
 	_ = databasev1.AddToScheme(scheme)
 	_ = zalando.AddToScheme(scheme)
 	// +kubebuilder:scaffold:scheme
@@ -53,19 +55,29 @@ func init() {
 func main() {
 	var metricsAddrCtrlMgr, metricsAddrSvcMgr, partitionID, tenant, ctrlClusterKubeconfig string
 	var enableLeaderElection bool
-	flag.StringVar(&metricsAddrSvcMgr, "metrics-addr-svc-mgr", ":8081", "The address the metric endpoint of the service cluster manager binds to.")
-	flag.StringVar(&metricsAddrCtrlMgr, "metrics-addr-ctrl-mgr", ":8082", "The address the metric endpoint of the control cluster manager binds to.")
+	flag.StringVar(&metricsAddrSvcMgr, "metrics-addr-svc-mgr", ":8080", "The address the metric endpoint of the service cluster manager binds to.")
+	flag.StringVar(&metricsAddrCtrlMgr, "metrics-addr-ctrl-mgr", "0", "The address the metric endpoint of the control cluster manager binds to.")
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
 	flag.StringVar(&partitionID, "partition-id", "", "The partition ID of the worker-cluster.")
 	flag.StringVar(&tenant, "tenant", "", "The tenant name.")
-	flag.StringVar(&ctrlClusterKubeconfig, "controlplane-kubeconfig", "", "The path to the kubeconfig to talk to the control plane")
+	flag.StringVar(&ctrlClusterKubeconfig, "controlplane-kubeconfig", "/var/run/secrets/postgreslet/kube/config", "The path to the kubeconfig to talk to the control plane")
 	flag.Parse()
 
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 
 	svcClusterConf := ctrl.GetConfigOrDie()
+	i, err := crdinstaller.New(svcClusterConf, scheme, ctrl.Log.WithName("CRDInstaller"))
+	if err != nil {
+		setupLog.Error(err, "unable to create `CRDInstaller`")
+		os.Exit(1)
+	}
+	if err := i.Install("external/crd-postgresql.yaml"); err != nil {
+		setupLog.Error(err, "unable to install CRD Postgresql")
+		os.Exit(1)
+	}
+
 	svcClusterMgr, err := ctrl.NewManager(svcClusterConf, ctrl.Options{
 		Scheme:             scheme,
 		MetricsBindAddress: metricsAddrSvcMgr,
@@ -98,29 +110,20 @@ func main() {
 		os.Exit(1)
 	}
 
-	y, err := yamlmanager.NewYAMLManager(svcClusterConf, scheme)
+	opMgr, err := operatormanager.New(svcClusterMgr.GetClient(), "external/svc-postgres-operator.yaml", scheme, ctrl.Log.WithName("OperatorManager"))
 	if err != nil {
-		setupLog.Error(err, "unable to create a new external YAML manager")
+		setupLog.Error(err, "unable to create `OperatorManager`")
 		os.Exit(1)
 	}
-	objs, err := y.InstallYAML("./external.yaml", partitionID)
-	if err != nil {
-		setupLog.Error(err, "unable to install external YAML")
-		os.Exit(1)
-	}
-	defer func() {
-		if err := y.UninstallYAML(objs); err != nil {
-			setupLog.Error(err, "unable to uninstall external YAML")
-		}
-	}()
 
 	if err = (&controllers.PostgresReconciler{
-		Client:      ctrlPlaneClusterMgr.GetClient(),
-		Service:     svcClusterMgr.GetClient(),
-		Log:         ctrl.Log.WithName("controllers").WithName("Postgres"),
-		Scheme:      ctrlPlaneClusterMgr.GetScheme(),
-		PartitionID: partitionID,
-		Tenant:      tenant,
+		Client:          ctrlPlaneClusterMgr.GetClient(),
+		Service:         svcClusterMgr.GetClient(),
+		Log:             ctrl.Log.WithName("controllers").WithName("Postgres"),
+		Scheme:          ctrlPlaneClusterMgr.GetScheme(),
+		PartitionID:     partitionID,
+		Tenant:          tenant,
+		OperatorManager: opMgr,
 	}).SetupWithManager(ctrlPlaneClusterMgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Postgres")
 		os.Exit(1)

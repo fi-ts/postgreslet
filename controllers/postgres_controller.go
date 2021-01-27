@@ -26,10 +26,12 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	pg "github.com/fi-ts/postgres-controller/api/v1"
+	"github.com/fi-ts/postgres-controller/pkg/operatormanager"
 )
 
 // requeue defines in how many seconds a requeue should happen
@@ -45,6 +47,7 @@ type PostgresReconciler struct {
 	Log                 logr.Logger
 	Scheme              *runtime.Scheme
 	PartitionID, Tenant string
+	*operatormanager.OperatorManager
 }
 
 // Reconcile is the entry point for postgres reconciliation.
@@ -74,8 +77,22 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	// Delete
 	if instance.IsBeingDeleted() {
 		log.Info("deleting owned zalando postgresql")
+		if err := r.deleteZPostgresql(ctx, k); err != nil {
+			return ctrl.Result{}, err
+		}
 
-		// r.deleteZPostgrsql(ctx, k)
+		namespace := instance.Spec.ProjectID
+		isIdle, err := r.IsOperatorDeletable(ctx, namespace)
+		if err != nil {
+			return ctrl.Result{}, fmt.Errorf("error while checking if the operator is idle: %v", err)
+		}
+		if !isIdle {
+			log.Info("operator is not idle")
+			return ctrl.Result{Requeue: true}, nil
+		}
+		if err := r.UninstallOperator(ctx, namespace); err != nil {
+			return ctrl.Result{}, fmt.Errorf("error while uninstalling operator: %v", err)
+		}
 
 		instance.RemoveFinalizer(pg.PostgresFinalizerName)
 		if err := r.Update(ctx, instance); err != nil {
@@ -86,13 +103,18 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 	// Add finalizer if none.
 	if !instance.HasFinalizer(pg.PostgresFinalizerName) {
-		r.Log.Info("finalizer being added")
+		log.Info("finalizer being added")
 		instance.AddFinalizer(pg.PostgresFinalizerName)
 		if err := r.Update(ctx, instance); err != nil {
 			return requeue, fmt.Errorf("error while adding finalizer: %v", err)
 		}
-		r.Log.Info("finalizer added")
+		log.Info("finalizer added")
 		return ctrl.Result{}, nil
+	}
+
+	// Check if zalando dependencies are installed. If not, install them.
+	if err := r.ensureZalandoDependencies(ctx, instance); err != nil {
+		return ctrl.Result{}, fmt.Errorf("error while ensuring Zalando dependencies: %v", err)
 	}
 
 	// Get zalando postgresql and create one if none.
@@ -132,23 +154,10 @@ func (r *PostgresReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func (r *PostgresReconciler) isManagedByUs(obj *pg.Postgres) bool {
-	if obj.Spec.PartitionID != r.PartitionID {
-		return false
-	}
-
-	// if this partition is only for one tenant
-	if r.Tenant != "" && obj.Spec.Tenant != r.Tenant {
-		return false
-	}
-
-	return true
-}
-
 func (r *PostgresReconciler) createZalandoPostgresql(ctx context.Context, z *pg.ZalandoPostgres) (ctrl.Result, error) {
 	log := r.Log.WithValues("zalando postgresql", z.ToKey())
 
-	// Make sure the namespace exists in the worker-cluster. // todo: Make sure it happens in the worker-cluster.
+	// Make sure the namespace exists in the worker-cluster.
 	ns := z.Namespace
 	if err := r.Service.Get(ctx, client.ObjectKey{Name: ns}, &corev1.Namespace{}); err != nil {
 		// errors other than `not found`
@@ -176,6 +185,54 @@ func (r *PostgresReconciler) createZalandoPostgresql(ctx context.Context, z *pg.
 	}
 
 	return ctrl.Result{}, nil
+}
+
+// ensureZalandoDependencies makes sure Zalando resources are installed in the service-cluster.
+func (r *PostgresReconciler) ensureZalandoDependencies(ctx context.Context, pg *pg.Postgres) error {
+	namespace := pg.Spec.ProjectID
+	isInstalled, err := r.IsOperatorInstalled(ctx, namespace)
+	if err != nil {
+		return fmt.Errorf("error while querying if zalando dependencies are installed: %v", err)
+	}
+	if !isInstalled {
+		_, err := r.InstallOperator(ctx, namespace, pg.Spec.Backup.S3BucketURL)
+		if err != nil {
+			return fmt.Errorf("error while installing zalando dependencies: %v", err)
+		}
+	}
+
+	return nil
+}
+
+func (r *PostgresReconciler) isManagedByUs(obj *pg.Postgres) bool {
+	if obj.Spec.PartitionID != r.PartitionID {
+		return false
+	}
+
+	// if this partition is only for one tenant
+	if r.Tenant != "" && obj.Spec.Tenant != r.Tenant {
+		return false
+	}
+
+	return true
+}
+
+func (r *PostgresReconciler) deleteZPostgresql(ctx context.Context, k *types.NamespacedName) error {
+	log := r.Log.WithValues("zalando postgrsql", k)
+	rawZ := &zalando.Postgresql{}
+	if err := r.Service.Get(ctx, *k, rawZ); err != nil {
+		if errors.IsNotFound(err) {
+			return nil
+		}
+		return fmt.Errorf("error while fetching zalando postgresql to delete: %v", err)
+	}
+
+	if err := r.Service.Delete(ctx, rawZ); err != nil {
+		return fmt.Errorf("error while deleting zalando postgresql: %v", err)
+	}
+
+	log.Info("zalando postgresql deleted")
+	return nil
 }
 
 func patchRawZ(out *zalando.Postgresql, in *pg.Postgres) {

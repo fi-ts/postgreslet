@@ -4,11 +4,10 @@ apiVersion: apiextensions.k8s.io/v1beta1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.3.0
+    controller-gen.kubebuilder.io/version: v0.2.5
   creationTimestamp: null
   name: postgres.database.fits.cloud
 spec:
-  preserveUnknownFields: false
   additionalPrinterColumns:
   - JSONPath: .spec.version
     name: Version
@@ -30,10 +29,14 @@ spec:
       description: Postgres is the Schema for the postgres API
       properties:
         apiVersion:
-          description: 'APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+          description: 'APIVersion defines the versioned schema of this representation
+            of an object. Servers should convert recognized schemas to the latest
+            internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
           type: string
         kind:
-          description: 'Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+          description: 'Kind is a string value representing the REST resource this
+            object represents. Servers may infer this from the endpoint the client
+            submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
           type: string
         metadata:
           type: object
@@ -44,7 +47,9 @@ spec:
               description: AccessList defines access restrictions
               properties:
                 sourceRanges:
-                  description: SourceRanges defines a list of prefixes in CIDR Notation e.g. 1.2.3.0/24 FIXME implement validation if source is a parsable CIDR
+                  description: SourceRanges defines a list of prefixes in CIDR Notation
+                    e.g. 1.2.3.0/24 FIXME implement validation if source is a parsable
+                    CIDR
                   items:
                     type: string
                   type: array
@@ -56,8 +61,12 @@ spec:
                   description: Retention defines how many days a backup will persist
                   format: int32
                   type: integer
+                s3BucketURL:
+                  description: S3BucketURL defines the URL of the S3 bucket for backup
+                  type: string
                 schedule:
-                  description: Schedule defines how often a backup should be made, in cron format
+                  description: Schedule defines how often a backup should be made,
+                    in cron format
                   type: string
               type: object
             description:
@@ -77,7 +86,8 @@ spec:
                       type: string
                   type: object
                 weekday:
-                  description: Weekday defines when the operator is allowed to do maintenance
+                  description: Weekday defines when the operator is allowed to do
+                    maintenance
                   type: integer
               type: object
             numberOfInstances:
@@ -100,7 +110,8 @@ spec:
                   description: SharedBuffer of the database
                   type: string
                 storageSize:
-                  description: StorageSize the amount of Storage this database will get
+                  description: StorageSize the amount of Storage this database will
+                    get
                   type: string
               type: object
             tenant:
@@ -114,7 +125,9 @@ spec:
           description: PostgresStatus defines the observed state of Postgres
           properties:
             description:
-              description: 'INSERT ADDITIONAL STATUS FIELD - define observed state of cluster Important: Run "make" to regenerate code after modifying this file'
+              description: 'INSERT ADDITIONAL STATUS FIELD - define observed state
+                of cluster Important: Run "make" to regenerate code after modifying
+                this file'
               type: string
           type: object
       type: object

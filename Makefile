@@ -17,6 +17,11 @@ GITVERSION := $(shell git describe --long --all)
 BUILDDATE := $(shell date -Iseconds)
 VERSION := $(or ${DOCKER_TAG},latest)
 
+# Postgres operator variables for YAML download
+POSTGRES_OPERATOR_VERSION ?= v1.6.0
+POSTGRES_OPERATOR_URL ?= https://raw.githubusercontent.com/zalando/postgres-operator/$(POSTGRES_OPERATOR_VERSION)/manifests
+POSTGRES_CRD_URL ?= https://raw.githubusercontent.com/zalando/postgres-operator/$(POSTGRES_OPERATOR_VERSION)/charts/postgres-operator/crds/postgresqls.yaml
+
 all: manager
 
 # Run tests
@@ -51,10 +56,8 @@ deploy: manifests
 	kustomize build config/default | kubectl apply -f -
 
 # Generate manifests e.g. CRD, RBAC etc.
-# todo: Remove `sed ...` once the bug in `kubebuilder` is fixed
 manifests: controller-gen
 	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=manager-role webhook paths="./..." output:crd:artifacts:config=config/crd/bases
-	sed -z 's#spec:#spec:\n  preserveUnknownFields: false#' -i config/crd/bases/database.fits.cloud_postgres.yaml
 
 # Run go fmt against code
 fmt:
@@ -76,7 +79,7 @@ docker-build:
 docker-push:
 	docker push ${IMG}:${VERSION}
 
-kind-load-image:
+kind-load-image: docker-build
 	kind load docker-image ${IMG}:${VERSION} -v 1
 
 # find or download controller-gen
@@ -96,10 +99,6 @@ else
 CONTROLLER_GEN=$(shell which controller-gen)
 endif
 
-copy-external-yaml:
-	kubectl apply -k github.com/zalando/postgres-operator/manifests --dry-run=client -o yaml > external.yaml
-	sed 's/resourceVersion/# resourceVersion/' -i ./external.yaml
-
 # Todo: Fix two metrics-addr. Not read right now.
 configmap:
 	kubectl create configmap -n system controller-manager-configmap \
@@ -111,3 +110,31 @@ configmap:
 		--from-literal=TENANT=sample-tenant \
 		--dry-run=client -o=yaml \
 		> config/manager/configmap.yaml
+
+svc-postgres-operator-yaml:
+	kubectl apply \
+	-f $(POSTGRES_OPERATOR_URL)/configmap.yaml \
+	-f $(POSTGRES_OPERATOR_URL)/operator-service-account-rbac.yaml \
+	-f $(POSTGRES_OPERATOR_URL)/postgres-operator.yaml \
+	-f $(POSTGRES_OPERATOR_URL)/api-service.yaml \
+	--dry-run=client -o yaml > external/svc-postgres-operator.yaml
+
+crd-postgresql-yaml:
+	kubectl apply -f $(POSTGRES_CRD_URL) --dry-run=client -o yaml > external/crd-postgresql.yaml
+
+secret:
+	@{ \
+	NS="postgres-controller-system" ;\
+	SECRET_DIR="postgreslet-secret" ;\
+	kubectl create ns $$NS --dry-run=client --save-config -o yaml | kubectl apply -f - ;\
+	if [ -d $$SECRET_DIR ]; then rm -fr $$SECRET_DIR; fi ;\
+	mkdir $$SECRET_DIR ;\
+	cp kubeconfig $$SECRET_DIR/controlplane-kubeconfig ;\
+	kubectl create secret generic postgreslet -n $$NS --from-file $$SECRET_DIR/ --dry-run=client -o yaml | kubectl apply -f - ;\
+	}
+
+create-postgres:
+	kubectl --kubeconfig kubeconfig apply -f config/samples/database_v1_postgres.yaml
+
+delete-postgres:
+	kubectl --kubeconfig kubeconfig delete -f config/samples/database_v1_postgres.yaml
