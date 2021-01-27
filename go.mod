@@ -3,7 +3,7 @@ module github.com/fi-ts/postgres-controller
 go 1.15
 
 require (
-	github.com/go-logr/logr v0.3.0
+	github.com/go-logr/logr v0.4.0
 	github.com/go-logr/zapr v0.3.0 // indirect
 	github.com/metal-stack/v v1.0.2
 	github.com/onsi/ginkgo v1.14.2
