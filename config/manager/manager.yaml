@@ -29,6 +29,9 @@ spec:
         - --enable-leader-election=false
         - --partition-id=sample-partition
         - --tenant=sample-tenant
+        envFrom:
+          - configMapRef:
+              name: controller-manager-configmap
         image: controller:latest
         imagePullPolicy: IfNotPresent
         name: manager
