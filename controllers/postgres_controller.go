@@ -285,44 +285,44 @@ func patchRawZ(out *zalando.Postgresql, in *pg.Postgres) {
 // TODO overall:
 // - deleteCWNP
 func createCWNP(ctx context.Context, client client.Client, in *pg.Postgres, port int) error {
-	for _, src := range in.Spec.AccessList.SourceRanges {
-		cp := &firewall.ClusterwideNetworkPolicy{
-			ObjectMeta: metav1.ObjectMeta{
-				// FIXME what is the unique identifier
-				Name:      "allow-to-" + in.ClusterName,
-				Namespace: "firewall",
-			},
-		}
+	portStr := intstr.FromInt(port)
+	tcp := corev1.ProtocolTCP
 
+	ports := []networkingv1.NetworkPolicyPort{
+		{Port: &portStr, Protocol: &tcp},
+	}
+
+	ipblocks := []networkingv1.IPBlock{}
+	for _, src := range in.Spec.AccessList.SourceRanges {
 		parsedSrc, err := netaddr.ParseIPPrefix(src)
 		if err != nil {
 			return fmt.Errorf("unable to parse sources:%s %w", src, err)
 		}
-		_, err = controllerutil.CreateOrUpdate(ctx, client, cp, func() error {
-			tcp := corev1.ProtocolTCP
-			portStr := intstr.FromInt(port)
-			cp.Spec.Ingress = []firewall.IngressRule{
-				{
-					Ports: []networkingv1.NetworkPolicyPort{
-						{
-							Port:     &portStr,
-							Protocol: &tcp,
-						},
-					},
-					From: []networkingv1.IPBlock{
-						{
-							CIDR: parsedSrc.String(),
-						},
-					},
-				},
-			}
-
-			return nil
-		})
-
-		if err != nil {
-			return fmt.Errorf("unable to deploy clusterwide network policy for database:%s into firewall namespace:%v", in.ClusterName, err)
+		ipblock := networkingv1.IPBlock{
+			CIDR: parsedSrc.String(),
 		}
+		ipblocks = append(ipblocks, ipblock)
 	}
+
+	ingressRules := []firewall.IngressRule{
+		{Ports: ports, From: ipblocks},
+	}
+
+	cp := &firewall.ClusterwideNetworkPolicy{
+		ObjectMeta: metav1.ObjectMeta{
+			// FIXME what is the unique identifier
+			Name:      "allow-to-" + in.ClusterName,
+			Namespace: "firewall",
+		},
+	}
+	_, err := controllerutil.CreateOrUpdate(ctx, client, cp, func() error {
+		cp.Spec.Ingress = ingressRules
+		return nil
+	})
+
+	if err != nil {
+		return fmt.Errorf("unable to deploy clusterwide network policy for database:%s into firewall namespace:%v", in.ClusterName, err)
+	}
+
 	return nil
 }

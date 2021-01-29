@@ -68,7 +68,7 @@ func main() {
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 
 	svcClusterConf := ctrl.GetConfigOrDie()
-	i, err := crdinstaller.New(svcClusterConf, scheme, ctrl.Log.WithName("CRDInstaller"),)
+	i, err := crdinstaller.New(svcClusterConf, scheme, ctrl.Log.WithName("CRDInstaller"))
 	if err != nil {
 		setupLog.Error(err, "unable to create `CRDInstaller`")
 		os.Exit(1)
