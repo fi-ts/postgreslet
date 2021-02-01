@@ -1,11 +1,11 @@
 apiVersion: v1
 data:
-  CONTROLPLANE_KUBECONFIG: kubeconfig
-  ENABLE_LEADER_ELECTION: "false"
-  METRICS_ADDR_CTRL_MGR: "0"
-  METRICS_ADDR_SVC_MGR: "8080"
-  PARTITION_ID: sample-partition
-  TENANT: sample-tenant
+  # CONTROLPLANE_KUBECONFIG: # the default value is used
+  ENABLE_LEADER_ELECTION: true
+  METRICS_ADDR_CTRL_MGR: 98765
+  METRICS_ADDR_SVC_MGR: 43210
+  PARTITION_ID: configmap-partition-id
+  TENANT: configmap-tenant
 kind: ConfigMap
 metadata:
   creationTimestamp: null
