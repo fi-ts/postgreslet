@@ -1,7 +1,0 @@
-apiVersion: database.fits.cloud/v1
-kind: PostgresProfile
-metadata:
-  name: postgresprofile-sample
-spec:
-  # Add fields here
-  foo: bar
