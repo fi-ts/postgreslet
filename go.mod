@@ -7,7 +7,7 @@ require (
 	github.com/go-logr/zapr v0.3.0 // indirect
 	github.com/metal-stack/v v1.0.2
 	github.com/onsi/ginkgo v1.14.2
-	github.com/onsi/gomega v1.10.4
+	github.com/onsi/gomega v1.10.5
 	github.com/zalando/postgres-operator v1.5.0
 	k8s.io/api v0.19.4
 	k8s.io/apiextensions-apiserver v0.18.6
