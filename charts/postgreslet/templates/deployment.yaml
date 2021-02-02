@@ -39,8 +39,8 @@ spec:
           command:
             - /manager
           args:
-            - --metrics-addr-svc-mgr=$(METRICS_ADDR_CTRL_MGR)
-            - --metrics-addr-ctrl-mgr=$(METRICS_ADDR_SVC_MGR)
+            - --metrics-addr-svc-mgr=$(METRICS_ADDR_SVC_MGR)
+            - --metrics-addr-ctrl-mgr=$(METRICS_ADDR_CTRL_MGR)
             - --enable-leader-election=$(ENABLE_LEADER_ELECTION)
             - --partition-id=$(PARTITION_ID)
             - --tenant=$(TENANT)
