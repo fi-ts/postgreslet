@@ -22,9 +22,3 @@ version: 0.1.0
 # follow Semantic Versioning. They should reflect the version the application is using.
 # It is recommended to use it with quotes.
 appVersion: "0.0.1"
-
-dependencies:
-  - name: postgreslet-support
-    version: 0.1.0
-    # TODO define repo
-    repository: file://../postgreslet-support
