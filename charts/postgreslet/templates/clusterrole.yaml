@@ -1,0 +1,45 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "postgreslet.roleNamePrefix" . }}-manager-role
+rules:
+- apiGroups:
+  - acid.zalan.do
+  resources:
+  - postgresqls
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - acid.zalan.do
+  resources:
+  - postgresqls/status
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - database.fits.cloud
+  resources:
+  - postgres
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - database.fits.cloud
+  resources:
+  - postgres/status
+  verbs:
+  - get
+  - patch
+  - update

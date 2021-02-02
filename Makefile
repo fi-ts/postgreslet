@@ -145,3 +145,12 @@ create-postgres:
 
 delete-postgres:
 	kubectl --kubeconfig kubeconfig delete -f config/samples/database_v1_postgres.yaml
+
+helm-clean:
+	rm -f charts/postgreslet/Chart.lock
+	rm -f charts/postgreslet/charts/*
+
+helm:
+	helm package charts/postgreslet-support/
+	helm dependency build charts/postgreslet/
+	helm package charts/postgreslet/

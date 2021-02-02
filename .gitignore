@@ -25,3 +25,8 @@ bin
 
 # control-plane kubeconfig file
 *kubeconfig
+
+# helm files
+charts/postgreslet/Chart.lock
+charts/postgreslet/charts/*
+
