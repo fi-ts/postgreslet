@@ -58,7 +58,11 @@ controlplaneKubeconfig: ""
 terminationGracePeriodSeconds: 10
 
 postgreslet:
+  # enableLeaderElection specifies weather leader election should be performed
   enableLeaderElection: false
+  # partitionId specifies which partition this postgreslet is responsable for, postgres resources from other partitions will be ignored
   partitionId: sample-partition
+  # tenant specifies which tenant this postgreslet is responsable for, postgres resources from other tenants will be ignored
   tenant: sample-tenant
+  # metricsAddr defines the listen address of the metrics endpoint
   metricsAddr: ":8080"
