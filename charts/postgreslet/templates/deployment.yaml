@@ -14,7 +14,8 @@ spec:
   template:
     metadata:
       annotations:
-        controlplane-kubeconfig-hash:  {{ sha256sum .Values.controlplaneKubeconfig | trunc 63 | trimSuffix "-" }}
+        checksum/controlplane-kubeconfig:  {{ sha256sum .Values.controlplaneKubeconfig | trunc 63 | trimSuffix "-" }}
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
       {{- with .Values.podAnnotations }}
         {{- toYaml . | nindent 8 }}
       {{- end }}
@@ -38,9 +39,14 @@ spec:
           command:
             - /manager
           args:
-            - --enable-leader-election={{ .Values.postgreslet.enableLeaderElection }}
-            - --partition-id={{ .Values.postgreslet.partitionId }}
-            - --tenant={{ .Values.postgreslet.tenant }}
+            - --metrics-addr-svc-mgr=$(METRICS_ADDR_CTRL_MGR)
+            - --metrics-addr-ctrl-mgr=$(METRICS_ADDR_SVC_MGR)
+            - --enable-leader-election=$(ENABLE_LEADER_ELECTION)
+            - --partition-id=$(PARTITION_ID)
+            - --tenant=$(TENANT)
+          envFrom:
+            - configMapRef:
+                name: {{ include "postgreslet.fullname" . }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts:

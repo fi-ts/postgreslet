@@ -58,3 +58,4 @@ postgreslet:
   enableLeaderElection: false
   partitionId: sample-partition
   tenant: sample-tenant
+  metricsAddr: ":8080"
