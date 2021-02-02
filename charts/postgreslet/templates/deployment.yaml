@@ -14,7 +14,7 @@ spec:
   template:
     metadata:
       annotations:
-        checksum/controlplane-kubeconfig:  {{ sha256sum .Values.controlplaneKubeconfig | trunc 63 | trimSuffix "-" }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
       {{- with .Values.podAnnotations }}
         {{- toYaml . | nindent 8 }}
