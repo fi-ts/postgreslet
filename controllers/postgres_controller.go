@@ -22,17 +22,14 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	firewall "github.com/metal-stack/firewall-controller/api/v1"
 	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
-	"inet.af/netaddr"
 	corev1 "k8s.io/api/core/v1"
-	networkingv1 "k8s.io/api/networking/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	firewall "github.com/metal-stack/firewall-controller/api/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/intstr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -88,6 +85,10 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			return ctrl.Result{}, err
 		}
 
+		if err :=r.deleteCWNP(ctx, instance); err != nil {
+			return ctrl.Result{}, fmt.Errorf("unable to delete `ClusterwideNetworkPolicy` for `Postgres` %v: %w", k, err)
+		}
+		
 		namespace := instance.Spec.ProjectID
 		isIdle, err := r.IsOperatorDeletable(ctx, namespace)
 		if err != nil {
@@ -150,6 +151,9 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	}
 
 	// Update status will be handled by the StatusReconciler, based on the Zalando Status
+	if err:=r.createOrUpdateCWNP(ctx, instance, 12345); err!= nil { // todo: what port?
+		return ctrl.Result{}, fmt.Errorf("unable to create or update `ClusterwideNetworkPolicy`: %W", err)
+	}
 
 	return ctrl.Result{}, nil
 }
@@ -284,45 +288,28 @@ func patchRawZ(out *zalando.Postgresql, in *pg.Postgres) {
 //   k apply -f https://github.com/metal-stack/firewall-controller/config/crd/bases/metal-stack.io_clusterwidenetworkpolicies.yaml
 // TODO overall:
 // - deleteCWNP
-func createCWNP(ctx context.Context, client client.Client, in *pg.Postgres, port int) error {
-	portStr := intstr.FromInt(port)
-	tcp := corev1.ProtocolTCP
-
-	ports := []networkingv1.NetworkPolicyPort{
-		{Port: &portStr, Protocol: &tcp},
-	}
-
-	ipblocks := []networkingv1.IPBlock{}
-	for _, src := range in.Spec.AccessList.SourceRanges {
-		parsedSrc, err := netaddr.ParseIPPrefix(src)
-		if err != nil {
-			return fmt.Errorf("unable to parse sources:%s %w", src, err)
-		}
-		ipblock := networkingv1.IPBlock{
-			CIDR: parsedSrc.String(),
-		}
-		ipblocks = append(ipblocks, ipblock)
-	}
-
-	ingressRules := []firewall.IngressRule{
-		{Ports: ports, From: ipblocks},
-	}
-
-	cp := &firewall.ClusterwideNetworkPolicy{
-		ObjectMeta: metav1.ObjectMeta{
-			// FIXME what is the unique identifier
-			Name:      "allow-to-" + in.ClusterName,
-			Namespace: "firewall",
-		},
-	}
-	_, err := controllerutil.CreateOrUpdate(ctx, client, cp, func() error {
-		cp.Spec.Ingress = ingressRules
-		return nil
-	})
-
+func (r *PostgresReconciler) createOrUpdateCWNP(ctx context.Context, in *pg.Postgres, port int) error {
+	policy, err := in.ToCWNP(port)
 	if err != nil {
-		return fmt.Errorf("unable to deploy clusterwide network policy for database:%s into firewall namespace:%v", in.ClusterName, err)
+		return fmt.Errorf("unable to convert `Postgres` to `ClusterwideNetworkPolicy`: %w", err)
 	}
 
+	key := &firewall.ClusterwideNetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: policy.Name, Namespace: policy.Namespace}}
+	if _, err := controllerutil.CreateOrUpdate(ctx, r.Service, key, func() error {
+		key.Spec.Ingress = policy.Spec.Ingress
+		return nil
+	}); err != nil {
+		return fmt.Errorf("unable to deploy clusterwide network policy for database %s/%s: %w", in.Namespace, in.Name, err)
+	}
+
+	return nil
+}
+
+func (r *PostgresReconciler) deleteCWNP(ctx context.Context, in *pg.Postgres) error {
+	policy :=&firewall.ClusterwideNetworkPolicy{}
+	policy.Name = in.Namespace + "--" + string(in.UID)
+	if err := r.Service.Delete(ctx, policy); err != nil {
+		return fmt.Errorf("unable to delete `ClusterwideNetworkPolicy` %v: %w", policy.Name, err)
+	}
 	return nil
 }

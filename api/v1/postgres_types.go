@@ -17,10 +17,16 @@ limitations under the License.
 package v1
 
 import (
+	"fmt"
 	"time"
 
+	firewall "github.com/metal-stack/firewall-controller/api/v1"
+	"inet.af/netaddr"
+	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -140,6 +146,35 @@ type PostgresList struct {
 // IsBeingDeleted returns true if the deletion-timestamp is set
 func (p *Postgres) IsBeingDeleted() bool {
 	return !p.ObjectMeta.DeletionTimestamp.IsZero()
+}
+
+func (p *Postgres) ToCWNP(port int) (*firewall.ClusterwideNetworkPolicy, error) {
+	portObj := intstr.FromInt(port)
+	tcp := corev1.ProtocolTCP
+	ports := []networkingv1.NetworkPolicyPort{
+		{Port: &portObj, Protocol: &tcp},
+	}
+
+	ipblocks := []networkingv1.IPBlock{}
+	for _, src := range p.Spec.AccessList.SourceRanges {
+		parsedSrc, err := netaddr.ParseIPPrefix(src)
+		if err != nil {
+			return nil, fmt.Errorf("unable to parse source range %s: %w", src, err)
+		}
+		ipblock := networkingv1.IPBlock{
+			CIDR: parsedSrc.String(),
+		}
+		ipblocks = append(ipblocks, ipblock)
+	}
+
+	policy := &firewall.ClusterwideNetworkPolicy{}
+	policy.Namespace = "firewall"
+	policy.Name = p.Spec.ProjectID + "--" + string(p.UID)
+	policy.Spec.Ingress = []firewall.IngressRule{
+		{Ports: ports, From: ipblocks},
+	}
+
+	return policy, nil
 }
 
 func (p *Postgres) ToKey() *types.NamespacedName {
