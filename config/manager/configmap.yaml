@@ -1,0 +1,12 @@
+apiVersion: v1
+data:
+  ENABLE_LEADER_ELECTION: "false"
+  METRICS_ADDR_CTRL_MGR: "0"
+  METRICS_ADDR_SVC_MGR: ":8080"
+  PARTITION_ID: cm-partition
+  TENANT: cm-tenant
+kind: ConfigMap
+metadata:
+  creationTimestamp: null
+  name: controller-manager-configmap
+  namespace: system

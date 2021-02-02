@@ -51,9 +51,14 @@ uninstall: manifests
 	kustomize build config/crd | kubectl --kubeconfig kubeconfig delete -f -
 
 # Deploy controller in the configured Kubernetes cluster in ~/.kube/config
-deploy: manifests
+deploy: manifests secret
 	cd config/manager && kustomize edit set image controller=${IMG}:${VERSION}
 	kustomize build config/default | kubectl apply -f -
+
+# clean up deployed resources in the configured Kubernetes cluster in ~/.kube/config
+cleanup: manifests
+	cd config/manager && kustomize edit set image controller=${IMG}:${VERSION}
+	kustomize build config/default | kubectl delete -f -
 
 # Generate manifests e.g. CRD, RBAC etc.
 manifests: controller-gen
@@ -98,6 +103,18 @@ CONTROLLER_GEN=$(GOBIN)/controller-gen
 else
 CONTROLLER_GEN=$(shell which controller-gen)
 endif
+
+# Todo: Fix two metrics-addr. Not read right now.
+configmap:
+	kubectl create configmap -n system controller-manager-configmap \
+		--from-literal=CONTROLPLANE_KUBECONFIG=kubeconfig \
+		--from-literal=ENABLE_LEADER_ELECTION=false \
+		--from-literal=METRICS_ADDR_CTRL_MGR=8081 \
+		--from-literal=METRICS_ADDR_SVC_MGR=8082 \
+		--from-literal=PARTITION_ID=sample-partition \
+		--from-literal=TENANT=sample-tenant \
+		--dry-run=client -o=yaml \
+		> config/manager/configmap.yaml
 
 svc-postgres-operator-yaml:
 	kubectl apply \
