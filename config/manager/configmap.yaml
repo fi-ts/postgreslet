@@ -3,8 +3,8 @@ data:
   ENABLE_LEADER_ELECTION: "false"
   METRICS_ADDR_CTRL_MGR: "0"
   METRICS_ADDR_SVC_MGR: ":8080"
-  PARTITION_ID: cm-partition
-  TENANT: cm-tenant
+  PARTITION_ID: sample-partition
+  TENANT: sample-tenant
 kind: ConfigMap
 metadata:
   creationTimestamp: null
