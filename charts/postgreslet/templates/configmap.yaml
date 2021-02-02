@@ -8,8 +8,10 @@ data:
 kind: ConfigMap
 metadata:
   name: {{ include "postgreslet.fullname" . }}
+{{- with .Values.podAnnotations }}
   annotations:
-    checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+    {{- toYaml . | nindent 4 }}
+{{- end }}
 {{- with .Values.podAnnotations }}
     {{- toYaml . | nindent 4 }}
 {{- end }}
