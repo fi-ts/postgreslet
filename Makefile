@@ -126,3 +126,6 @@ create-postgres:
 
 delete-postgres:
 	kubectl --kubeconfig kubeconfig delete -f config/samples/database_v1_postgres.yaml
+
+test-cwnp:
+	./hack/test-cwnp.sh

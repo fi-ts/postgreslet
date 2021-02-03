@@ -35,6 +35,7 @@ import (
 	"github.com/fi-ts/postgres-controller/controllers"
 	"github.com/fi-ts/postgres-controller/pkg/crdinstaller"
 	"github.com/fi-ts/postgres-controller/pkg/operatormanager"
+	firewall "github.com/metal-stack/firewall-controller/api/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	// +kubebuilder:scaffold:imports
 )
@@ -48,6 +49,7 @@ func init() {
 	_ = apiextensionsv1.AddToScheme(scheme)
 	_ = clientgoscheme.AddToScheme(scheme)
 	_ = databasev1.AddToScheme(scheme)
+	_ = firewall.AddToScheme(scheme)
 	_ = zalando.AddToScheme(scheme)
 	// +kubebuilder:scaffold:scheme
 }

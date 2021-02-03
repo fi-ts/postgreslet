@@ -85,10 +85,10 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			return ctrl.Result{}, err
 		}
 
-		if err :=r.deleteCWNP(ctx, instance); err != nil {
-			return ctrl.Result{}, fmt.Errorf("unable to delete `ClusterwideNetworkPolicy` for `Postgres` %v: %w", k, err)
+		if err := r.deleteCWNP(ctx, instance); err != nil {
+			return ctrl.Result{}, fmt.Errorf("unable to delete `ClusterwideNetworkPolicy` for instance %v: %w", k, err)
 		}
-		
+
 		namespace := instance.Spec.ProjectID
 		isIdle, err := r.IsOperatorDeletable(ctx, namespace)
 		if err != nil {
@@ -151,7 +151,7 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	}
 
 	// Update status will be handled by the StatusReconciler, based on the Zalando Status
-	if err:=r.createOrUpdateCWNP(ctx, instance, 12345); err!= nil { // todo: what port?
+	if err := r.createOrUpdateCWNP(ctx, instance, 12345); err != nil { // todo: what port?
 		return ctrl.Result{}, fmt.Errorf("unable to create or update `ClusterwideNetworkPolicy`: %W", err)
 	}
 
@@ -247,6 +247,7 @@ func (r *PostgresReconciler) deleteZPostgresql(ctx context.Context, k *types.Nam
 }
 
 func patchRawZ(out *zalando.Postgresql, in *pg.Postgres) {
+	out.Spec.AllowedSourceRanges = in.Spec.AccessList.SourceRanges
 	out.Spec.NumberOfInstances = in.Spec.NumberOfInstances
 
 	// todo: Check if the validation should be performed here.
@@ -288,26 +289,32 @@ func patchRawZ(out *zalando.Postgresql, in *pg.Postgres) {
 //   k apply -f https://github.com/metal-stack/firewall-controller/config/crd/bases/metal-stack.io_clusterwidenetworkpolicies.yaml
 // TODO overall:
 // - deleteCWNP
+
+// todo: Change to `controllerutl.CreateOrPatch`
+// createOrUpdateCWNP will create an ingress firewall rule on the firewall in front of the k8s cluster
+// based on the spec.AccessList.SourceRanges given.
 func (r *PostgresReconciler) createOrUpdateCWNP(ctx context.Context, in *pg.Postgres, port int) error {
 	policy, err := in.ToCWNP(port)
 	if err != nil {
-		return fmt.Errorf("unable to convert `Postgres` to `ClusterwideNetworkPolicy`: %w", err)
+		return fmt.Errorf("unable to convert instance %v to `ClusterwideNetworkPolicy`: %w", in.ToKey(), err)
 	}
 
+	// placeholder of the object with the specified namespaced name
 	key := &firewall.ClusterwideNetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: policy.Name, Namespace: policy.Namespace}}
 	if _, err := controllerutil.CreateOrUpdate(ctx, r.Service, key, func() error {
 		key.Spec.Ingress = policy.Spec.Ingress
 		return nil
 	}); err != nil {
-		return fmt.Errorf("unable to deploy clusterwide network policy for database %s/%s: %w", in.Namespace, in.Name, err)
+		return fmt.Errorf("unable to deploy `ClusterwideNetworkPolicy` for instance %s: %w", in.ToKey(), err)
 	}
 
 	return nil
 }
 
 func (r *PostgresReconciler) deleteCWNP(ctx context.Context, in *pg.Postgres) error {
-	policy :=&firewall.ClusterwideNetworkPolicy{}
-	policy.Name = in.Namespace + "--" + string(in.UID)
+	policy := &firewall.ClusterwideNetworkPolicy{}
+	policy.Namespace = "firewall"
+	policy.Name = in.Spec.ProjectID + "--" + string(in.UID)
 	if err := r.Service.Delete(ctx, policy); err != nil {
 		return fmt.Errorf("unable to delete `ClusterwideNetworkPolicy` %v: %w", policy.Name, err)
 	}
