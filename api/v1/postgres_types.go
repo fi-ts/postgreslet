@@ -164,6 +164,9 @@ func (p *Postgres) ToKey() *types.NamespacedName {
 	}
 }
 
+// Name of the label referencing the owning Postgres resource in the control cluster
+const LabelName string = "postgres.finalizers.database.fits.cloud"
+
 func (p *Postgres) ToZalandoPostgres() *ZalandoPostgres {
 	projectID := p.Spec.ProjectID
 	return &ZalandoPostgres{
@@ -171,6 +174,7 @@ func (p *Postgres) ToZalandoPostgres() *ZalandoPostgres {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      p.Spec.ProjectID + "--" + string(p.UID), // todo: "." used to work but not anymore. Make sure the rule is well-documented.
 			Namespace: projectID,                               // todo: Check if the projectID is too long for zalando operator.
+			Labels:    map[string]string{LabelName: string(p.UID)},
 		},
 		Spec: ZalandoPostgresSpec{
 			MaintenanceWindows: func() []MaintenanceWindow {
