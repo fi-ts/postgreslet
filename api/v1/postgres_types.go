@@ -146,10 +146,7 @@ type PostgresList struct {
 
 // HasSourceRanges returns true if SourceRanges are set
 func (p *Postgres) HasSourceRanges() bool {
-	if p.Spec.AccessList.SourceRanges == nil {
-		return false
-	}
-	return false
+	return p.Spec.AccessList.SourceRanges != nil
 }
 
 // IsBeingDeleted returns true if the deletion-timestamp is set

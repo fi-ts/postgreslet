@@ -82,7 +82,7 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	if instance.IsBeingDeleted() {
 		if instance.HasSourceRanges() {
 			if err := r.deleteCWNP(ctx, instance); err != nil {
-				return ctrl.Result{}, fmt.Errorf("unable to delete corresponing CRD ClusterwideNetworkPolicy: %w", err)
+				return ctrl.Result{}, err
 			}
 			log.Info("corresponding CRD ClusterwideNetworkPolicy deleted")
 		}
@@ -153,9 +153,10 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		log.Info("zalando postgresql updated", "ns/name", k)
 	}
 
+	// todo: what port?
 	// Update status will be handled by the StatusReconciler, based on the Zalando Status
-	if err := r.createOrUpdateCWNP(ctx, instance, 12345); err != nil { // todo: what port?
-		return ctrl.Result{}, fmt.Errorf("unable to create or update `ClusterwideNetworkPolicy`: %W", err)
+	if err := r.createOrUpdateCWNP(ctx, instance, 12345); err != nil {
+		return ctrl.Result{}, fmt.Errorf("unable to create or update corresponding CRD ClusterwideNetworkPolicy: %W", err)
 	}
 
 	return ctrl.Result{}, nil
