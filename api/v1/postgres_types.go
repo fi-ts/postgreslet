@@ -17,6 +17,7 @@ limitations under the License.
 package v1
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -75,7 +76,6 @@ type PostgresSpec struct {
 
 // AccessList defines the type of restrictions to access the database
 type AccessList struct {
-	// +kubebuilder:validation:Required
 	// SourceRanges defines a list of prefixes in CIDR Notation e.g. 1.2.3.0/24 or fdaa::/104
 	SourceRanges []string `json:"sourceRanges,omitempty"`
 }
@@ -144,12 +144,25 @@ type PostgresList struct {
 	Items           []Postgres `json:"items"`
 }
 
+// HasSourceRanges returns true if SourceRanges are set
+func (p *Postgres) HasSourceRanges() bool {
+	if p.Spec.AccessList.SourceRanges == nil {
+		return false
+	}
+	return false
+}
+
 // IsBeingDeleted returns true if the deletion-timestamp is set
 func (p *Postgres) IsBeingDeleted() bool {
 	return !p.ObjectMeta.DeletionTimestamp.IsZero()
 }
 
+// ToCWNP returns CRD ClusterwideNetworkPolic derived from CRD Postgres
 func (p *Postgres) ToCWNP(port int) (*firewall.ClusterwideNetworkPolicy, error) {
+	if !p.HasSourceRanges() {
+		return nil, errors.New(".spec.accessList.sourceRanges not set")
+	}
+
 	portObj := intstr.FromInt(port)
 	tcp := corev1.ProtocolTCP
 	ports := []networkingv1.NetworkPolicyPort{
