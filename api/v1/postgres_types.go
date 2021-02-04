@@ -165,7 +165,7 @@ func (p *Postgres) ToKey() *types.NamespacedName {
 }
 
 // Name of the label referencing the owning Postgres resource in the control cluster
-const LabelName string = "postgres.finalizers.database.fits.cloud"
+const LabelName string = "postgres.database.fits.cloud/uuid"
 
 func (p *Postgres) ToZalandoPostgres() *ZalandoPostgres {
 	projectID := p.Spec.ProjectID
