@@ -26,6 +26,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -71,19 +72,19 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	}
 
 	z := instance.ToZalandoPostgres()
-	// z, err := r.getZPostgresql(ctx, instance, instance.ToZalandoPostgres().Namespace)
 
 	matchingLabels := client.MatchingLabels{pg.LabelName: string(instance.UID)}
+	// TODO use z.Namespace so the calculation of the name is encapsuled in ToZalandoPostgres()?
+	namespace := instance.Spec.ProjectID
 
 	// Delete
 	if instance.IsBeingDeleted() {
 		log.Info("deleting owned zalando postgresql")
 
-		if err := r.deleteZPostgresqlByLabels(ctx, matchingLabels, z.Namespace); err != nil {
+		if err := r.deleteZPostgresqlByLabels(ctx, matchingLabels, namespace); err != nil {
 			return ctrl.Result{}, err
 		}
 
-		namespace := instance.Spec.ProjectID
 		isIdle, err := r.IsOperatorDeletable(ctx, namespace)
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("error while checking if the operator is idle: %v", err)
@@ -120,7 +121,7 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	}
 
 	// Get zalando postgresql and create one if none.
-	rawZ, err := r.getZPostgresql(ctx, matchingLabels, z.Namespace)
+	rawZ, err := r.getZPostgresql(ctx, matchingLabels, namespace)
 	if err != nil {
 		log.Info("unable to fetch zalando postgresql", "error", err)
 		// errors other than `NotFound`
@@ -134,14 +135,15 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 	// Update zalando postgresql.
 	if rawZ.Name != "" {
-		log.Info("updating zalando postgresql")
+		namespacedName := types.NamespacedName{Namespace: rawZ.Namespace, Name: rawZ.Name}
+		log.Info("updating zalando postgresql", "ns/name", namespacedName)
 		patch := client.MergeFrom(rawZ.DeepCopy())
 		patchRawZ(rawZ, instance)
 		if err := r.Service.Patch(ctx, rawZ, patch); err != nil {
-			log.Error(err, "error while updating zalando postgresql ")
+			log.Error(err, "error while updating zalando postgresql", "ns/name", namespacedName)
 			return requeue, err
 		}
-		log.Info("zalando postgresql updated")
+		log.Info("zalando postgresql updated", "ns/name", namespacedName)
 	}
 
 	// Update status will be handled by the StatusReconciler, based on the Zalando Status
@@ -287,8 +289,6 @@ func (r *PostgresReconciler) getZPostgresql(ctx context.Context, matchingLabel c
 }
 
 func (r *PostgresReconciler) getZPostgresqlByLabels(ctx context.Context, matchingLabels client.MatchingLabels, namespace string) ([]zalando.Postgresql, error) {
-
-	//client.MatchingLabels{pg.LabelName: string(owner.UID)}
 
 	zpl := &zalando.PostgresqlList{}
 	opts := []client.ListOption{
