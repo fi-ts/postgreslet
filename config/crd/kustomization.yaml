@@ -3,10 +3,9 @@
 # It should be run by config/default
 resources:
 - bases/database.fits.cloud_postgres.yaml
-- bases/database.fits.cloud_postgresprofiles.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
-patchesStrategicMerge:
+# patchesStrategicMerge:
 # [WEBHOOK] To enable webhook, uncomment all the sections with [WEBHOOK] prefix.
 # patches here are for enabling the conversion webhook for each CRD
 # - patches/webhook_in_postgres.yaml

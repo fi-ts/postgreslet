@@ -60,14 +60,25 @@ type PostgresSpec struct {
 	Tenant string `json:"tenant,omitempty"`
 	// PartitionID the partition where the database is created
 	PartitionID string `json:"partitionID,omitempty"`
+
 	// NumberOfInstances number of replicas
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:default=1
 	NumberOfInstances int32 `json:"numberOfInstances,omitempty"`
+
 	// Version is the version of Postgre-as-a-Service
+	// +kubebuilder:validation:Enum="12";
+	// +kubebuilder:default="12"
 	Version string `json:"version,omitempty"`
+
 	// Size of the database
 	Size *Size `json:"size,omitempty"`
+
+	// todo: add default
 	// Maintenance defines automatic maintenance of the database
 	Maintenance *Maintenance `json:"maintenance,omitempty"`
+
+	// todo: add default
 	// Backup parametes of the database backup
 	Backup *Backup `json:"backup,omitempty"`
 	// AccessList defines access restrictions
@@ -96,7 +107,10 @@ type Size struct {
 	CPU string `json:"cpu,omitempty"`
 	// SharedBuffer of the database
 	SharedBuffer string `json:"sharedBuffer,omitempty"`
+
 	// StorageSize the amount of Storage this database will get
+	// +kubebuilder:default="1Gi"
+	// +kubebuilder:validation:Pattern=^[1-9][0-9]*Gi
 	StorageSize string `json:"storageSize,omitempty"`
 }
 

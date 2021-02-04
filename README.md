@@ -71,3 +71,37 @@ Delete _postgres_ on control-cluster and all the local corresponding resources.
 ```sh
 make delete-postgres
 ```
+
+## Local Helm Development
+
+Delete and recreate all existing kind clusters (optional)
+
+```sh
+kind delete cluster --name ctrl
+kind delete cluster
+kind create cluster --name ctrl --kubeconfig ./kubeconfig --config ctrl-cluster-config
+kind create cluster
+```
+
+Build the charts
+
+```sh
+make helm-clean
+make helm
+```
+
+Prepare the control cluster
+
+```sh
+helm --kubeconfig kubeconfig upgrade --install postgreslet-support postgreslet-support-0.1.0.tgz
+kubectl --kubeconfig kubeconfig get postgres -A
+```
+
+Install the Postgreslet to the service cluster
+
+```sh
+make kind-load-image
+kubectl create namespace postgreslet-system
+helm upgrade --install postgreslet postgreslet-0.1.0.tgz --namespace postgreslet-system --set-file controlplaneKubeconfig=kubeconfig  --set image.tag=latest
+kubectl get po -A --watch
+```

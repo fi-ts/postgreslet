@@ -1,8 +1,10 @@
 
 # Image URL to use all building/pushing image targets
 IMG ?= r.metal-stack.io/extensions/postgreslet
-# Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
-CRD_OPTIONS ?= "crd:trivialVersions=true"
+
+# `crd:crdVersions=v1`: Produce apiextensions.k8s.io/v1 CRD
+# `trivialVersions=true`: Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
+CRD_OPTIONS ?= "crd:crdVersions=v1,trivialVersions=true"
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
@@ -51,9 +53,14 @@ uninstall: manifests
 	kustomize build config/crd | kubectl --kubeconfig kubeconfig delete -f -
 
 # Deploy controller in the configured Kubernetes cluster in ~/.kube/config
-deploy: manifests
+deploy: manifests secret
 	cd config/manager && kustomize edit set image controller=${IMG}:${VERSION}
 	kustomize build config/default | kubectl apply -f -
+
+# clean up deployed resources in the configured Kubernetes cluster in ~/.kube/config
+cleanup: manifests
+	cd config/manager && kustomize edit set image controller=${IMG}:${VERSION}
+	kustomize build config/default | kubectl delete -f -
 
 # Generate manifests e.g. CRD, RBAC etc.
 manifests: controller-gen
@@ -99,6 +106,18 @@ else
 CONTROLLER_GEN=$(shell which controller-gen)
 endif
 
+# Todo: Fix two metrics-addr. Not read right now.
+configmap:
+	kubectl create configmap -n system controller-manager-configmap \
+		--from-literal=CONTROLPLANE_KUBECONFIG=kubeconfig \
+		--from-literal=ENABLE_LEADER_ELECTION=false \
+		--from-literal=METRICS_ADDR_CTRL_MGR=8081 \
+		--from-literal=METRICS_ADDR_SVC_MGR=8082 \
+		--from-literal=PARTITION_ID=sample-partition \
+		--from-literal=TENANT=sample-tenant \
+		--dry-run=client -o=yaml \
+		> config/manager/configmap.yaml
+
 svc-postgres-operator-yaml:
 	kubectl apply \
 	-f $(POSTGRES_OPERATOR_URL)/configmap.yaml \
@@ -126,6 +145,15 @@ create-postgres:
 
 delete-postgres:
 	kubectl --kubeconfig kubeconfig delete -f config/samples/database_v1_postgres.yaml
+
+helm-clean:
+	rm -f charts/postgreslet/Chart.lock
+	rm -f charts/postgreslet/charts/*
+
+helm:
+	helm package charts/postgreslet-support/
+	helm dependency build charts/postgreslet/
+	helm package charts/postgreslet/
 
 test-cwnp:
 	./hack/test-cwnp.sh
