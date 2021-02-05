@@ -7,7 +7,7 @@ require (
 	github.com/metal-stack/firewall-controller v1.0.1
 	github.com/metal-stack/v v1.0.2
 	github.com/onsi/ginkgo v1.14.2
-	github.com/onsi/gomega v1.10.4
+	github.com/onsi/gomega v1.10.5
 	github.com/zalando/postgres-operator v1.5.0
 	inet.af/netaddr v0.0.0-20210115183222-bffc12a571f6
 	k8s.io/api v0.19.4

@@ -213,13 +213,17 @@ func (p *Postgres) ToPeripheralResourceName() string {
 	return p.Spec.ProjectID + "--" + string(p.UID)
 }
 
+// Name of the label referencing the owning Postgres resource in the control cluster
+const LabelName string = "postgres.database.fits.cloud/uuid"
+
 func (p *Postgres) ToZalandoPostgres() *ZalandoPostgres {
 	projectID := p.Spec.ProjectID
 	return &ZalandoPostgres{
 		TypeMeta: ZalandoPostgresTypeMeta,
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      p.ToPeripheralResourceName(),
-			Namespace: projectID, // todo: Check if the projectID is too long for zalando operator.
+			Namespace: projectID,                               // todo: Check if the projectID is too long for zalando operator.
+			Labels:    map[string]string{LabelName: string(p.UID)},
 		},
 		Spec: ZalandoPostgresSpec{
 			MaintenanceWindows: func() []MaintenanceWindow {
