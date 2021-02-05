@@ -74,8 +74,8 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	z := instance.ToZalandoPostgres()
 
 	matchingLabels := client.MatchingLabels{pg.LabelName: string(instance.UID)}
-	// TODO use z.Namespace so the calculation of the name is encapsuled in ToZalandoPostgres()?
-	namespace := instance.Spec.ProjectID
+	// we use z.Namespace so the calculation of the name is encapsuled in ToZalandoPostgres()
+	namespace := z.Namespace
 
 	// Delete
 	if instance.IsBeingDeleted() {
@@ -281,9 +281,9 @@ func (r *PostgresReconciler) getZPostgresql(ctx context.Context, matchingLabel c
 		return nil, err
 	}
 
-	if len(items) > 1 {
-		return nil, fmt.Errorf("error while fetching zalando postgresql: Not unique, got %d results", len(items))
-	} else if len(items) < 1 {
+	if len := len(items); len > 1 {
+		return nil, fmt.Errorf("error while fetching zalando postgresql: Not unique, got %d results", len)
+	} else if len < 1 {
 		return nil, errors.NewNotFound(zalando.Resource("postgresql"), "")
 	}
 
