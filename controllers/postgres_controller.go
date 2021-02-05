@@ -159,7 +159,8 @@ func (r *PostgresReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 func (r *PostgresReconciler) createZalandoPostgresql(ctx context.Context, z *pg.ZalandoPostgres) (ctrl.Result, error) {
-	log := r.Log.WithValues("zalando postgresql", z.ToKey())
+	namespacedName := types.NamespacedName{Namespace: z.Namespace, Name: z.Name}
+	log := r.Log.WithValues("ns/name", namespacedName)
 
 	// Make sure the namespace exists in the worker-cluster.
 	ns := z.Namespace
