@@ -274,6 +274,7 @@ func patchRawZ(out *zalando.Postgresql, in *pg.Postgres) {
 	// todo: in.Spec.Backup, in.Spec.AccessList
 }
 
+// Returns *only one* Zalndo Postgresql resource with the given label, returns an error if not unique.
 func (r *PostgresReconciler) getZPostgresql(ctx context.Context, matchingLabel client.MatchingLabels, namespace string) (*zalando.Postgresql, error) {
 	items, err := r.getZPostgresqlByLabels(ctx, matchingLabel, namespace)
 	if err != nil {
@@ -289,6 +290,7 @@ func (r *PostgresReconciler) getZPostgresql(ctx context.Context, matchingLabel c
 	return &items[0], nil
 }
 
+// Fetches all the Zalando Postgreql resources from the service cluster that have the given labels attached.
 func (r *PostgresReconciler) getZPostgresqlByLabels(ctx context.Context, matchingLabels client.MatchingLabels, namespace string) ([]zalando.Postgresql, error) {
 
 	zpl := &zalando.PostgresqlList{}
