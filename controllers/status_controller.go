@@ -19,7 +19,6 @@ package controllers
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -67,7 +66,7 @@ func (r *StatusReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		return ctrl.Result{}, err
 	}
 
-	derivedOwnerUID, err := deriveOwnerData(instance.Name)
+	derivedOwnerUID, err := deriveOwnerData(instance)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -116,11 +115,12 @@ func (r *StatusReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func deriveOwnerData(instanceName string) (types.UID, error) {
-	result := strings.SplitN(instanceName, "--", 2)
-	if len(result) < 2 {
+// Extract the UID of the owner object by reading the value of a certain label
+func deriveOwnerData(instance *zalando.Postgresql) (types.UID, error) {
+	value, ok := instance.ObjectMeta.Labels[pg.LabelName]
+	if !ok {
 		return "", fmt.Errorf("Could not derive owner reference")
 	}
-	ownerUID := types.UID(result[1])
+	ownerUID := types.UID(value)
 	return ownerUID, nil
 }
