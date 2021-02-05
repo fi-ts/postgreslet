@@ -80,12 +80,10 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 	// Delete
 	if instance.IsBeingDeleted() {
-		if instance.HasSourceRanges() {
-			if err := r.deleteCWNP(ctx, instance); err != nil {
-				return ctrl.Result{}, err
-			}
-			log.Info("corresponding CRD ClusterwideNetworkPolicy deleted")
+		if err := r.deleteCWNP(ctx, instance); client.IgnoreNotFound(err) != nil { // todo: remove ignorenotfound
+			return ctrl.Result{}, err
 		}
+		log.Info("corresponding CRD ClusterwideNetworkPolicy deleted")
 
 		log.Info("deleting owned zalando postgresql")
 		if err := r.deleteZPostgresql(ctx, k); err != nil {
@@ -153,9 +151,9 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		log.Info("zalando postgresql updated", "ns/name", k)
 	}
 
-	// todo: what port?
+	// todo: Check the port. The default port of postgres is used.
 	// Update status will be handled by the StatusReconciler, based on the Zalando Status
-	if err := r.createOrUpdateCWNP(ctx, instance, 12345); err != nil {
+	if err := r.createOrUpdateCWNP(ctx, instance, 5432); err != nil {
 		return ctrl.Result{}, fmt.Errorf("unable to create or update corresponding CRD ClusterwideNetworkPolicy: %W", err)
 	}
 
@@ -251,7 +249,10 @@ func (r *PostgresReconciler) deleteZPostgresql(ctx context.Context, k *types.Nam
 }
 
 func patchRawZ(out *zalando.Postgresql, in *pg.Postgres) {
-	out.Spec.AllowedSourceRanges = in.Spec.AccessList.SourceRanges
+	if in.HasSourceRanges() {
+		out.Spec.AllowedSourceRanges = in.Spec.AccessList.SourceRanges
+	}
+
 	out.Spec.NumberOfInstances = in.Spec.NumberOfInstances
 
 	// todo: Check if the validation should be performed here.
@@ -309,7 +310,7 @@ func (r *PostgresReconciler) createOrUpdateCWNP(ctx context.Context, in *pg.Post
 func (r *PostgresReconciler) deleteCWNP(ctx context.Context, in *pg.Postgres) error {
 	policy := &firewall.ClusterwideNetworkPolicy{}
 	policy.Namespace = "firewall"
-	policy.Name = in.Spec.ProjectID + "--" + string(in.UID)
+	policy.Name = in.ToPeripheralResourceName()
 	if err := r.Service.Delete(ctx, policy); err != nil {
 		return fmt.Errorf("unable to delete CRD ClusterwideNetworkPolicy %v: %w", policy.Name, err)
 	}

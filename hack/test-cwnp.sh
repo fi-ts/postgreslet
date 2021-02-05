@@ -1,11 +1,5 @@
 #!/bin/bash
 
-# Create ns where all CRD ClusterwideNetworkPolicy reside
-kubectl create ns firewall
-
-# Apply CRD ClusterwideNetworkPolicy to local service-cluster
-kubectl apply -f https://raw.githubusercontent.com/metal-stack/firewall-controller/master/config/crd/bases/metal-stack.io_clusterwidenetworkpolicies.yaml
-
 # Apply CRD Postgres to control-plane-cluster corresponding to kubeconfig
 kubectl --kubeconfig kubeconfig apply -f config/samples/_test_cwnp.yaml
 
@@ -52,6 +46,3 @@ while kubectl get clusterwidenetworkpolicy -n firewall "$POLICY_NAME" > /dev/nul
     sleep 1s
 done
 echo 'CRD ClusterwideNetworkPolicy deletion test passed'
-
-# Clean up
-kubectl delete ns firewall

@@ -9,9 +9,6 @@ metadata:
   namespace: database
   name: sample-name-a
 spec:
-  accessList:
-    sourceRanges:
-    - 1.2.3.4/24
   backup:
     s3BucketURL: ""
   numberOfInstances: 2

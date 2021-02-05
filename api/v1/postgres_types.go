@@ -17,7 +17,6 @@ limitations under the License.
 package v1
 
 import (
-	"errors"
 	"fmt"
 	"time"
 
@@ -160,7 +159,7 @@ type PostgresList struct {
 
 // HasSourceRanges returns true if SourceRanges are set
 func (p *Postgres) HasSourceRanges() bool {
-	return p.Spec.AccessList.SourceRanges != nil
+	return p.Spec.AccessList != nil && p.Spec.AccessList.SourceRanges != nil
 }
 
 // IsBeingDeleted returns true if the deletion-timestamp is set
@@ -168,33 +167,34 @@ func (p *Postgres) IsBeingDeleted() bool {
 	return !p.ObjectMeta.DeletionTimestamp.IsZero()
 }
 
-// ToCWNP returns CRD ClusterwideNetworkPolic derived from CRD Postgres
+// ToCWNP returns CRD ClusterwideNetworkPolicy derived from CRD Postgres
 func (p *Postgres) ToCWNP(port int) (*firewall.ClusterwideNetworkPolicy, error) {
-	if !p.HasSourceRanges() {
-		return nil, errors.New(".spec.accessList.sourceRanges not set")
-	}
-
 	portObj := intstr.FromInt(port)
 	tcp := corev1.ProtocolTCP
 	ports := []networkingv1.NetworkPolicyPort{
 		{Port: &portObj, Protocol: &tcp},
 	}
 
+	// When SourceRanges of Postgres aren't set, ipblocks will be left blank,
+	// which implies denying all accecces.
 	ipblocks := []networkingv1.IPBlock{}
-	for _, src := range p.Spec.AccessList.SourceRanges {
-		parsedSrc, err := netaddr.ParseIPPrefix(src)
-		if err != nil {
-			return nil, fmt.Errorf("unable to parse source range %s: %w", src, err)
+	if p.HasSourceRanges() {
+		for _, src := range p.Spec.AccessList.SourceRanges {
+			parsedSrc, err := netaddr.ParseIPPrefix(src)
+			if err != nil {
+				return nil, fmt.Errorf("unable to parse source range %s: %w", src, err)
+			}
+			ipblock := networkingv1.IPBlock{
+				CIDR: parsedSrc.String(),
+			}
+			ipblocks = append(ipblocks, ipblock)
 		}
-		ipblock := networkingv1.IPBlock{
-			CIDR: parsedSrc.String(),
-		}
-		ipblocks = append(ipblocks, ipblock)
 	}
 
 	policy := &firewall.ClusterwideNetworkPolicy{}
+	// todo: Use the exported const.
 	policy.Namespace = "firewall"
-	policy.Name = p.Spec.ProjectID + "--" + string(p.UID)
+	policy.Name = p.ToPeripheralResourceName()
 	policy.Spec.Ingress = []firewall.IngressRule{
 		{Ports: ports, From: ipblocks},
 	}
@@ -209,13 +209,17 @@ func (p *Postgres) ToKey() *types.NamespacedName {
 	}
 }
 
+func (p *Postgres) ToPeripheralResourceName() string {
+	return p.Spec.ProjectID + "--" + string(p.UID)
+}
+
 func (p *Postgres) ToZalandoPostgres() *ZalandoPostgres {
 	projectID := p.Spec.ProjectID
 	return &ZalandoPostgres{
 		TypeMeta: ZalandoPostgresTypeMeta,
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      p.Spec.ProjectID + "--" + string(p.UID), // todo: "." used to work but not anymore. Make sure the rule is well-documented.
-			Namespace: projectID,                               // todo: Check if the projectID is too long for zalando operator.
+			Name:      p.ToPeripheralResourceName(),
+			Namespace: projectID, // todo: Check if the projectID is too long for zalando operator.
 		},
 		Spec: ZalandoPostgresSpec{
 			MaintenanceWindows: func() []MaintenanceWindow {

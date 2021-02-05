@@ -41,7 +41,7 @@ manager: generate fmt vet
 	-o bin/manager main.go
 
 # Run against the configured Kubernetes cluster in ~/.kube/config
-run: generate fmt vet manifests
+run: generate fmt vet manifests install-crd-cwnp
 	go run ./main.go -partition-id sample-partition -tenant sample-tenant -controlplane-kubeconfig "./kubeconfig"
 
 # Install CRDs into a cluster
@@ -53,7 +53,7 @@ uninstall: manifests
 	kustomize build config/crd | kubectl --kubeconfig kubeconfig delete -f -
 
 # Deploy controller in the configured Kubernetes cluster in ~/.kube/config
-deploy: manifests secret
+deploy: install-crd-cwnp manifests secret kind-load-image
 	cd config/manager && kustomize edit set image controller=${IMG}:${VERSION}
 	kustomize build config/default | kubectl apply -f -
 
@@ -157,3 +157,13 @@ helm:
 
 test-cwnp:
 	./hack/test-cwnp.sh
+
+install-crd-cwnp:
+	# Apply CRD ClusterwideNetworkPolicy to local service-cluster
+	kubectl apply -f https://raw.githubusercontent.com/metal-stack/firewall-controller/master/config/crd/bases/metal-stack.io_clusterwidenetworkpolicies.yaml
+	# Create ns where all firewall related CRD ClusterwideNetworkPolicy reside
+	kubectl create ns firewall
+
+uninstall-crd-cwnp:
+	kubectl delete ns firewall
+	kubectl delete -f https://raw.githubusercontent.com/metal-stack/firewall-controller/master/config/crd/bases/metal-stack.io_clusterwidenetworkpolicies.yaml
