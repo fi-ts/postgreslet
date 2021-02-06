@@ -159,10 +159,8 @@ test-cwnp:
 	./hack/test-cwnp.sh
 
 install-crd-cwnp:
-	# Apply CRD ClusterwideNetworkPolicy to local service-cluster
 	kubectl apply -f https://raw.githubusercontent.com/metal-stack/firewall-controller/master/config/crd/bases/metal-stack.io_clusterwidenetworkpolicies.yaml
-	# Create ns where all firewall related CRD ClusterwideNetworkPolicy reside
-	kubectl create ns firewall
+	kubectl create ns firewall --dry-run=client --save-config -o yaml | kubectl apply -f -
 
 uninstall-crd-cwnp:
 	kubectl delete ns firewall
