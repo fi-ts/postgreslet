@@ -165,6 +165,8 @@ func (m *OperatorManager) UninstallOperator(ctx context.Context, namespace strin
 		}
 	}
 
+	// todo: delete namespace
+
 	m.Log.Info("operator deleted")
 	return nil
 }

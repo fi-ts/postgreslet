@@ -14,11 +14,15 @@ import (
 	"github.com/go-logr/logr"
 	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
 	corev1 "k8s.io/api/core/v1"
+
+	firewall "github.com/metal-stack/firewall-controller/api/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	pg "github.com/fi-ts/postgres-controller/api/v1"
 	"github.com/fi-ts/postgres-controller/pkg/operatormanager"
@@ -69,6 +73,11 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 	// Delete
 	if instance.IsBeingDeleted() {
+		if err := r.deleteCWNP(ctx, instance); client.IgnoreNotFound(err) != nil { // todo: remove ignorenotfound
+			return ctrl.Result{}, err
+		}
+		log.Info("corresponding CRD ClusterwideNetworkPolicy deleted")
+
 		log.Info("deleting owned zalando postgresql")
 
 		if err := r.deleteZPostgresqlByLabels(ctx, matchingLabels, namespace); err != nil {
@@ -136,7 +145,11 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		log.Info("zalando postgresql updated", "ns/name", namespacedName)
 	}
 
+	// todo: Check the port. The default port of postgres is used.
 	// Update status will be handled by the StatusReconciler, based on the Zalando Status
+	if err := r.createOrUpdateCWNP(ctx, instance, 5432); err != nil {
+		return ctrl.Result{}, fmt.Errorf("unable to create or update corresponding CRD ClusterwideNetworkPolicy: %W", err)
+	}
 
 	return ctrl.Result{}, nil
 }
@@ -231,6 +244,10 @@ func (r *PostgresReconciler) deleteZPostgresqlByLabels(ctx context.Context, matc
 }
 
 func patchRawZ(out *zalando.Postgresql, in *pg.Postgres) {
+	if in.HasSourceRanges() {
+		out.Spec.AllowedSourceRanges = in.Spec.AccessList.SourceRanges
+	}
+
 	out.Spec.NumberOfInstances = in.Spec.NumberOfInstances
 
 	// todo: Check if the validation should be performed here.
@@ -261,7 +278,38 @@ func patchRawZ(out *zalando.Postgresql, in *pg.Postgres) {
 		}
 	}()
 
-	// todo: in.Spec.Backup, in.Spec.AccessList
+	// todo: in.Spec.Backup
+}
+
+// todo: Change to `controllerutl.CreateOrPatch`
+// createOrUpdateCWNP will create an ingress firewall rule on the firewall in front of the k8s cluster
+// based on the spec.AccessList.SourceRanges given.
+func (r *PostgresReconciler) createOrUpdateCWNP(ctx context.Context, in *pg.Postgres, port int) error {
+	policy, err := in.ToCWNP(port)
+	if err != nil {
+		return fmt.Errorf("unable to convert instance to CRD ClusterwideNetworkPolicy: %w", err)
+	}
+
+	// placeholder of the object with the specified namespaced name
+	key := &firewall.ClusterwideNetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: policy.Name, Namespace: policy.Namespace}}
+	if _, err := controllerutil.CreateOrUpdate(ctx, r.Service, key, func() error {
+		key.Spec.Ingress = policy.Spec.Ingress
+		return nil
+	}); err != nil {
+		return fmt.Errorf("unable to deploy CRD ClusterwideNetworkPolicy: %w", err)
+	}
+
+	return nil
+}
+
+func (r *PostgresReconciler) deleteCWNP(ctx context.Context, in *pg.Postgres) error {
+	policy := &firewall.ClusterwideNetworkPolicy{}
+	policy.Namespace = "firewall"
+	policy.Name = in.ToPeripheralResourceName()
+	if err := r.Service.Delete(ctx, policy); err != nil {
+		return fmt.Errorf("unable to delete CRD ClusterwideNetworkPolicy %v: %w", policy.Name, err)
+	}
+	return nil
 }
 
 // Returns *only one* Zalndo Postgresql resource with the given label, returns an error if not unique.

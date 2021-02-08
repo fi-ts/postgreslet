@@ -7,10 +7,16 @@
 package v1
 
 import (
+	"fmt"
 	"time"
 
+	firewall "github.com/metal-stack/firewall-controller/api/v1"
+	"inet.af/netaddr"
+	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -70,8 +76,7 @@ type PostgresSpec struct {
 
 // AccessList defines the type of restrictions to access the database
 type AccessList struct {
-	// SourceRanges defines a list of prefixes in CIDR Notation e.g. 1.2.3.0/24
-	// FIXME implement validation if source is a parsable CIDR
+	// SourceRanges defines a list of prefixes in CIDR Notation e.g. 1.2.3.0/24 or fdaa::/104
 	SourceRanges []string `json:"sourceRanges,omitempty"`
 }
 
@@ -142,9 +147,49 @@ type PostgresList struct {
 	Items           []Postgres `json:"items"`
 }
 
+// HasSourceRanges returns true if SourceRanges are set
+func (p *Postgres) HasSourceRanges() bool {
+	return p.Spec.AccessList != nil && p.Spec.AccessList.SourceRanges != nil
+}
+
 // IsBeingDeleted returns true if the deletion-timestamp is set
 func (p *Postgres) IsBeingDeleted() bool {
 	return !p.ObjectMeta.DeletionTimestamp.IsZero()
+}
+
+// ToCWNP returns CRD ClusterwideNetworkPolicy derived from CRD Postgres
+func (p *Postgres) ToCWNP(port int) (*firewall.ClusterwideNetworkPolicy, error) {
+	portObj := intstr.FromInt(port)
+	tcp := corev1.ProtocolTCP
+	ports := []networkingv1.NetworkPolicyPort{
+		{Port: &portObj, Protocol: &tcp},
+	}
+
+	// When SourceRanges of Postgres aren't set, ipblocks will be left blank,
+	// which implies denying all accecces.
+	ipblocks := []networkingv1.IPBlock{}
+	if p.HasSourceRanges() {
+		for _, src := range p.Spec.AccessList.SourceRanges {
+			parsedSrc, err := netaddr.ParseIPPrefix(src)
+			if err != nil {
+				return nil, fmt.Errorf("unable to parse source range %s: %w", src, err)
+			}
+			ipblock := networkingv1.IPBlock{
+				CIDR: parsedSrc.String(),
+			}
+			ipblocks = append(ipblocks, ipblock)
+		}
+	}
+
+	policy := &firewall.ClusterwideNetworkPolicy{}
+	// todo: Use the exported const.
+	policy.Namespace = "firewall"
+	policy.Name = p.ToPeripheralResourceName()
+	policy.Spec.Ingress = []firewall.IngressRule{
+		{Ports: ports, From: ipblocks},
+	}
+
+	return policy, nil
 }
 
 func (p *Postgres) ToKey() *types.NamespacedName {
@@ -152,6 +197,10 @@ func (p *Postgres) ToKey() *types.NamespacedName {
 		Namespace: p.Namespace,
 		Name:      p.Name,
 	}
+}
+
+func (p *Postgres) ToPeripheralResourceName() string {
+	return p.Spec.ProjectID + "--" + string(p.UID)
 }
 
 // Name of the label referencing the owning Postgres resource in the control cluster
@@ -162,7 +211,7 @@ func (p *Postgres) ToZalandoPostgres() *ZalandoPostgres {
 	return &ZalandoPostgres{
 		TypeMeta: ZalandoPostgresTypeMeta,
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      p.Spec.ProjectID + "--" + string(p.UID), // todo: "." used to work but not anymore. Make sure the rule is well-documented.
+			Name:      p.ToPeripheralResourceName(),
 			Namespace: projectID,                               // todo: Check if the projectID is too long for zalando operator.
 			Labels:    map[string]string{LabelName: string(p.UID)},
 		},

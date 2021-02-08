@@ -9,22 +9,6 @@ metadata:
   namespace: database
   name: sample-name-a
 spec:
-  backup:
-    s3BucketURL: ""
-  numberOfInstances: 2
-  partitionID: sample-partition
-  projectID: projectid-a
-  size:
-    storageSize: 1Gi
-  tenant: sample-tenant
-  version: "12"
----
-apiVersion: database.fits.cloud/v1
-kind: Postgres
-metadata:
-  namespace: database
-  name: sample-name-b
-spec:
   accessList:
     sourceRanges:
     - 1.2.3.4/24
@@ -32,7 +16,7 @@ spec:
     s3BucketURL: ""
   numberOfInstances: 2
   partitionID: sample-partition
-  projectID: projectid-b
+  projectID: projectid-a
   size:
     storageSize: 1Gi
   tenant: sample-tenant

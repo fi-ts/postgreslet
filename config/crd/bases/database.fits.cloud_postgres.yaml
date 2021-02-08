@@ -48,8 +48,7 @@ spec:
                 properties:
                   sourceRanges:
                     description: SourceRanges defines a list of prefixes in CIDR Notation
-                      e.g. 1.2.3.0/24 FIXME implement validation if source is a parsable
-                      CIDR
+                      e.g. 1.2.3.0/24 or fdaa::/104
                     items:
                       type: string
                     type: array
