@@ -1,5 +1,5 @@
 domain: fits.cloud
-repo: github.com/fi-ts/postgres-controller
+repo: github.com/fi-ts/postgreslet
 resources:
 - group: database
   kind: Postgres

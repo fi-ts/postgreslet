@@ -1,4 +1,4 @@
-module github.com/fi-ts/postgres-controller
+module github.com/fi-ts/postgreslet
 
 go 1.15
 

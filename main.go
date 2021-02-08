@@ -21,10 +21,10 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	databasev1 "github.com/fi-ts/postgres-controller/api/v1"
-	"github.com/fi-ts/postgres-controller/controllers"
-	"github.com/fi-ts/postgres-controller/pkg/crdinstaller"
-	"github.com/fi-ts/postgres-controller/pkg/operatormanager"
+	databasev1 "github.com/fi-ts/postgreslet/api/v1"
+	"github.com/fi-ts/postgreslet/controllers"
+	"github.com/fi-ts/postgreslet/pkg/crdinstaller"
+	"github.com/fi-ts/postgreslet/pkg/operatormanager"
 	firewall "github.com/metal-stack/firewall-controller/api/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	// +kubebuilder:scaffold:imports

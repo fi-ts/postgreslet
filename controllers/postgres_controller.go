@@ -24,8 +24,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	pg "github.com/fi-ts/postgres-controller/api/v1"
-	"github.com/fi-ts/postgres-controller/pkg/operatormanager"
+	pg "github.com/fi-ts/postgreslet/api/v1"
+	"github.com/fi-ts/postgreslet/pkg/operatormanager"
 )
 
 // requeue defines in how many seconds a requeue should happen

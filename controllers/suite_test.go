@@ -20,7 +20,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	databasev1 "github.com/fi-ts/postgres-controller/api/v1"
+	databasev1 "github.com/fi-ts/postgreslet/api/v1"
 	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
 	// +kubebuilder:scaffold:imports
 )
