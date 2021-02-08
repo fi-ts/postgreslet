@@ -1,0 +1,33 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "postgreslet-support.roleNamePrefix" . }}-readonly
+rules:
+- apiGroups:
+  - "database.fits.cloud"
+  resources:
+  - postgres
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - "database.fits.cloud"
+  resources:
+  - postgres/status
+  verbs:
+  - get
+  - update
+  - patch
+- apiGroups:
+  - "metal-stack.io"
+  resources:
+  - clusterwidenetworkpolicies
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
