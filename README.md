@@ -1,4 +1,4 @@
-# postgres-controller
+# postgreslet
 
 A small controller which acts as a bridge between the zalando-postgres-operator and our postgres Resource.
 

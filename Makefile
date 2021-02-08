@@ -131,7 +131,7 @@ crd-postgresql-yaml:
 
 secret:
 	@{ \
-	NS="postgres-controller-system" ;\
+	NS="postgreslet-system" ;\
 	SECRET_DIR="postgreslet-secret" ;\
 	kubectl create ns $$NS --dry-run=client --save-config -o yaml | kubectl apply -f - ;\
 	if [ -d $$SECRET_DIR ]; then rm -fr $$SECRET_DIR; fi ;\
