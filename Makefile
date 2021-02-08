@@ -1,6 +1,6 @@
 
 # Image URL to use all building/pushing image targets
-IMG ?= r.metal-stack.io/extensions/postgreslet
+IMG ?= r.metal-stack.io/postgreslet
 
 # `crd:crdVersions=v1`: Produce apiextensions.k8s.io/v1 CRD
 # `trivialVersions=true`: Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
