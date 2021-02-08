@@ -24,7 +24,7 @@ Newly introduced DBMS-specific (or, more specifically, DBMS-operator specific) a
 
 ### postgres-operator
 
-Existing operator that does the heavy lifting, [implemented and maintained by Zalando](https://github.com/zalando/postgres-operator/). Watches for custom resources created/updated by our `postgres-controller`. Probably one instance per project and service cluster (due to restrictions in the configuration of the backup storage backend).
+Existing operator that does the heavy lifting, [implemented and maintained by Zalando](https://github.com/zalando/postgres-operator/). Watches for custom resources created/updated by our `postgreslet`. Probably one instance per project and service cluster (due to restrictions in the configuration of the backup storage backend).
 
 ## CLI mock
 
@@ -333,6 +333,6 @@ fits    cd4eac58-46a5-4a31-b59f-2ec207baa817    fra-equ01       pg   my-db   124
   * s3-api
   * accounting-api
   * database-api
-  * postgres-controller
+  * postgreslet
   * postgres-operator
   

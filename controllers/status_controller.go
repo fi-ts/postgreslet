@@ -19,7 +19,7 @@ import (
 
 	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
 
-	pg "github.com/fi-ts/postgres-controller/api/v1"
+	pg "github.com/fi-ts/postgreslet/api/v1"
 )
 
 // StatusReconciler reconciles a Postgresql object
