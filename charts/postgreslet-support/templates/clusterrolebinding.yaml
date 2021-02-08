@@ -1,0 +1,12 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "postgreslet-support.roleName" . }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "postgreslet-support.roleName" . }}
+subjects:
+- kind: ServiceAccount
+  name: {{ include "postgreslet-support.serviceAccountName" . }}
+  namespace: {{ .Release.Namespace }}
