@@ -53,7 +53,7 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{/*
 Create the prefix to use in (cluster)role names and bindings
 */}}
-{{- define "postgreslet-support.roleNamePrefix" -}}
+{{- define "postgreslet-support.roleName" -}}
 {{- if .Values.serviceAccount.create }}
 {{- default (include "postgreslet-support.fullname" .) .Values.serviceAccount.roleNamePrefix }}
 {{- else }}
