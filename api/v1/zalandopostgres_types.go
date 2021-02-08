@@ -1,3 +1,8 @@
+/*
+/ SPDX-FileCopyrightText: 2021 Finanz Informatik Technologie Services GmbHs
+/
+/ SPDX-License-Identifier: AGPL-1.0-only
+*/
 package v1
 
 import (
