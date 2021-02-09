@@ -251,14 +251,6 @@ items:
     - podsecuritypolicies
     verbs:
     - use
-  - apiGroups:
-    - policy
-    resources:
-    - podsecuritypolicies
-    resourceNames:
-    - postgres-operator-psp
-    verbs:
-    - use
 - apiVersion: rbac.authorization.k8s.io/v1
   kind: ClusterRoleBinding
   metadata:
@@ -315,6 +307,7 @@ items:
     - extensions
     resourceNames:
     - privileged
+    - postgres-operator-psp
     resources:
     - podsecuritypolicies
     verbs:
