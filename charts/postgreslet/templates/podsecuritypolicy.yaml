@@ -1,0 +1,21 @@
+apiVersion: policy/v1beta1
+kind: PodSecurityPolicy
+metadata:
+labels:
+name: postgres-operator-psp
+spec:
+allowPrivilegeEscalation: true
+fsGroup:
+    rule: RunAsAny
+runAsUser:
+    rule: RunAsAny
+seLinux:
+    rule: RunAsAny
+supplementalGroups:
+    rule: RunAsAny
+volumes:
+- hostPath
+- secret
+- persistentVolumeClaim
+- configMap
+- emptyDir
