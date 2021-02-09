@@ -183,7 +183,7 @@ func (p *Postgres) ToCWNP(port int) (*firewall.ClusterwideNetworkPolicy, error) 
 
 	policy := &firewall.ClusterwideNetworkPolicy{}
 	// todo: Use the exported const.
-	policy.Namespace = "firewall"
+	policy.Namespace = firewall.ClusterwideNetworkPolicyNamespace
 	policy.Name = p.ToPeripheralResourceName()
 	policy.Spec.Ingress = []firewall.IngressRule{
 		{Ports: ports, From: ipblocks},
@@ -212,7 +212,7 @@ func (p *Postgres) ToZalandoPostgres() *ZalandoPostgres {
 		TypeMeta: ZalandoPostgresTypeMeta,
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      p.ToPeripheralResourceName(),
-			Namespace: projectID,                               // todo: Check if the projectID is too long for zalando operator.
+			Namespace: projectID, // todo: Check if the projectID is too long for zalando operator.
 			Labels:    map[string]string{LabelName: string(p.UID)},
 		},
 		Spec: ZalandoPostgresSpec{
