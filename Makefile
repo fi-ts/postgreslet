@@ -1,6 +1,6 @@
 
 # Image URL to use all building/pushing image targets
-IMG ?= r.metal-stack.io/extensions/postgreslet
+IMG ?= r.metal-stack.io/postgreslet
 
 # `crd:crdVersions=v1`: Produce apiextensions.k8s.io/v1 CRD
 # `trivialVersions=true`: Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
@@ -131,7 +131,7 @@ crd-postgresql-yaml:
 
 secret:
 	@{ \
-	NS="postgres-controller-system" ;\
+	NS="postgreslet-system" ;\
 	SECRET_DIR="postgreslet-secret" ;\
 	kubectl create ns $$NS --dry-run=client --save-config -o yaml | kubectl apply -f - ;\
 	if [ -d $$SECRET_DIR ]; then rm -fr $$SECRET_DIR; fi ;\
