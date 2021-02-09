@@ -199,6 +199,41 @@ func (p *Postgres) ToKey() *types.NamespacedName {
 	}
 }
 
+func (p *Postgres) ToSvcLB(lbIP string, lbPort int32) *corev1.Service {
+	lb := &corev1.Service{}
+	lb.Spec.Type = "LoadBalancer"
+
+	lb.Annotations["metallb.universe.tf/allow-shared-ip"] = "spilo"
+
+	lb.Namespace = p.Spec.ProjectID
+	lb.Name = p.ToPeripheralResourceName()
+	lb.SetLabels(map[string]string{
+		"application":  "spilo",
+		"cluster-name": lb.Name,
+		"spilo-role":   "master",
+		"team":         lb.Namespace,
+	})
+
+	// svc.Spec.LoadBalancerSourceRanges // todo: Do we need to set this?
+
+	port := corev1.ServicePort{}
+	port.Name = "postgresql"
+	port.Port = lbPort
+	port.Protocol = corev1.ProtocolTCP
+	port.TargetPort = intstr.FromInt(5432)
+	lb.Spec.Ports[0] = port
+
+	lb.Spec.Selector = map[string]string{
+		"application":  "spilo",
+		"cluster-name": lb.Name,
+		"spilo-role":   "master",
+	}
+
+	lb.Spec.LoadBalancerIP = lbIP
+
+	return lb
+}
+
 func (p *Postgres) ToPeripheralResourceName() string {
 	return p.Spec.ProjectID + "--" + string(p.UID)
 }
