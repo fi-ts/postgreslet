@@ -252,7 +252,7 @@ items:
     verbs:
     - use
   - apiGroups:
-    - extensions
+    - policy
     resources:
     - podsecuritypolicies
     resourceNames:
