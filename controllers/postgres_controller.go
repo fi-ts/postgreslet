@@ -304,7 +304,7 @@ func (r *PostgresReconciler) createOrUpdateCWNP(ctx context.Context, in *pg.Post
 
 func (r *PostgresReconciler) deleteCWNP(ctx context.Context, in *pg.Postgres) error {
 	policy := &firewall.ClusterwideNetworkPolicy{}
-	policy.Namespace = "firewall"
+	policy.Namespace = firewall.ClusterwideNetworkPolicyNamespace
 	policy.Name = in.ToPeripheralResourceName()
 	if err := r.Service.Delete(ctx, policy); err != nil {
 		return fmt.Errorf("unable to delete CRD ClusterwideNetworkPolicy %v: %w", policy.Name, err)
