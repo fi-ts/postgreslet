@@ -7,13 +7,17 @@
 package main
 
 import (
+	"context"
 	"flag"
+	"fmt"
+	"net"
 	"os"
 	"os/signal"
 	"syscall"
 
 	"github.com/metal-stack/v"
 	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
@@ -24,6 +28,7 @@ import (
 	databasev1 "github.com/fi-ts/postgreslet/api/v1"
 	"github.com/fi-ts/postgreslet/controllers"
 	"github.com/fi-ts/postgreslet/pkg/crdinstaller"
+	"github.com/fi-ts/postgreslet/pkg/lbmanager"
 	"github.com/fi-ts/postgreslet/pkg/operatormanager"
 	firewall "github.com/metal-stack/firewall-controller/api/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -45,8 +50,9 @@ func init() {
 }
 
 func main() {
-	var metricsAddrCtrlMgr, metricsAddrSvcMgr, partitionID, tenant, ctrlClusterKubeconfig string
+	var metricsAddrCtrlMgr, metricsAddrSvcMgr, partitionID, tenant, ctrlClusterKubeconfig, lbIP string
 	var enableLeaderElection bool
+	var portRangeStart, portRangeSize int
 	flag.StringVar(&metricsAddrSvcMgr, "metrics-addr-svc-mgr", ":8080", "The address the metric endpoint of the service cluster manager binds to.")
 	flag.StringVar(&metricsAddrCtrlMgr, "metrics-addr-ctrl-mgr", "0", "The address the metric endpoint of the control cluster manager binds to.")
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", false,
@@ -55,9 +61,19 @@ func main() {
 	flag.StringVar(&partitionID, "partition-id", "", "The partition ID of the worker-cluster.")
 	flag.StringVar(&tenant, "tenant", "", "The tenant name.")
 	flag.StringVar(&ctrlClusterKubeconfig, "controlplane-kubeconfig", "/var/run/secrets/postgreslet/kube/config", "The path to the kubeconfig to talk to the control plane")
+	flag.StringVar(&lbIP, "load-balancer-ip", "", "The load-balancer IP of postgres in this cluster.")
+	// todo: Check the default port range start and size.
+	flag.IntVar(&portRangeStart, "port-range-start", 32767, "The start of the port range of services LoadBalancer.")
+	flag.IntVar(&portRangeSize, "port-range-size", 8192, "The size of the port range of services LoadBalancer.")
 	flag.Parse()
 
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
+
+	// todo: Shift the logic to a dedicated pkg for args validation.
+	if ip := net.ParseIP(lbIP); ip == nil {
+		ctrl.Log.Error(nil, fmt.Sprintf("IP %s not valid", lbIP))
+		os.Exit(1)
+	}
 
 	// todo: Remove
 	ctrl.Log.Info("flag",
@@ -65,7 +81,10 @@ func main() {
 		"metrics-addr-ctrl-mgr", metricsAddrCtrlMgr,
 		"enable-leader-election", enableLeaderElection,
 		"partition-id", partitionID,
-		"tenant", tenant)
+		"tenant", tenant,
+		"load-balancer-ip", lbIP,
+		"port-range-start", portRangeStart,
+		"port-range-size", portRangeSize)
 
 	svcClusterConf := ctrl.GetConfigOrDie()
 	i, err := crdinstaller.New(svcClusterConf, scheme, ctrl.Log.WithName("CRDInstaller"))
@@ -87,6 +106,15 @@ func main() {
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start service cluster manager")
+		os.Exit(1)
+	}
+
+	// Add new index for listing Services of type LoadBalancer by matching fields
+	if err := svcClusterMgr.GetFieldIndexer().IndexField(context.Background(), &corev1.Service{}, lbmanager.SvcTypeIndex, func(o runtime.Object) []string {
+		svc := o.(*corev1.Service)
+		return []string{string(svc.Spec.Type)}
+	}); err != nil {
+		setupLog.Error(err, "unable to add new index for listing Services of type LoadBalancer")
 		os.Exit(1)
 	}
 
@@ -124,6 +152,7 @@ func main() {
 		PartitionID:     partitionID,
 		Tenant:          tenant,
 		OperatorManager: opMgr,
+		LBManager:       lbmanager.New(svcClusterMgr.GetClient(), lbIP, int32(portRangeStart), int32(portRangeSize)),
 	}).SetupWithManager(ctrlPlaneClusterMgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Postgres")
 		os.Exit(1)

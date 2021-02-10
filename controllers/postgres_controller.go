@@ -25,6 +25,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	pg "github.com/fi-ts/postgreslet/api/v1"
+	"github.com/fi-ts/postgreslet/pkg/lbmanager"
 	"github.com/fi-ts/postgreslet/pkg/operatormanager"
 )
 
@@ -42,6 +43,7 @@ type PostgresReconciler struct {
 	Scheme              *runtime.Scheme
 	PartitionID, Tenant string
 	*operatormanager.OperatorManager
+	*lbmanager.LBManager
 }
 
 // Reconcile is the entry point for postgres reconciliation.
@@ -77,6 +79,11 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			return ctrl.Result{}, err
 		}
 		log.Info("corresponding CRD ClusterwideNetworkPolicy deleted")
+
+		if err := r.DeleteLB(ctx, instance); err != nil {
+			return ctrl.Result{}, err
+		}
+		log.Info("corresponding Service of type LoadBalancer deleted")
 
 		log.Info("deleting owned zalando postgresql")
 
@@ -143,6 +150,10 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			return requeue, err
 		}
 		log.Info("zalando postgresql updated", "ns/name", namespacedName)
+	}
+
+	if err := r.CreateLBIfNone(ctx, instance); err != nil {
+		return ctrl.Result{}, err
 	}
 
 	// todo: Check the port. The default port of postgres is used.

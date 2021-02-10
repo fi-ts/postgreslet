@@ -203,16 +203,19 @@ func (p *Postgres) ToSvcLB(lbIP string, lbPort int32) *corev1.Service {
 	lb := &corev1.Service{}
 	lb.Spec.Type = "LoadBalancer"
 
-	lb.Annotations["metallb.universe.tf/allow-shared-ip"] = "spilo"
+	lb.Annotations = map[string]string{
+		"metallb.universe.tf/allow-shared-ip": "spilo",
+	}
 
 	lb.Namespace = p.Spec.ProjectID
-	lb.Name = p.ToPeripheralResourceName()
-	lb.SetLabels(map[string]string{
+	lb.Name = p.ToSvcLBName()
+	label := map[string]string{
 		"application":  "spilo",
-		"cluster-name": lb.Name,
+		"cluster-name": p.ToPeripheralResourceName(),
 		"spilo-role":   "master",
 		"team":         lb.Namespace,
-	})
+	}
+	lb.SetLabels(label)
 
 	// svc.Spec.LoadBalancerSourceRanges // todo: Do we need to set this?
 
@@ -221,17 +224,17 @@ func (p *Postgres) ToSvcLB(lbIP string, lbPort int32) *corev1.Service {
 	port.Port = lbPort
 	port.Protocol = corev1.ProtocolTCP
 	port.TargetPort = intstr.FromInt(5432)
-	lb.Spec.Ports[0] = port
+	lb.Spec.Ports = []corev1.ServicePort{port}
 
-	lb.Spec.Selector = map[string]string{
-		"application":  "spilo",
-		"cluster-name": lb.Name,
-		"spilo-role":   "master",
-	}
+	lb.Spec.Selector = label
 
 	lb.Spec.LoadBalancerIP = lbIP
 
 	return lb
+}
+
+func (p *Postgres) ToSvcLBName() string {
+	return p.ToPeripheralResourceName() + "-lb"
 }
 
 func (p *Postgres) ToPeripheralResourceName() string {

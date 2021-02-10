@@ -5,6 +5,9 @@ data:
   METRICS_ADDR_SVC_MGR: {{ .Values.postgreslet.metricsAddr | quote }}
   PARTITION_ID: {{ .Values.postgreslet.partitionId | quote }}
   TENANT: {{ .Values.postgreslet.tenant | quote }}
+  LOAD_BALANCER_IP: {{ .Values.postgreslet.loadBalancerIP | quote }}
+  PORT_RANGE_START: {{ .Values.postgreslet.portRangeStart }}
+  PORT_RANGE_SIZE: {{ .Values.postgreslet.portRangeSize }}
 kind: ConfigMap
 metadata:
   name: {{ include "postgreslet.fullname" . }}

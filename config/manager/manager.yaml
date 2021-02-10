@@ -31,6 +31,9 @@ spec:
         - --enable-leader-election=$(ENABLE_LEADER_ELECTION)
         - --partition-id=$(PARTITION_ID)
         - --tenant=$(TENANT)
+        - --load-balancer-ip=$(LOAD_BALANCER_IP)
+        - --port-range-start=$(PORT_RANGE_START)
+        - --port-range-size=$(PORT_RANGE_SIZE)
         envFrom:
           - configMapRef:
               name: controller-manager-configmap
