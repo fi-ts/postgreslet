@@ -10,11 +10,11 @@ require (
 	github.com/onsi/gomega v1.10.5
 	github.com/zalando/postgres-operator v1.5.0
 	inet.af/netaddr v0.0.0-20210115183222-bffc12a571f6
-	k8s.io/api v0.19.4
-	k8s.io/apiextensions-apiserver v0.18.9
-	k8s.io/apimachinery v0.19.4
+	k8s.io/api v0.20.2
+	k8s.io/apiextensions-apiserver v0.20.1
+	k8s.io/apimachinery v0.20.2
 	k8s.io/client-go v11.0.0+incompatible
-	sigs.k8s.io/controller-runtime v0.6.4
+	sigs.k8s.io/controller-runtime v0.8.2
 )
 
 replace k8s.io/client-go => k8s.io/client-go v0.19.4
