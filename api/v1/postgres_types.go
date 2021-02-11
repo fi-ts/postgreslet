@@ -26,6 +26,8 @@ import (
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Version",type=string,JSONPath=`.spec.version`
 // +kubebuilder:printcolumn:name="Status",type=string,JSONPath=`.status.description`
+// +kubebuilder:printcolumn:name="Load-Balancer-IP",type=string,JSONPath=`.status.lbSocket.ip`
+// +kubebuilder:printcolumn:name="Load-Balancer-Port",type=integer,JSONPath=`.status.lbSocket.port`
 
 // Postgres is the Schema for the postgres API
 type Postgres struct {
@@ -136,6 +138,14 @@ type PostgresStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 	Description string `json:"description,omitempty"`
+
+	LBSocket LBSocket `json:"lbSocket,omitempty"`
+}
+
+// LBSocket represents load-balancer socket of Postgres
+type LBSocket struct {
+	IP   string `json:"ip,omitempty"`
+	Port int32  `json:"port,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -233,12 +243,26 @@ func (p *Postgres) ToSvcLB(lbIP string, lbPort int32) *corev1.Service {
 	return lb
 }
 
+// ToSvcLBName returns the name of the peripheral resource Service LoadBalancer.
+// It's different from all other peripheral resources because the operator
+// already generates one service with that name.
 func (p *Postgres) ToSvcLBName() string {
 	return p.ToPeripheralResourceName() + "-lb"
 }
 
+func (p *Postgres) ToSvcLBNamespacedName() *types.NamespacedName {
+	return &types.NamespacedName{
+		Namespace: p.ToPeripheralResourceNamespace(),
+		Name:      p.ToSvcLBName(),
+	}
+}
+
 func (p *Postgres) ToPeripheralResourceName() string {
 	return p.Spec.ProjectID + "--" + string(p.UID)
+}
+
+func (p *Postgres) ToPeripheralResourceNamespace() string {
+	return p.Spec.ProjectID
 }
 
 // Name of the label referencing the owning Postgres resource in the control cluster
