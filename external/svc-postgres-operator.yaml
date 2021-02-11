@@ -29,8 +29,7 @@ items:
     pod_label_wait_timeout: 10m
     pod_management_policy: ordered_ready
     pod_role_label: spilo-role
-    pod_service_account_name: 'postgres-pod'
-    pod_service_account_role_binding_definition: '{"apiVersion":"rbac.authorization.k8s.io/v1","kind":"RoleBinding","metadata":{"name":"postgres-pod"},"roleRef":{"apiGroup":"rbac.authorization.k8s.io","kind":"ClusterRole","name":"postgres-pod"},"subjects":[{"kind":"ServiceAccount","name":"postgres-pod"}]}'
+    pod_service_account_name: 'postgres-operator'
     pod_terminate_grace_period: 5m
     ready_wait_interval: 3s
     ready_wait_timeout: 30s
@@ -248,6 +247,7 @@ items:
     - extensions
     resourceNames:
     - privileged
+    - postgres-operator-psp
     resources:
     - podsecuritypolicies
     verbs:
@@ -308,7 +308,6 @@ items:
     - extensions
     resourceNames:
     - privileged
-    - postgres-operator-psp
     resources:
     - podsecuritypolicies
     verbs:
