@@ -194,6 +194,16 @@ func (m *OperatorManager) createNewRuntimeObject(ctx context.Context, objs []run
 		// ClusterRole is not namespaced.
 		key.Namespace = ""
 		err = m.Get(ctx, key, &rbacv1.ClusterRole{})
+		// Add our psp
+
+		pspPolicyRule := rbacv1.PolicyRule{
+			APIGroups: []string{"extensions"},
+			Verbs:     []string{"use"},
+			Resources: []string{"podsecuritypolicies"},
+			// TODO make psp name configurable
+			ResourceNames: []string{"postgres-operator-psp"},
+		}
+		v.Rules = append(v.Rules, pspPolicyRule)
 	case *rbacv1.ClusterRoleBinding:
 		m.Log.Info("handling ClusterRoleBinding")
 		// Set the namespace of the ServiceAccount in the ClusterRoleBinding.
@@ -251,6 +261,8 @@ func (m *OperatorManager) createNewRuntimeObject(ctx context.Context, objs []run
 func (m *OperatorManager) editConfigMap(cm *v1.ConfigMap, namespace, s3BucketURL string) {
 	cm.Data["logical_backup_s3_bucket"] = s3BucketURL
 	cm.Data["watched_namespace"] = namespace
+	// TODO don't use the same serviceaccount for operator and databases, see #88
+	cm.Data["pod_service_account_name"] = "postgres-operator"
 }
 
 // ensureCleanMetadata ensures obj has clean metadata
