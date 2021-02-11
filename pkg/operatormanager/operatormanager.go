@@ -202,12 +202,10 @@ func (m *OperatorManager) createNewRuntimeObject(ctx context.Context, objs []run
 		key.Namespace = ""
 		err = m.Get(ctx, key, &rbacv1.ClusterRole{})
 		// Add our psp
-
 		pspPolicyRule := rbacv1.PolicyRule{
-			APIGroups: []string{"extensions"},
-			Verbs:     []string{"use"},
-			Resources: []string{"podsecuritypolicies"},
-			// TODO make psp name configurable
+			APIGroups:     []string{"extensions"},
+			Verbs:         []string{"use"},
+			Resources:     []string{"podsecuritypolicies"},
 			ResourceNames: []string{m.pspName},
 		}
 		v.Rules = append(v.Rules, pspPolicyRule)
