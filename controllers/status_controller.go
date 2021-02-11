@@ -84,13 +84,6 @@ func (r *StatusReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		}
 		owner.Status.Description = instance.Status.PostgresClusterStatus
 
-		lb := &corev1.Service{}
-		if err := r.Client.Get(ctx, *owner.ToSvcLBNamespacedName(), lb); err != nil {
-			return fmt.Errorf("failed to fetch the corresponding Service of type LoadBalancer: %w", err)
-		}
-		owner.Status.LBSocket.IP = lb.Spec.LoadBalancerIP
-		owner.Status.LBSocket.Port = lb.Spec.Ports[0].Port
-
 		log.Info("Updating owner", "owner", owner)
 		if err := r.Control.Status().Update(ctx, &owner); err != nil {
 			log.Error(err, "failed to update owner object")
@@ -101,6 +94,17 @@ func (r *StatusReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 	if retryErr != nil {
 		return ctrl.Result{}, retryErr
+	}
+
+	lb := &corev1.Service{}
+	if err := r.Client.Get(ctx, *owner.ToSvcLBNamespacedName(), lb); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to fetch the corresponding Service of type LoadBalancer: %w", err)
+	}
+	owner.Status.LBSocket.IP = lb.Spec.LoadBalancerIP
+	owner.Status.LBSocket.Port = lb.Spec.Ports[0].Port
+
+	if err := r.Control.Status().Update(ctx, &owner); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to update lbSocket of Postgres: %w", err)
 	}
 
 	return ctrl.Result{}, nil
