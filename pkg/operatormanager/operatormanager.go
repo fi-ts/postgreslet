@@ -29,10 +29,6 @@ import (
 // operatorPodMatchingLabels is for listing operator pods
 var operatorPodMatchingLabels = client.MatchingLabels{"name": "postgres-operator"}
 
-// The name of our required psp
-// TODO: read psp name from configmap
-const pspName string = "postgres-operator-psp"
-
 // The serviceAccount name to use for the database pods.
 // TODO: create new account per namespace
 // TODO: use different account for operator and database
@@ -46,10 +42,11 @@ type OperatorManager struct {
 	Log  logr.Logger
 	meta.MetadataAccessor
 	*runtime.Scheme
+	pspName string
 }
 
 // New creates a new `OperatorManager`
-func New(client client.Client, fileName string, scheme *runtime.Scheme, log logr.Logger) (*OperatorManager, error) {
+func New(client client.Client, fileName string, scheme *runtime.Scheme, log logr.Logger, pspName string) (*OperatorManager, error) {
 	bb, err := ioutil.ReadFile(fileName)
 	if err != nil {
 		return nil, fmt.Errorf("error while reading operator yaml file: %v", err)
@@ -70,6 +67,7 @@ func New(client client.Client, fileName string, scheme *runtime.Scheme, log logr
 		list:             list,
 		Scheme:           scheme,
 		Log:              log,
+		pspName:          pspName,
 	}, nil
 }
 
@@ -210,7 +208,7 @@ func (m *OperatorManager) createNewRuntimeObject(ctx context.Context, objs []run
 			Verbs:     []string{"use"},
 			Resources: []string{"podsecuritypolicies"},
 			// TODO make psp name configurable
-			ResourceNames: []string{pspName},
+			ResourceNames: []string{m.pspName},
 		}
 		v.Rules = append(v.Rules, pspPolicyRule)
 	case *rbacv1.ClusterRoleBinding:
