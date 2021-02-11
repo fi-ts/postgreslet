@@ -24,10 +24,10 @@ jobs:
         password: ${{ secrets.DOCKER_REGISTRY_TOKEN }}
       if: steps.fork.outputs.is_fork_pr == 'false'
 
-    - name: Lint
-      uses: golangci/golangci-lint-action@v2
-      with:
-        version: v1.32.2
+    # - name: Lint
+    #   uses: golangci/golangci-lint-action@v2
+    #   with:
+    #     version: v1.32.2
 
     - name: Build Docker image
       run: |
