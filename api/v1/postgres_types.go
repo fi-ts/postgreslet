@@ -8,7 +8,10 @@ package v1
 
 import (
 	"fmt"
+	"log"
 	"time"
+
+	"regexp"
 
 	firewall "github.com/metal-stack/firewall-controller/api/v1"
 	"inet.af/netaddr"
@@ -200,7 +203,44 @@ func (p *Postgres) ToKey() *types.NamespacedName {
 }
 
 func (p *Postgres) ToPeripheralResourceName() string {
-	return p.Spec.ProjectID + "--" + string(p.UID)
+
+	return p.generateTeamID() + "-" + p.generateDatabaseName()
+}
+
+func (p *Postgres) generateTeamID() string {
+	// We only want letters and numbers
+	reg, err := regexp.Compile("[^a-zA-Z0-9]+")
+	if err != nil {
+		log.Fatal(err)
+	}
+	generatedTeamID := reg.ReplaceAllString(p.Spec.ProjectID, "")
+
+	// Limit size
+	// only works for ASCII, but we stripped everything else in the previous step anyway
+	var maxLen = 16
+	if len(generatedTeamID) > maxLen {
+		generatedTeamID = generatedTeamID[:maxLen]
+	}
+
+	return generatedTeamID
+}
+
+func (p *Postgres) generateDatabaseName() string {
+	// We only want letters and numbers
+	reg, err := regexp.Compile("[^a-zA-Z0-9]+")
+	if err != nil {
+		log.Fatal(err)
+	}
+	generatedDatabaseName := reg.ReplaceAllString(string(p.UID), "")
+
+	// Limit size
+	// only works for ASCII, but we stripped everything else in the previous step anyway
+	var maxLen = 20
+	if len(generatedDatabaseName) > maxLen {
+		generatedDatabaseName = generatedDatabaseName[:maxLen]
+	}
+
+	return generatedDatabaseName
 }
 
 // Name of the label referencing the owning Postgres resource in the control cluster
@@ -247,7 +287,7 @@ func (p *Postgres) ToZalandoPostgres() *ZalandoPostgres {
 					ResourceLimits: &ResourceDescription{}, // todo: Fill it out.
 				}
 			}(),
-			TeamID: projectID,
+			TeamID: p.generateTeamID(),
 			Volume: Volume{Size: p.Spec.Size.StorageSize},
 		},
 	}
