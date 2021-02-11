@@ -29,6 +29,15 @@ import (
 // operatorPodMatchingLabels is for listing operator pods
 var operatorPodMatchingLabels = client.MatchingLabels{"name": "postgres-operator"}
 
+// The name of our required psp
+// TODO: read psp name from configmap
+const pspName string = "postgres-operator-psp"
+
+// The serviceAccount name to use for the database pods.
+// TODO: create new account per namespace
+// TODO: use different account for operator and database
+const serviceAccountName string = "postgres-operator"
+
 // OperatorManager manages the operator
 type OperatorManager struct {
 	client.Client
@@ -201,7 +210,7 @@ func (m *OperatorManager) createNewRuntimeObject(ctx context.Context, objs []run
 			Verbs:     []string{"use"},
 			Resources: []string{"podsecuritypolicies"},
 			// TODO make psp name configurable
-			ResourceNames: []string{"postgres-operator-psp"},
+			ResourceNames: []string{pspName},
 		}
 		v.Rules = append(v.Rules, pspPolicyRule)
 	case *rbacv1.ClusterRoleBinding:
@@ -262,7 +271,7 @@ func (m *OperatorManager) editConfigMap(cm *v1.ConfigMap, namespace, s3BucketURL
 	cm.Data["logical_backup_s3_bucket"] = s3BucketURL
 	cm.Data["watched_namespace"] = namespace
 	// TODO don't use the same serviceaccount for operator and databases, see #88
-	cm.Data["pod_service_account_name"] = "postgres-operator"
+	cm.Data["pod_service_account_name"] = serviceAccountName
 }
 
 // ensureCleanMetadata ensures obj has clean metadata
