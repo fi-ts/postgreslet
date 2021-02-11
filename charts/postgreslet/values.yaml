@@ -66,3 +66,6 @@ postgreslet:
   tenant: sample-tenant
   # metricsAddr defines the listen address of the metrics endpoint
   metricsAddr: ":8080"
+  # customPspName The name to use for our custom psp
+  # If not set, a name is generated using the fullname template
+  customPspName: ""

@@ -1,7 +1,7 @@
 apiVersion: policy/v1beta1
 kind: PodSecurityPolicy
 metadata:
-    name: postgres-operator-psp
+    name: {{ include "postgreslet.pspName" . }}
 spec:
     allowPrivilegeEscalation: true
     fsGroup:

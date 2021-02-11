@@ -71,3 +71,10 @@ Create the name of the service account to use
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}
 {{- end }}
+
+{{/*
+Create the name of the custom pod security policy to use
+*/}}
+{{- define "postgreslet.pspName" -}}
+{{- default (include "postgreslet.fullname" .) .Values.postgreslet.customPspName }}
+{{- end }}
