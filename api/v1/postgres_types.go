@@ -74,6 +74,8 @@ type PostgresSpec struct {
 	Backup *Backup `json:"backup,omitempty"`
 	// AccessList defines access restrictions
 	AccessList *AccessList `json:"accessList,omitempty"`
+	// SecretName reference to the secret where the user credentials are stored
+	SecretName string `json:"secretname,omitempty"`
 }
 
 // AccessList defines the type of restrictions to access the database
@@ -90,6 +92,8 @@ type Backup struct {
 	Retention int32 `json:"retention,omitempty"`
 	// Schedule defines how often a backup should be made, in cron format
 	Schedule string `json:"schedule,omitempty"`
+	// SecretName reference to the secret where the backup credentials are stored
+	SecretName string `json:"secretname,omitempty"`
 }
 
 // Size defines the size aspects of the database
