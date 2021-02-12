@@ -5,6 +5,7 @@ data:
   METRICS_ADDR_SVC_MGR: {{ .Values.postgreslet.metricsAddr | quote }}
   PARTITION_ID: {{ .Values.postgreslet.partitionId | quote }}
   TENANT: {{ .Values.postgreslet.tenant | quote }}
+  CUSTOM_PSP_NAME: {{ include "postgreslet.pspName" . | quote  }}
 kind: ConfigMap
 metadata:
   name: {{ include "postgreslet.fullname" . }}

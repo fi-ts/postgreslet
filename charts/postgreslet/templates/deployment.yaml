@@ -44,6 +44,7 @@ spec:
             - --enable-leader-election=$(ENABLE_LEADER_ELECTION)
             - --partition-id=$(PARTITION_ID)
             - --tenant=$(TENANT)
+            - --custom-psp-name=$(CUSTOM_PSP_NAME)
           envFrom:
             - configMapRef:
                 name: {{ include "postgreslet.fullname" . }}
