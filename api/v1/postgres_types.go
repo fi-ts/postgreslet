@@ -8,7 +8,6 @@ package v1
 
 import (
 	"fmt"
-	"log"
 	"time"
 
 	"regexp"
@@ -207,17 +206,14 @@ func (p *Postgres) ToPeripheralResourceName() string {
 	return p.generateTeamID() + "-" + p.generateDatabaseName()
 }
 
+var alphaNumericRegExp *regexp.Regexp = regexp.MustCompile("[^a-zA-Z0-9]+")
+
 func (p *Postgres) generateTeamID() string {
 	// We only want letters and numbers
-	reg, err := regexp.Compile("[^a-zA-Z0-9]+")
-	if err != nil {
-		log.Fatal(err)
-	}
-	generatedTeamID := reg.ReplaceAllString(p.Spec.ProjectID, "")
+	generatedTeamID := alphaNumericRegExp.ReplaceAllString(p.Spec.ProjectID, "")
 
 	// Limit size
-	// only works for ASCII, but we stripped everything else in the previous step anyway
-	var maxLen = 16
+	maxLen := 16
 	if len(generatedTeamID) > maxLen {
 		generatedTeamID = generatedTeamID[:maxLen]
 	}
@@ -227,15 +223,10 @@ func (p *Postgres) generateTeamID() string {
 
 func (p *Postgres) generateDatabaseName() string {
 	// We only want letters and numbers
-	reg, err := regexp.Compile("[^a-zA-Z0-9]+")
-	if err != nil {
-		log.Fatal(err)
-	}
-	generatedDatabaseName := reg.ReplaceAllString(string(p.UID), "")
+	generatedDatabaseName := alphaNumericRegExp.ReplaceAllString(string(p.UID), "")
 
 	// Limit size
-	// only works for ASCII, but we stripped everything else in the previous step anyway
-	var maxLen = 20
+	maxLen := 20
 	if len(generatedDatabaseName) > maxLen {
 		generatedDatabaseName = generatedDatabaseName[:maxLen]
 	}
