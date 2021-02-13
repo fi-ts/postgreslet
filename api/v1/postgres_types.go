@@ -139,11 +139,11 @@ type PostgresStatus struct {
 	// Important: Run "make" to regenerate code after modifying this file
 	Description string `json:"description,omitempty"`
 
-	LBSocket LBSocket `json:"lbSocket,omitempty"`
+	Socket Socket `json:"lbSocket,omitempty"`
 }
 
-// LBSocket represents load-balancer socket of Postgres
-type LBSocket struct {
+// Socket represents load-balancer socket of Postgres
+type Socket struct {
 	IP   string `json:"ip,omitempty"`
 	Port int32  `json:"port,omitempty"`
 }

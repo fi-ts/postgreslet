@@ -100,8 +100,8 @@ func (r *StatusReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	if err := r.Client.Get(ctx, *owner.ToSvcLBNamespacedName(), lb); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to fetch the corresponding Service of type LoadBalancer: %w", err)
 	}
-	owner.Status.LBSocket.IP = lb.Spec.LoadBalancerIP
-	owner.Status.LBSocket.Port = lb.Spec.Ports[0].Port
+	owner.Status.Socket.IP = lb.Spec.LoadBalancerIP
+	owner.Status.Socket.Port = lb.Spec.Ports[0].Port
 
 	if err := r.Control.Status().Update(ctx, &owner); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to update lbSocket of Postgres: %w", err)

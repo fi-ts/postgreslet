@@ -144,7 +144,7 @@ spec:
                   this file'
                 type: string
               lbSocket:
-                description: LBSocket represents load-balancer socket of Postgres
+                description: Socket represents load-balancer socket of Postgres
                 properties:
                   ip:
                     type: string
