@@ -47,6 +47,7 @@ spec:
             - --load-balancer-ip=$(LOAD_BALANCER_IP)
             - --port-range-start=$(PORT_RANGE_START)
             - --port-range-size=$(PORT_RANGE_SIZE)
+            - --custom-psp-name=$(CUSTOM_PSP_NAME)
           envFrom:
             - configMapRef:
                 name: {{ include "postgreslet.fullname" . }}

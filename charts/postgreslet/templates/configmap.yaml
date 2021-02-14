@@ -8,6 +8,7 @@ data:
   LOAD_BALANCER_IP: {{ .Values.postgreslet.loadBalancerIP | quote }}
   PORT_RANGE_START: {{ .Values.postgreslet.portRangeStart }}
   PORT_RANGE_SIZE: {{ .Values.postgreslet.portRangeSize }}
+  CUSTOM_PSP_NAME: {{ include "postgreslet.pspName" . | quote  }}
 kind: ConfigMap
 metadata:
   name: {{ include "postgreslet.fullname" . }}

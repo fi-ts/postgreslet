@@ -72,3 +72,6 @@ postgreslet:
   portRangeStart: 31767
   # portRangesize defines the size of the port range of services LoadBalancer
   portRangeSize: 8192
+  # customPspName The name to use for our custom psp
+  # If not set, a name is generated using the fullname template
+  customPspName: ""

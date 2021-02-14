@@ -50,7 +50,7 @@ func init() {
 }
 
 func main() {
-	var metricsAddrCtrlMgr, metricsAddrSvcMgr, partitionID, tenant, ctrlClusterKubeconfig, lbIP string
+	var metricsAddrCtrlMgr, metricsAddrSvcMgr, partitionID, tenant, ctrlClusterKubeconfig, pspName, lbIP string
 	var enableLeaderElection bool
 	var portRangeStart, portRangeSize int
 	flag.StringVar(&metricsAddrSvcMgr, "metrics-addr-svc-mgr", ":8080", "The address the metric endpoint of the service cluster manager binds to.")
@@ -65,6 +65,7 @@ func main() {
 	// todo: Check the default port range start and size.
 	flag.IntVar(&portRangeStart, "port-range-start", 32767, "The start of the port range of services LoadBalancer.")
 	flag.IntVar(&portRangeSize, "port-range-size", 8192, "The size of the port range of services LoadBalancer.")
+	flag.StringVar(&pspName, "custom-psp-name", "postgres-operator-psp", "The namem of our custom PodSecurityPolicy. Will be added to the ClusterRoles.")
 	flag.Parse()
 
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
@@ -138,7 +139,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	opMgr, err := operatormanager.New(svcClusterMgr.GetClient(), "external/svc-postgres-operator.yaml", scheme, ctrl.Log.WithName("OperatorManager"))
+	opMgr, err := operatormanager.New(svcClusterMgr.GetClient(), "external/svc-postgres-operator.yaml", scheme, ctrl.Log.WithName("OperatorManager"), pspName)
 	if err != nil {
 		setupLog.Error(err, "unable to create `OperatorManager`")
 		os.Exit(1)

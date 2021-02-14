@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"time"
 
+	"regexp"
+
 	firewall "github.com/metal-stack/firewall-controller/api/v1"
 	"inet.af/netaddr"
 	corev1 "k8s.io/api/core/v1"
@@ -74,6 +76,8 @@ type PostgresSpec struct {
 	Backup *Backup `json:"backup,omitempty"`
 	// AccessList defines access restrictions
 	AccessList *AccessList `json:"accessList,omitempty"`
+	// SecretName reference to the secret where the user credentials are stored
+	SecretName string `json:"secretname,omitempty"`
 }
 
 // AccessList defines the type of restrictions to access the database
@@ -90,6 +94,8 @@ type Backup struct {
 	Retention int32 `json:"retention,omitempty"`
 	// Schedule defines how often a backup should be made, in cron format
 	Schedule string `json:"schedule,omitempty"`
+	// SecretName reference to the secret where the backup credentials are stored
+	SecretName string `json:"secretname,omitempty"`
 }
 
 // Size defines the size aspects of the database
@@ -258,7 +264,36 @@ func (p *Postgres) ToSvcLBNamespacedName() *types.NamespacedName {
 }
 
 func (p *Postgres) ToPeripheralResourceName() string {
-	return p.Spec.ProjectID + "--" + string(p.UID)
+
+	return p.generateTeamID() + "-" + p.generateDatabaseName()
+}
+
+var alphaNumericRegExp *regexp.Regexp = regexp.MustCompile("[^a-zA-Z0-9]+")
+
+func (p *Postgres) generateTeamID() string {
+	// We only want letters and numbers
+	generatedTeamID := alphaNumericRegExp.ReplaceAllString(p.Spec.ProjectID, "")
+
+	// Limit size
+	maxLen := 16
+	if len(generatedTeamID) > maxLen {
+		generatedTeamID = generatedTeamID[:maxLen]
+	}
+
+	return generatedTeamID
+}
+
+func (p *Postgres) generateDatabaseName() string {
+	// We only want letters and numbers
+	generatedDatabaseName := alphaNumericRegExp.ReplaceAllString(string(p.UID), "")
+
+	// Limit size
+	maxLen := 20
+	if len(generatedDatabaseName) > maxLen {
+		generatedDatabaseName = generatedDatabaseName[:maxLen]
+	}
+
+	return generatedDatabaseName
 }
 
 func (p *Postgres) ToPeripheralResourceNamespace() string {
@@ -309,7 +344,7 @@ func (p *Postgres) ToZalandoPostgres() *ZalandoPostgres {
 					ResourceLimits: &ResourceDescription{}, // todo: Fill it out.
 				}
 			}(),
-			TeamID: projectID,
+			TeamID: p.generateTeamID(),
 			Volume: Volume{Size: p.Spec.Size.StorageSize},
 		},
 	}
