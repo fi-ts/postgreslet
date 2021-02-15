@@ -6,8 +6,8 @@ data:
   PARTITION_ID: {{ .Values.postgreslet.partitionId | quote }}
   TENANT: {{ .Values.postgreslet.tenant | quote }}
   LOAD_BALANCER_IP: {{ .Values.postgreslet.loadBalancerIP | quote }}
-  PORT_RANGE_START: {{ .Values.postgreslet.portRangeStart }}
-  PORT_RANGE_SIZE: {{ .Values.postgreslet.portRangeSize }}
+  PORT_RANGE_START: {{ .Values.postgreslet.portRangeStart | quote }}
+  PORT_RANGE_SIZE: {{ .Values.postgreslet.portRangeSize | quote }}
   CUSTOM_PSP_NAME: {{ include "postgreslet.pspName" . | quote  }}
 kind: ConfigMap
 metadata:
