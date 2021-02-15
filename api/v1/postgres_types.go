@@ -248,6 +248,7 @@ func (p *Postgres) ToSvcLB(lbIP string, lbPort int32) *corev1.Service {
 	}
 
 	if len(lbIP) > 0 {
+		// if no ip is set, a new loadbalancer will be created automatically
 		lb.Spec.LoadBalancerIP = lbIP
 	}
 
