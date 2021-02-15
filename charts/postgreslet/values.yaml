@@ -67,7 +67,8 @@ postgreslet:
   # metricsAddr defines the listen address of the metrics endpoint
   metricsAddr: ":8080"
   # loadBalancerIP defines the load-balancer IP of postgres in this cluster
-  loadBalancerIP: "127.0.0.1"
+  # If not set one will be provisioned dynamically
+  loadBalancerIP: ""
   # portRangeStart deinfes the start of the port range of services LoadBalancer
   portRangeStart: 32000
   # portRangesize defines the size of the port range of services LoadBalancer
