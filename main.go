@@ -59,7 +59,7 @@ func main() {
 	flag.StringVar(&partitionID, "partition-id", "", "The partition ID of the worker-cluster.")
 	flag.StringVar(&tenant, "tenant", "", "The tenant name.")
 	flag.StringVar(&ctrlClusterKubeconfig, "controlplane-kubeconfig", "/var/run/secrets/postgreslet/kube/config", "The path to the kubeconfig to talk to the control plane")
-	flag.StringVar(&lbIP, "load-balancer-ip", "", "The load-balancer IP of postgres in this cluster.")
+	flag.StringVar(&lbIP, "load-balancer-ip", "", "The load-balancer IP of postgres in this cluster. If not set one will be provisioned dynamically.")
 	// todo: Check the default port range start and size.
 	flag.IntVar(&portRangeStart, "port-range-start", 32000, "The start of the port range of services LoadBalancer.")
 	flag.IntVar(&portRangeSize, "port-range-size", 8000, "The size of the port range of services LoadBalancer.")
@@ -68,10 +68,12 @@ func main() {
 
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 
-	// todo: Shift the logic to a dedicated pkg for args validation.
-	if ip := net.ParseIP(lbIP); ip == nil {
-		ctrl.Log.Error(nil, fmt.Sprintf("IP %s not valid", lbIP))
-		os.Exit(1)
+	if len(lbIP) > 0 {
+		// todo: Shift the logic to a dedicated pkg for args validation.
+		if ip := net.ParseIP(lbIP); ip == nil {
+			ctrl.Log.Error(nil, fmt.Sprintf("IP %s not valid", lbIP))
+			os.Exit(1)
+		}
 	}
 
 	// todo: Remove
