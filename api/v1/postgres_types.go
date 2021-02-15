@@ -7,6 +7,7 @@
 package v1
 
 import (
+	"encoding/base64"
 	"fmt"
 	"time"
 
@@ -19,6 +20,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -212,6 +214,50 @@ func (p *Postgres) ToKey() *types.NamespacedName {
 	return &types.NamespacedName{
 		Namespace: p.Namespace,
 		Name:      p.Name,
+	}
+}
+
+const SecretNamespace = "pgaas"
+
+func (p *Postgres) ToSecret(src *corev1.SecretList) (*corev1.Secret, error) {
+	new := &corev1.Secret{}
+	new.Namespace = SecretNamespace
+	new.Name = p.ToSecretName()
+	new.Type = corev1.SecretTypeOpaque
+
+	// Fill in the contents of the new secret
+	for _, v := range src.Items {
+		user, err := base64.StdEncoding.DecodeString(string(v.Data["username"]))
+		if err != nil {
+			return nil, fmt.Errorf("failed to decode base64: %w", err)
+		}
+
+		new.Data[string(user)] = v.Data["password"]
+	}
+
+	return new, nil
+}
+
+func (p *Postgres) ToSecretListOption() []client.ListOption {
+	return []client.ListOption{
+		client.MatchingLabels(
+			map[string]string{
+				"application":  "spilo",
+				"cluster-name": p.ToPeripheralResourceName(),
+				"team":         p.generateTeamID(),
+			},
+		),
+	}
+}
+
+func (p *Postgres) ToSecretName() string {
+	return p.ToPeripheralResourceName() + "-passwords"
+}
+
+func (p *Postgres) ToSecretNamesapcedName() *types.NamespacedName {
+	return &types.NamespacedName{
+		Namespace: SecretNamespace,
+		Name:      p.ToSecretName(),
 	}
 }
 
