@@ -23,10 +23,10 @@ spec:
     - jsonPath: .status.description
       name: Status
       type: string
-    - jsonPath: .status.lbSocket.ip
+    - jsonPath: .status.socket.ip
       name: Load-Balancer-IP
       type: string
-    - jsonPath: .status.lbSocket.port
+    - jsonPath: .status.socket.port
       name: Load-Balancer-Port
       type: integer
     name: v1

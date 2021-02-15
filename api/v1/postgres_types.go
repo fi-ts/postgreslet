@@ -28,8 +28,8 @@ import (
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Version",type=string,JSONPath=`.spec.version`
 // +kubebuilder:printcolumn:name="Status",type=string,JSONPath=`.status.description`
-// +kubebuilder:printcolumn:name="Load-Balancer-IP",type=string,JSONPath=`.status.lbSocket.ip`
-// +kubebuilder:printcolumn:name="Load-Balancer-Port",type=integer,JSONPath=`.status.lbSocket.port`
+// +kubebuilder:printcolumn:name="Load-Balancer-IP",type=string,JSONPath=`.status.socket.ip`
+// +kubebuilder:printcolumn:name="Load-Balancer-Port",type=integer,JSONPath=`.status.socket.port`
 
 // Postgres is the Schema for the postgres API
 type Postgres struct {
