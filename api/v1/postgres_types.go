@@ -223,7 +223,7 @@ func (p *Postgres) ToSvcLB(lbIP string, lbPort int32) *corev1.Service {
 		"metallb.universe.tf/allow-shared-ip": "spilo",
 	}
 
-	lb.Namespace = p.Spec.ProjectID
+	lb.Namespace = p.ToPeripheralResourceNamespace()
 	lb.Name = p.ToSvcLBName()
 	label := map[string]string{
 		"application":  "spilo",
@@ -304,12 +304,11 @@ func (p *Postgres) ToPeripheralResourceNamespace() string {
 const LabelName string = "postgres.database.fits.cloud/uuid"
 
 func (p *Postgres) ToZalandoPostgres() *ZalandoPostgres {
-	projectID := p.Spec.ProjectID
 	return &ZalandoPostgres{
 		TypeMeta: ZalandoPostgresTypeMeta,
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      p.ToPeripheralResourceName(),
-			Namespace: projectID, // todo: Check if the projectID is too long for zalando operator.
+			Namespace: p.ToPeripheralResourceNamespace(),
 			Labels:    map[string]string{LabelName: string(p.UID)},
 		},
 		Spec: ZalandoPostgresSpec{

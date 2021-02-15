@@ -29,7 +29,7 @@ func New(client client.Client, lbIP string, portRangeStart, portRangeSize int32)
 
 func (m *LBManager) CreateLBIfNone(ctx context.Context, in *api.Postgres) error {
 	if err := m.Get(ctx, client.ObjectKey{
-		Namespace: in.Spec.ProjectID,
+		Namespace: in.ToPeripheralResourceNamespace(),
 		Name:      in.ToSvcLBName(),
 	}, &corev1.Service{}); err != nil {
 		if !apimach.IsNotFound(err) {
@@ -50,7 +50,7 @@ func (m *LBManager) CreateLBIfNone(ctx context.Context, in *api.Postgres) error 
 
 func (m *LBManager) DeleteLB(ctx context.Context, in *api.Postgres) error {
 	lb := &corev1.Service{}
-	lb.Namespace = in.Spec.ProjectID
+	lb.Namespace = in.ToPeripheralResourceNamespace()
 	lb.Name = in.ToSvcLBName()
 	if err := m.Delete(ctx, lb); client.IgnoreNotFound(err) != nil { // todo: remove ignorenotfound
 		return err

@@ -208,7 +208,7 @@ func (r *PostgresReconciler) createZalandoPostgresql(ctx context.Context, z *pg.
 
 // ensureZalandoDependencies makes sure Zalando resources are installed in the service-cluster.
 func (r *PostgresReconciler) ensureZalandoDependencies(ctx context.Context, pg *pg.Postgres) error {
-	namespace := pg.Spec.ProjectID
+	namespace := pg.ToPeripheralResourceNamespace()
 	isInstalled, err := r.IsOperatorInstalled(ctx, namespace)
 	if err != nil {
 		return fmt.Errorf("error while querying if zalando dependencies are installed: %v", err)
