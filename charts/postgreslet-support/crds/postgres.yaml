@@ -1,8 +1,11 @@
+
+---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.2.5
+  creationTimestamp: null
   name: postgres.database.fits.cloud
 spec:
   group: database.fits.cloud
@@ -20,16 +23,26 @@ spec:
     - jsonPath: .status.description
       name: Status
       type: string
+    - jsonPath: .status.lbSocket.ip
+      name: Load-Balancer-IP
+      type: string
+    - jsonPath: .status.lbSocket.port
+      name: Load-Balancer-Port
+      type: integer
     name: v1
     schema:
       openAPIV3Schema:
         description: Postgres is the Schema for the postgres API
         properties:
           apiVersion:
-            description: 'APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
             type: string
           kind:
-            description: 'Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
             type: string
           metadata:
             type: object
@@ -40,7 +53,8 @@ spec:
                 description: AccessList defines access restrictions
                 properties:
                   sourceRanges:
-                    description: SourceRanges defines a list of prefixes in CIDR Notation e.g. 1.2.3.0/24 FIXME implement validation if source is a parsable CIDR
+                    description: SourceRanges defines a list of prefixes in CIDR Notation
+                      e.g. 1.2.3.0/24 or fdaa::/104
                     items:
                       type: string
                     type: array
@@ -53,17 +67,24 @@ spec:
                     format: int32
                     type: integer
                   s3BucketURL:
-                    description: S3BucketURL defines the URL of the S3 bucket for backup
+                    description: S3BucketURL defines the URL of the S3 bucket for
+                      backup
                     type: string
                   schedule:
-                    description: Schedule defines how often a backup should be made, in cron format
+                    description: Schedule defines how often a backup should be made,
+                      in cron format
+                    type: string
+                  secretname:
+                    description: SecretName reference to the secret where the backup
+                      credentials are stored
                     type: string
                 type: object
               description:
                 description: Description
                 type: string
               maintenance:
-                description: 'todo: add default Maintenance defines automatic maintenance of the database'
+                description: 'todo: add default Maintenance defines automatic maintenance
+                  of the database'
                 properties:
                   timeWindow:
                     description: TimeWindow defines when the maintenance should happen
@@ -76,7 +97,8 @@ spec:
                         type: string
                     type: object
                   weekday:
-                    description: Weekday defines when the operator is allowed to do maintenance
+                    description: Weekday defines when the operator is allowed to do
+                      maintenance
                     type: integer
                 type: object
               numberOfInstances:
@@ -91,6 +113,10 @@ spec:
               projectID:
                 description: ProjectID metal project ID
                 type: string
+              secretname:
+                description: SecretName reference to the secret where the user credentials
+                  are stored
+                type: string
               size:
                 description: Size of the database
                 properties:
@@ -102,7 +128,8 @@ spec:
                     type: string
                   storageSize:
                     default: 1Gi
-                    description: StorageSize the amount of Storage this database will get
+                    description: StorageSize the amount of Storage this database will
+                      get
                     pattern: ^[1-9][0-9]*Gi
                     type: string
                 type: object
@@ -120,8 +147,19 @@ spec:
             description: PostgresStatus defines the observed state of Postgres
             properties:
               description:
-                description: 'INSERT ADDITIONAL STATUS FIELD - define observed state of cluster Important: Run "make" to regenerate code after modifying this file'
+                description: 'INSERT ADDITIONAL STATUS FIELD - define observed state
+                  of cluster Important: Run "make" to regenerate code after modifying
+                  this file'
                 type: string
+              socket:
+                description: Socket represents load-balancer socket of Postgres
+                properties:
+                  ip:
+                    type: string
+                  port:
+                    format: int32
+                    type: integer
+                type: object
             type: object
         type: object
     served: true

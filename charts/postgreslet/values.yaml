@@ -66,6 +66,12 @@ postgreslet:
   tenant: sample-tenant
   # metricsAddr defines the listen address of the metrics endpoint
   metricsAddr: ":8080"
+  # loadBalancerIP defines the load-balancer IP of postgres in this cluster
+  loadBalancerIP: "127.0.0.1"
+  # portRangeStart deinfes the start of the port range of services LoadBalancer
+  portRangeStart: 32000
+  # portRangesize defines the size of the port range of services LoadBalancer
+  portRangeSize: 8000
   # customPspName The name to use for our custom psp
   # If not set, a name is generated using the fullname template
   customPspName: ""

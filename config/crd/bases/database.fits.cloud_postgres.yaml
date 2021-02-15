@@ -23,6 +23,12 @@ spec:
     - jsonPath: .status.description
       name: Status
       type: string
+    - jsonPath: .status.socket.ip
+      name: Load-Balancer-IP
+      type: string
+    - jsonPath: .status.socket.port
+      name: Load-Balancer-Port
+      type: integer
     name: v1
     schema:
       openAPIV3Schema:
@@ -68,6 +74,10 @@ spec:
                     description: Schedule defines how often a backup should be made,
                       in cron format
                     type: string
+                  secretname:
+                    description: SecretName reference to the secret where the backup
+                      credentials are stored
+                    type: string
                 type: object
               description:
                 description: Description
@@ -103,6 +113,10 @@ spec:
               projectID:
                 description: ProjectID metal project ID
                 type: string
+              secretname:
+                description: SecretName reference to the secret where the user credentials
+                  are stored
+                type: string
               size:
                 description: Size of the database
                 properties:
@@ -137,6 +151,15 @@ spec:
                   of cluster Important: Run "make" to regenerate code after modifying
                   this file'
                 type: string
+              socket:
+                description: Socket represents load-balancer socket of Postgres
+                properties:
+                  ip:
+                    type: string
+                  port:
+                    format: int32
+                    type: integer
+                type: object
             type: object
         type: object
     served: true

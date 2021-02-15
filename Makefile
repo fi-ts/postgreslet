@@ -42,7 +42,13 @@ manager: generate fmt vet
 
 # Run against the configured Kubernetes cluster in ~/.kube/config
 run: generate fmt vet manifests install-crd-cwnp
-	go run ./main.go -partition-id sample-partition -tenant sample-tenant -controlplane-kubeconfig "./kubeconfig"
+	go run ./main.go \
+	-partition-id sample-partition \
+	-tenant sample-tenant \
+	-controlplane-kubeconfig "./kubeconfig" \
+	-load-balancer-ip "127.0.0.1" \
+	-port-range-start 32000 \
+	-port-range-size 8000
 
 # Install CRDs into a cluster
 install: manifests

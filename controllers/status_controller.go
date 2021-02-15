@@ -10,6 +10,7 @@ import (
 	"fmt"
 
 	"github.com/go-logr/logr"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -82,6 +83,7 @@ func (r *StatusReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			return err
 		}
 		owner.Status.Description = instance.Status.PostgresClusterStatus
+
 		log.Info("Updating owner", "owner", owner)
 		if err := r.Control.Status().Update(ctx, &owner); err != nil {
 			log.Error(err, "failed to update owner object")
@@ -92,6 +94,17 @@ func (r *StatusReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 	if retryErr != nil {
 		return ctrl.Result{}, retryErr
+	}
+
+	lb := &corev1.Service{}
+	if err := r.Client.Get(ctx, *owner.ToSvcLBNamespacedName(), lb); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to fetch the corresponding Service of type LoadBalancer: %w", err)
+	}
+	owner.Status.Socket.IP = lb.Spec.LoadBalancerIP
+	owner.Status.Socket.Port = lb.Spec.Ports[0].Port
+
+	if err := r.Control.Status().Update(ctx, &owner); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to update lbSocket of Postgres: %w", err)
 	}
 
 	return ctrl.Result{}, nil

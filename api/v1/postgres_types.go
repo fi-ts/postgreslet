@@ -28,6 +28,8 @@ import (
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Version",type=string,JSONPath=`.spec.version`
 // +kubebuilder:printcolumn:name="Status",type=string,JSONPath=`.status.description`
+// +kubebuilder:printcolumn:name="Load-Balancer-IP",type=string,JSONPath=`.status.socket.ip`
+// +kubebuilder:printcolumn:name="Load-Balancer-Port",type=integer,JSONPath=`.status.socket.port`
 
 // Postgres is the Schema for the postgres API
 type Postgres struct {
@@ -142,6 +144,14 @@ type PostgresStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 	Description string `json:"description,omitempty"`
+
+	Socket Socket `json:"socket,omitempty"`
+}
+
+// Socket represents load-balancer socket of Postgres
+type Socket struct {
+	IP   string `json:"ip,omitempty"`
+	Port int32  `json:"port,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -205,6 +215,57 @@ func (p *Postgres) ToKey() *types.NamespacedName {
 	}
 }
 
+var SvcLoadBalancerLabel = map[string]string{
+	"postgres.database.fits.cloud/managed-by": "postgreslet",
+}
+
+func (p *Postgres) ToSvcLB(lbIP string, lbPort int32) *corev1.Service {
+	lb := &corev1.Service{}
+	lb.Spec.Type = "LoadBalancer"
+
+	lb.Annotations = map[string]string{
+		"metallb.universe.tf/allow-shared-ip": "spilo",
+	}
+
+	lb.Namespace = p.ToPeripheralResourceNamespace()
+	lb.Name = p.ToSvcLBName()
+	lb.SetLabels(SvcLoadBalancerLabel)
+
+	// svc.Spec.LoadBalancerSourceRanges // todo: Do we need to set this?
+
+	port := corev1.ServicePort{}
+	port.Name = "postgresql"
+	port.Port = lbPort
+	port.Protocol = corev1.ProtocolTCP
+	port.TargetPort = intstr.FromInt(5432)
+	lb.Spec.Ports = []corev1.ServicePort{port}
+
+	lb.Spec.Selector = map[string]string{
+		"application":  "spilo",
+		"cluster-name": p.ToPeripheralResourceName(),
+		"spilo-role":   "master",
+		"team":         p.generateTeamID(),
+	}
+
+	lb.Spec.LoadBalancerIP = lbIP
+
+	return lb
+}
+
+// ToSvcLBName returns the name of the peripheral resource Service LoadBalancer.
+// It's different from all other peripheral resources because the operator
+// already generates one service with that name.
+func (p *Postgres) ToSvcLBName() string {
+	return p.ToPeripheralResourceName() + "-external"
+}
+
+func (p *Postgres) ToSvcLBNamespacedName() *types.NamespacedName {
+	return &types.NamespacedName{
+		Namespace: p.ToPeripheralResourceNamespace(),
+		Name:      p.ToSvcLBName(),
+	}
+}
+
 func (p *Postgres) ToPeripheralResourceName() string {
 
 	return p.generateTeamID() + "-" + p.generateDatabaseName()
@@ -238,16 +299,19 @@ func (p *Postgres) generateDatabaseName() string {
 	return generatedDatabaseName
 }
 
+func (p *Postgres) ToPeripheralResourceNamespace() string {
+	return p.Spec.ProjectID
+}
+
 // Name of the label referencing the owning Postgres resource in the control cluster
 const LabelName string = "postgres.database.fits.cloud/uuid"
 
 func (p *Postgres) ToZalandoPostgres() *ZalandoPostgres {
-	projectID := p.Spec.ProjectID
 	return &ZalandoPostgres{
 		TypeMeta: ZalandoPostgresTypeMeta,
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      p.ToPeripheralResourceName(),
-			Namespace: projectID, // todo: Check if the projectID is too long for zalando operator.
+			Namespace: p.ToPeripheralResourceNamespace(),
 			Labels:    map[string]string{LabelName: string(p.UID)},
 		},
 		Spec: ZalandoPostgresSpec{

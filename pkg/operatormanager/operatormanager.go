@@ -115,6 +115,22 @@ func (m *OperatorManager) IsOperatorDeletable(ctx context.Context, namespace str
 		m.Log.Info("operator is deletable")
 		return true, nil
 	}
+
+	// todo: Check statefulset as well. Issue #83
+
+	services := &corev1.ServiceList{}
+	if err := m.List(ctx, services, client.InNamespace(namespace), m.toInstanceMatchingLabels(namespace)); err != nil {
+		if errors.IsNotFound(err) {
+			m.Log.Info("operator is deletable")
+			return true, nil
+		}
+		return false, fmt.Errorf("error while fetching the list of instances operated by the operator: %v", err)
+	}
+	if len(services.Items) == 0 {
+		m.Log.Info("operator is deletable")
+		return true, nil
+	}
+
 	return false, nil
 }
 
@@ -314,7 +330,7 @@ func (m *OperatorManager) ensureNamespace(ctx context.Context, namespace string,
 
 // toInstanceMatchingLabels makes the matching labels for the pods of the instances operated by the operator
 func (m *OperatorManager) toInstanceMatchingLabels(namespace string) *client.MatchingLabels {
-	return &client.MatchingLabels{"team": namespace, "application": "spilo"}
+	return &client.MatchingLabels{"application": "spilo"}
 }
 
 // toObjectKey makes ObjectKey from namespace and the name of obj

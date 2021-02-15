@@ -25,6 +25,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	pg "github.com/fi-ts/postgreslet/api/v1"
+	"github.com/fi-ts/postgreslet/pkg/lbmanager"
 	"github.com/fi-ts/postgreslet/pkg/operatormanager"
 )
 
@@ -42,6 +43,7 @@ type PostgresReconciler struct {
 	Scheme              *runtime.Scheme
 	PartitionID, Tenant string
 	*operatormanager.OperatorManager
+	*lbmanager.LBManager
 }
 
 // Reconcile is the entry point for postgres reconciliation.
@@ -77,6 +79,11 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			return ctrl.Result{}, err
 		}
 		log.Info("corresponding CRD ClusterwideNetworkPolicy deleted")
+
+		if err := r.DeleteSvcLB(ctx, instance); err != nil {
+			return ctrl.Result{}, err
+		}
+		log.Info("corresponding Service of type LoadBalancer deleted")
 
 		log.Info("deleting owned zalando postgresql")
 
@@ -145,6 +152,10 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		log.Info("zalando postgresql updated", "ns/name", namespacedName)
 	}
 
+	if err := r.CreateSvcLBIfNone(ctx, instance); err != nil {
+		return ctrl.Result{}, err
+	}
+
 	// todo: Check the port. The default port of postgres is used.
 	// Update status will be handled by the StatusReconciler, based on the Zalando Status
 	if err := r.createOrUpdateCWNP(ctx, instance, 5432); err != nil {
@@ -197,7 +208,7 @@ func (r *PostgresReconciler) createZalandoPostgresql(ctx context.Context, z *pg.
 
 // ensureZalandoDependencies makes sure Zalando resources are installed in the service-cluster.
 func (r *PostgresReconciler) ensureZalandoDependencies(ctx context.Context, pg *pg.Postgres) error {
-	namespace := pg.Spec.ProjectID
+	namespace := pg.ToPeripheralResourceNamespace()
 	isInstalled, err := r.IsOperatorInstalled(ctx, namespace)
 	if err != nil {
 		return fmt.Errorf("error while querying if zalando dependencies are installed: %v", err)
