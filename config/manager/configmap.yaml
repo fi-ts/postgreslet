@@ -5,7 +5,7 @@ data:
   METRICS_ADDR_SVC_MGR: ":8080"
   PARTITION_ID: sample-partition
   TENANT: sample-tenant
-  LOAD_BALANCER_IP: "172.0.0.1"
+  LOAD_BALANCER_IP: "127.0.0.1"
   PORT_RANGE_START: 31767
   PORT_RANGE_SIZE: 8192
 kind: ConfigMap
