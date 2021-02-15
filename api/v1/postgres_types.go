@@ -215,6 +215,10 @@ func (p *Postgres) ToKey() *types.NamespacedName {
 	}
 }
 
+var SvcLoadBalancerLabel = map[string]string{
+	"cloud-service": "pgaas",
+}
+
 func (p *Postgres) ToSvcLB(lbIP string, lbPort int32) *corev1.Service {
 	lb := &corev1.Service{}
 	lb.Spec.Type = "LoadBalancer"
@@ -225,13 +229,7 @@ func (p *Postgres) ToSvcLB(lbIP string, lbPort int32) *corev1.Service {
 
 	lb.Namespace = p.ToPeripheralResourceNamespace()
 	lb.Name = p.ToSvcLBName()
-	label := map[string]string{
-		"application":  "spilo",
-		"cluster-name": p.ToPeripheralResourceName(),
-		"spilo-role":   "master",
-		"team":         p.generateTeamID(),
-	}
-	lb.SetLabels(label)
+	lb.SetLabels(SvcLoadBalancerLabel)
 
 	// svc.Spec.LoadBalancerSourceRanges // todo: Do we need to set this?
 
@@ -242,7 +240,12 @@ func (p *Postgres) ToSvcLB(lbIP string, lbPort int32) *corev1.Service {
 	port.TargetPort = intstr.FromInt(5432)
 	lb.Spec.Ports = []corev1.ServicePort{port}
 
-	lb.Spec.Selector = label
+	lb.Spec.Selector = map[string]string{
+		"application":  "spilo",
+		"cluster-name": p.ToPeripheralResourceName(),
+		"spilo-role":   "master",
+		"team":         p.generateTeamID(),
+	}
 
 	lb.Spec.LoadBalancerIP = lbIP
 

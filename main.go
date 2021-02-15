@@ -7,7 +7,6 @@
 package main
 
 import (
-	"context"
 	"flag"
 	"fmt"
 	"net"
@@ -17,7 +16,6 @@ import (
 
 	"github.com/metal-stack/v"
 	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
@@ -107,15 +105,6 @@ func main() {
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start service cluster manager")
-		os.Exit(1)
-	}
-
-	// Add new index for listing Services of type LoadBalancer by matching fields
-	if err := svcClusterMgr.GetFieldIndexer().IndexField(context.Background(), &corev1.Service{}, lbmanager.SvcTypeIndex, func(o runtime.Object) []string {
-		svc := o.(*corev1.Service)
-		return []string{string(svc.Spec.Type)}
-	}); err != nil {
-		setupLog.Error(err, "unable to add new index for listing Services of type LoadBalancer")
 		os.Exit(1)
 	}
 

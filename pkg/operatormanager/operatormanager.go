@@ -116,6 +116,8 @@ func (m *OperatorManager) IsOperatorDeletable(ctx context.Context, namespace str
 		return true, nil
 	}
 
+	// todo: Check statefulset as well.
+
 	services := &corev1.ServiceList{}
 	if err := m.List(ctx, services, client.InNamespace(namespace), m.toInstanceMatchingLabels(namespace)); err != nil {
 		if errors.IsNotFound(err) {

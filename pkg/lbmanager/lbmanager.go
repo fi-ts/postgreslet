@@ -58,17 +58,9 @@ func (m *LBManager) DeleteSvcLB(ctx context.Context, in *api.Postgres) error {
 	return nil
 }
 
-const SvcTypeIndex = "spec.type"
-
 func (m *LBManager) nextFreePort(ctx context.Context) (int32, error) {
 	lbs := &corev1.ServiceList{}
-	if err := m.List(ctx, lbs,
-		client.MatchingFields{SvcTypeIndex: string(corev1.ServiceTypeLoadBalancer)},
-		client.MatchingLabels{
-			"application": "spilo",
-			"spilo-role":  "master",
-		},
-	); err != nil {
+	if err := m.List(ctx, lbs, client.MatchingLabels(api.SvcLoadBalancerLabel)); err != nil {
 		return 0, fmt.Errorf("failed to fetch the list of services of type LoadBalancer: %w", err)
 	}
 
