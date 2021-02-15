@@ -152,7 +152,7 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		log.Info("zalando postgresql updated", "ns/name", namespacedName)
 	}
 
-	if err := r.CreateLBIfNone(ctx, instance); err != nil {
+	if err := r.CreateSvcLBIfNone(ctx, instance); err != nil {
 		return ctrl.Result{}, err
 	}
 
