@@ -253,7 +253,7 @@ func (p *Postgres) ToSvcLB(lbIP string, lbPort int32) *corev1.Service {
 // It's different from all other peripheral resources because the operator
 // already generates one service with that name.
 func (p *Postgres) ToSvcLBName() string {
-	return p.ToPeripheralResourceName() + "-lb"
+	return p.ToPeripheralResourceName() + "-external"
 }
 
 func (p *Postgres) ToSvcLBNamespacedName() *types.NamespacedName {
