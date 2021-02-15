@@ -196,7 +196,7 @@ func (p *Postgres) ToCWNP(port int) (*firewall.ClusterwideNetworkPolicy, error) 
 			ipblocks = append(ipblocks, ipblock)
 		}
 	} else {
-		// add an empty block
+		// add an empty block so access is blocked
 		ipblock := networkingv1.IPBlock{}
 		ipblocks = append(ipblocks, ipblock)
 	}
