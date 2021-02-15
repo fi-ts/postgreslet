@@ -229,7 +229,7 @@ func (p *Postgres) ToSvcLB(lbIP string, lbPort int32) *corev1.Service {
 		"application":  "spilo",
 		"cluster-name": p.ToPeripheralResourceName(),
 		"spilo-role":   "master",
-		"team":         lb.Namespace,
+		"team":         p.generateTeamID(),
 	}
 	lb.SetLabels(label)
 
