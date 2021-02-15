@@ -151,7 +151,7 @@ spec:
                   of cluster Important: Run "make" to regenerate code after modifying
                   this file'
                 type: string
-              lbSocket:
+              socket:
                 description: Socket represents load-balancer socket of Postgres
                 properties:
                   ip:

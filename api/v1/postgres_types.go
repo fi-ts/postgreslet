@@ -145,7 +145,7 @@ type PostgresStatus struct {
 	// Important: Run "make" to regenerate code after modifying this file
 	Description string `json:"description,omitempty"`
 
-	Socket Socket `json:"lbSocket,omitempty"`
+	Socket Socket `json:"socket,omitempty"`
 }
 
 // Socket represents load-balancer socket of Postgres
