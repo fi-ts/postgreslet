@@ -74,6 +74,10 @@ spec:
                     description: Schedule defines how often a backup should be made,
                       in cron format
                     type: string
+                  secretname:
+                    description: SecretName reference to the secret where the backup
+                      credentials are stored
+                    type: string
                 type: object
               description:
                 description: Description
@@ -108,6 +112,10 @@ spec:
                 type: string
               projectID:
                 description: ProjectID metal project ID
+                type: string
+              secretname:
+                description: SecretName reference to the secret where the user credentials
+                  are stored
                 type: string
               size:
                 description: Size of the database
