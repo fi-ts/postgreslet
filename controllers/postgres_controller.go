@@ -80,7 +80,7 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		}
 		log.Info("corresponding CRD ClusterwideNetworkPolicy deleted")
 
-		if err := r.DeleteLB(ctx, instance); err != nil {
+		if err := r.DeleteSvcLB(ctx, instance); err != nil {
 			return ctrl.Result{}, err
 		}
 		log.Info("corresponding Service of type LoadBalancer deleted")

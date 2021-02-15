@@ -27,7 +27,7 @@ func New(client client.Client, lbIP string, portRangeStart, portRangeSize int32)
 	}
 }
 
-func (m *LBManager) CreateLBIfNone(ctx context.Context, in *api.Postgres) error {
+func (m *LBManager) CreateSvcLBIfNone(ctx context.Context, in *api.Postgres) error {
 	if err := m.Get(ctx, client.ObjectKey{
 		Namespace: in.ToPeripheralResourceNamespace(),
 		Name:      in.ToSvcLBName(),
@@ -48,7 +48,7 @@ func (m *LBManager) CreateLBIfNone(ctx context.Context, in *api.Postgres) error 
 	return nil
 }
 
-func (m *LBManager) DeleteLB(ctx context.Context, in *api.Postgres) error {
+func (m *LBManager) DeleteSvcLB(ctx context.Context, in *api.Postgres) error {
 	lb := &corev1.Service{}
 	lb.Namespace = in.ToPeripheralResourceNamespace()
 	lb.Name = in.ToSvcLBName()
