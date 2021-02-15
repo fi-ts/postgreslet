@@ -47,8 +47,8 @@ run: generate fmt vet manifests install-crd-cwnp
 	-tenant sample-tenant \
 	-controlplane-kubeconfig "./kubeconfig" \
 	-load-balancer-ip "127.0.0.1" \
-	-port-range-start 32767 \
-	-port-range-size 8192
+	-port-range-start 32000 \
+	-port-range-size 8000
 
 # Install CRDs into a cluster
 install: manifests

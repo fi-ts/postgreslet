@@ -216,7 +216,7 @@ func (p *Postgres) ToKey() *types.NamespacedName {
 }
 
 var SvcLoadBalancerLabel = map[string]string{
-	"cloud-service": "pgaas",
+	"postgres.database.fits.cloud/managed-by": "postgreslet",
 }
 
 func (p *Postgres) ToSvcLB(lbIP string, lbPort int32) *corev1.Service {

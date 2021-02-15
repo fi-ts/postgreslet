@@ -61,8 +61,8 @@ func main() {
 	flag.StringVar(&ctrlClusterKubeconfig, "controlplane-kubeconfig", "/var/run/secrets/postgreslet/kube/config", "The path to the kubeconfig to talk to the control plane")
 	flag.StringVar(&lbIP, "load-balancer-ip", "", "The load-balancer IP of postgres in this cluster.")
 	// todo: Check the default port range start and size.
-	flag.IntVar(&portRangeStart, "port-range-start", 32767, "The start of the port range of services LoadBalancer.")
-	flag.IntVar(&portRangeSize, "port-range-size", 8192, "The size of the port range of services LoadBalancer.")
+	flag.IntVar(&portRangeStart, "port-range-start", 32000, "The start of the port range of services LoadBalancer.")
+	flag.IntVar(&portRangeSize, "port-range-size", 8000, "The size of the port range of services LoadBalancer.")
 	flag.StringVar(&pspName, "custom-psp-name", "postgres-operator-psp", "The namem of our custom PodSecurityPolicy. Will be added to the ClusterRoles.")
 	flag.Parse()
 
