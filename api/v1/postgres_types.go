@@ -254,7 +254,7 @@ func (p *Postgres) ToSecretName() string {
 	return p.ToPeripheralResourceName() + "-passwords"
 }
 
-func (p *Postgres) ToSecretNamesapcedName() *types.NamespacedName {
+func (p *Postgres) ToSecretNamespacedName() *types.NamespacedName {
 	return &types.NamespacedName{
 		Namespace: SecretNamespace,
 		Name:      p.ToSecretName(),

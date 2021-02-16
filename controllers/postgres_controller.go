@@ -180,7 +180,7 @@ func (r *PostgresReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 func (r *PostgresReconciler) CreateSecret(ctx context.Context, in *pg.Postgres) error {
 	new := &corev1.Secret{}
-	if err := r.Client.Get(ctx, *in.ToSecretNamesapcedName(), new); err != nil {
+	if err := r.Client.Get(ctx, *in.ToSecretNamespacedName(), new); err != nil {
 		if !errors.IsNotFound(err) {
 			return fmt.Errorf("failed to fetch secret: %w", err)
 		}
