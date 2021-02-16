@@ -102,6 +102,8 @@ type Backup struct {
 type Size struct {
 	// CPU is in the format as pod.spec.resource.request.cpu
 	CPU string `json:"cpu,omitempty"`
+	// Memory is in the format as pod.spec.resource.request.memory
+	Memory string `json:"memory,omitempty"`
 	// SharedBuffer of the database
 	SharedBuffer string `json:"sharedBuffer,omitempty"`
 

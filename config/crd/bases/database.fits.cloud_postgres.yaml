@@ -123,6 +123,9 @@ spec:
                   cpu:
                     description: CPU is in the format as pod.spec.resource.request.cpu
                     type: string
+                  memory:
+                    description: Memory is in the format as pod.spec.resource.request.memory
+                    type: string
                   sharedBuffer:
                     description: SharedBuffer of the database
                     type: string
