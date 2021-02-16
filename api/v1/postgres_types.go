@@ -7,9 +7,7 @@
 package v1
 
 import (
-	"encoding/base64"
 	"fmt"
-	"log"
 	"time"
 
 	"regexp"
@@ -19,9 +17,11 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -176,21 +176,6 @@ func (p *Postgres) IsBeingDeleted() bool {
 	return !p.ObjectMeta.DeletionTimestamp.IsZero()
 }
 
-func (p *Postgres) toMaintenance() Maintenance {
-	now := time.Now()
-	return Maintenance{
-		Weekday: Sun,
-		TimeWindow: TimeWindow{
-			Start: metav1.Time{
-				Time: now,
-			},
-			End: metav1.Time{
-				Time: now,
-			},
-		},
-	}
-}
-
 // ToCWNP returns CRD ClusterwideNetworkPolicy derived from CRD Postgres
 func (p *Postgres) ToCWNP(port int) (*firewall.ClusterwideNetworkPolicy, error) {
 	portObj := intstr.FromInt(port)
@@ -230,55 +215,6 @@ func (p *Postgres) ToKey() *types.NamespacedName {
 	return &types.NamespacedName{
 		Namespace: p.Namespace,
 		Name:      p.Name,
-	}
-}
-
-const SecretNamespace = "pgaas"
-
-func (p *Postgres) ToUserPasswordsSecret(src *corev1.SecretList) (*corev1.Secret, error) {
-	secret := &corev1.Secret{}
-	secret.Namespace = SecretNamespace
-	secret.Name = p.ToSecretName()
-	secret.Type = corev1.SecretTypeOpaque
-
-	log.Print("===src===> ", src)
-	// Fill in the contents of the new secret
-	for _, v := range src.Items {
-		log.Print("======> ", v)
-		user, err := base64.StdEncoding.DecodeString(string(v.Data["username"]))
-		log.Print("======> ", user)
-		if err != nil {
-			return nil, fmt.Errorf("failed to decode base64: %w", err)
-		}
-
-		secret.Data[string(user)] = v.Data["password"]
-	}
-	log.Print("======> ", *secret)
-
-	return secret, nil
-}
-
-func (p *Postgres) ToUserPasswordsSecretListOption() []client.ListOption {
-	return []client.ListOption{
-		client.InNamespace(p.ToPeripheralResourceNamespace()),
-		client.MatchingLabels(
-			map[string]string{
-				"application":  "spilo",
-				"cluster-name": p.ToPeripheralResourceName(),
-				"team":         p.generateTeamID(),
-			},
-		),
-	}
-}
-
-func (p *Postgres) ToSecretName() string {
-	return p.ToPeripheralResourceName() + "-passwords"
-}
-
-func (p *Postgres) ToSecretNamespacedName() *types.NamespacedName {
-	return &types.NamespacedName{
-		Namespace: SecretNamespace,
-		Name:      p.ToSecretName(),
 	}
 }
 
@@ -336,6 +272,41 @@ func (p *Postgres) ToSvcLBNamespacedName() *types.NamespacedName {
 func (p *Postgres) ToPeripheralResourceName() string {
 
 	return p.generateTeamID() + "-" + p.generateDatabaseName()
+}
+
+// ToUserPasswordSecret returns the secret containing user password pairs
+func (p *Postgres) ToUserPasswordsSecret(src *corev1.SecretList, scheme *runtime.Scheme) (*corev1.Secret, error) {
+	secret := &corev1.Secret{}
+	secret.Namespace = p.Namespace
+	// todo: Consider `p.Name + "-passwords", so the`
+	secret.Name = p.ToPeripheralResourceName() + "-passwords"
+	secret.Type = corev1.SecretTypeOpaque
+
+	// Fill in the contents of the new secret
+	for _, v := range src.Items {
+		secret.Data[string(v.Data["username"])] = v.Data["password"]
+	}
+
+	// Set the owner of the secret
+	if err := controllerutil.SetControllerReference(p, secret, scheme); err != nil {
+		return nil, err
+	}
+
+	return secret, nil
+}
+
+// ToUserPasswordsSecretListOption returns the argument for listing secrets
+func (p *Postgres) ToUserPasswordsSecretListOption() []client.ListOption {
+	return []client.ListOption{
+		client.InNamespace(p.ToPeripheralResourceNamespace()),
+		client.MatchingLabels(
+			map[string]string{
+				"application":  "spilo",
+				"cluster-name": p.ToPeripheralResourceName(),
+				"team":         p.generateTeamID(),
+			},
+		),
+	}
 }
 
 var alphaNumericRegExp *regexp.Regexp = regexp.MustCompile("[^a-zA-Z0-9]+")

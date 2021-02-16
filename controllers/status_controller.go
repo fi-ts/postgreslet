@@ -17,6 +17,7 @@ import (
 	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
 
@@ -108,6 +109,16 @@ func (r *StatusReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		return ctrl.Result{}, fmt.Errorf("failed to update lbSocket of Postgres: %w", err)
 	}
 
+	// Fetch the list of operator-generated secrets
+	secrets := &corev1.SecretList{}
+	if err := r.List(ctx, secrets, owner.ToUserPasswordsSecretListOption()...); client.IgnoreNotFound(err) != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to fetch the list of operator generated secrets: %w", err)
+	}
+
+	if err := r.createOrUpdateSecret(ctx, &owner, secrets, log); err != nil {
+		return ctrl.Result{}, err
+	}
+
 	return ctrl.Result{}, nil
 }
 
@@ -115,7 +126,42 @@ func (r *StatusReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 func (r *StatusReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&zalando.Postgresql{}).
+		Owns(&corev1.Secret{}). // changes of secrets trigger reconciliation
 		Complete(r)
+}
+
+func (r *StatusReconciler) createOrUpdateSecret(ctx context.Context, in *pg.Postgres, secrets *corev1.SecretList, log logr.Logger) error {
+	secret, err := in.ToUserPasswordsSecret(secrets, r.Scheme)
+	if err != nil {
+		return fmt.Errorf("failed to convert to the secret containing user password pairs: %w", err)
+	}
+
+	// placeholder of the secret with the specified namespaced name
+	fetched := &corev1.Secret{ObjectMeta: secret.ObjectMeta}
+	// todo: update to CreateOrPatch()
+	result, err := controllerutil.CreateOrUpdate(ctx, r.Control, fetched, func() error {
+		fetched.Data = secret.Data
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create or update the secret containing user password pairs: %w", err)
+	}
+	log.Info("secret created or updated", "operation result", result)
+
+	if result == controllerutil.OperationResultCreated {
+		// todo: Consider removing secretName from Spec
+		//       if the secret name has a fixed relationship with postgres name:
+		//       secretNmae = f(postgresName)
+		//       Then, it's not a specification.
+		patch := client.MergeFrom(in.DeepCopy())
+		in.Spec.SecretName = secret.Name
+		if err := r.Control.Patch(ctx, in, patch); err != nil {
+			return fmt.Errorf("failed to patch postgres %w", err)
+		}
+		log.Info("postgres patched", "secret name", in.Spec.SecretName)
+	}
+
+	return nil
 }
 
 // Extract the UID of the owner object by reading the value of a certain label

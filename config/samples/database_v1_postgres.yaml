@@ -1,12 +1,12 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: database
+  name: pgaas-test
 ---
 apiVersion: database.fits.cloud/v1
 kind: Postgres
 metadata:
-  namespace: database
+  namespace: pgaas-test
   name: sample-name-a
 spec:
   backup:
@@ -22,7 +22,7 @@ spec:
 apiVersion: database.fits.cloud/v1
 kind: Postgres
 metadata:
-  namespace: database
+  namespace: pgaas-test
   name: sample-name-b
 spec:
   accessList:
