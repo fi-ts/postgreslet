@@ -350,9 +350,13 @@ func (p *Postgres) ToZalandoPostgres() *ZalandoPostgres {
 				}
 				return &Resources{
 					ResourceRequests: &ResourceDescription{
-						CPU: p.Spec.Size.CPU,
+						CPU:    p.Spec.Size.CPU,
+						Memory: p.Spec.Size.Memory,
 					},
-					ResourceLimits: &ResourceDescription{}, // todo: Fill it out.
+					ResourceLimits: &ResourceDescription{
+						CPU:    p.Spec.Size.CPU,
+						Memory: p.Spec.Size.Memory,
+					},
 				}
 			}(),
 			TeamID: p.generateTeamID(),

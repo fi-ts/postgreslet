@@ -135,7 +135,7 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			return requeue, err
 		}
 		log.Info("creating zalando postgresql", "ns/name", z)
-		setValuesToZ(rawZ, instance)
+
 		return r.createZalandoPostgresql(ctx, z)
 	}
 
@@ -144,7 +144,7 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		namespacedName := types.NamespacedName{Namespace: rawZ.Namespace, Name: rawZ.Name}
 		log.Info("updating zalando postgresql", "ns/name", namespacedName)
 		patch := client.MergeFrom(rawZ.DeepCopy())
-		setValuesToZ(rawZ, instance)
+		patchRawZ(rawZ, instance)
 		if err := r.Service.Patch(ctx, rawZ, patch); err != nil {
 			log.Error(err, "error while updating zalando postgresql", "ns/name", namespacedName)
 			return requeue, err
@@ -254,7 +254,7 @@ func (r *PostgresReconciler) deleteZPostgresqlByLabels(ctx context.Context, matc
 	return nil
 }
 
-func setValuesToZ(out *zalando.Postgresql, in *pg.Postgres) {
+func patchRawZ(out *zalando.Postgresql, in *pg.Postgres) {
 	if in.HasSourceRanges() {
 		out.Spec.AllowedSourceRanges = in.Spec.AccessList.SourceRanges
 	}
