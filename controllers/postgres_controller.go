@@ -265,6 +265,7 @@ func patchRawZ(out *zalando.Postgresql, in *pg.Postgres) {
 	out.Spec.PostgresqlParam.PgVersion = in.Spec.Version
 
 	out.Spec.ResourceRequests.CPU = in.Spec.Size.CPU
+	out.Spec.ResourceRequests.Memory = in.Spec.Size.CPU
 
 	// todo: Check if the validation should be performed here.
 	out.Spec.Volume.Size = in.Spec.Size.StorageSize
