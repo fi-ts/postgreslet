@@ -162,10 +162,19 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		return ctrl.Result{}, fmt.Errorf("unable to create or update corresponding CRD ClusterwideNetworkPolicy: %W", err)
 	}
 
-	if instance.Spec.SecretName == "" {
-		if err := r.CreateSecret(ctx, instance); err != nil {
-			return ctrl.Result{}, err
-		}
+	// Fetch the list of operator-generated secrets
+	secrets := &corev1.SecretList{}
+	if err := r.Service.List(ctx, secrets, instance.ToUserPasswordsSecretListOption()...); client.IgnoreNotFound(err) != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to fetch the list of operator generated secrets: %w", err)
+	}
+
+	// There must be a secret. Otherwise requeue.
+	if len(secrets.Items) == 0 {
+		return ctrl.Result{Requeue: true}, nil
+	}
+
+	if err := r.createOrUpdateSecret(ctx, instance, secrets); err != nil {
+		return ctrl.Result{}, err
 	}
 
 	return ctrl.Result{}, nil
@@ -178,30 +187,23 @@ func (r *PostgresReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func (r *PostgresReconciler) CreateSecret(ctx context.Context, in *pg.Postgres) error {
-	new := &corev1.Secret{}
-	if err := r.Client.Get(ctx, *in.ToSecretNamespacedName(), new); err != nil {
+func (r *PostgresReconciler) createOrUpdateSecret(ctx context.Context, in *pg.Postgres, secrets *corev1.SecretList) error {
+	secret, err := in.ToUserPasswordsSecret(secrets)
+	if err != nil {
+		return fmt.Errorf("failed to convert to secret: %w", err)
+	}
+
+	if err := r.Client.Get(ctx, *in.ToSecretNamespacedName(), secret); err != nil {
 		if !errors.IsNotFound(err) {
 			return fmt.Errorf("failed to fetch secret: %w", err)
 		}
 
-		// Fetch the list of operator-generated secrets
-		secrets := &corev1.SecretList{}
-		if err := r.Client.List(ctx, secrets, in.ToSecretListOption()...); err != nil {
-			return fmt.Errorf("failed to fetch the list of operator generated secrets: %w", err)
-		}
-
-		new, err := in.ToSecret(secrets)
-		if err != nil {
-			return fmt.Errorf("failed to convert to secret: %w", err)
-		}
-
-		if err := r.Client.Create(ctx, new); err != nil {
+		if err := r.Client.Create(ctx, secret); err != nil {
 			return fmt.Errorf("failed to create secret: %w", err)
 		}
 
 		patch := client.MergeFrom(in.DeepCopy())
-		in.Spec.SecretName = new.Name
+		in.Spec.SecretName = secret.Name
 		if err := r.Client.Patch(ctx, in, patch); err != nil {
 			return fmt.Errorf("failed to patch postgres %w", err)
 		}

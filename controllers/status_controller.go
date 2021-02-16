@@ -96,6 +96,7 @@ func (r *StatusReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		return ctrl.Result{}, retryErr
 	}
 
+	// todo: not found is not an error
 	lb := &corev1.Service{}
 	if err := r.Client.Get(ctx, *owner.ToSvcLBNamespacedName(), lb); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to fetch the corresponding Service of type LoadBalancer: %w", err)

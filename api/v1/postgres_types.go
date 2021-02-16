@@ -9,6 +9,7 @@ package v1
 import (
 	"encoding/base64"
 	"fmt"
+	"log"
 	"time"
 
 	"regexp"
@@ -175,6 +176,21 @@ func (p *Postgres) IsBeingDeleted() bool {
 	return !p.ObjectMeta.DeletionTimestamp.IsZero()
 }
 
+func (p *Postgres) toMaintenance() Maintenance {
+	now := time.Now()
+	return Maintenance{
+		Weekday: Sun,
+		TimeWindow: TimeWindow{
+			Start: metav1.Time{
+				Time: now,
+			},
+			End: metav1.Time{
+				Time: now,
+			},
+		},
+	}
+}
+
 // ToCWNP returns CRD ClusterwideNetworkPolicy derived from CRD Postgres
 func (p *Postgres) ToCWNP(port int) (*firewall.ClusterwideNetworkPolicy, error) {
 	portObj := intstr.FromInt(port)
@@ -219,27 +235,32 @@ func (p *Postgres) ToKey() *types.NamespacedName {
 
 const SecretNamespace = "pgaas"
 
-func (p *Postgres) ToSecret(src *corev1.SecretList) (*corev1.Secret, error) {
+func (p *Postgres) ToUserPasswordsSecret(src *corev1.SecretList) (*corev1.Secret, error) {
 	secret := &corev1.Secret{}
 	secret.Namespace = SecretNamespace
 	secret.Name = p.ToSecretName()
 	secret.Type = corev1.SecretTypeOpaque
 
+	log.Print("===src===> ", src)
 	// Fill in the contents of the new secret
 	for _, v := range src.Items {
+		log.Print("======> ", v)
 		user, err := base64.StdEncoding.DecodeString(string(v.Data["username"]))
+		log.Print("======> ", user)
 		if err != nil {
 			return nil, fmt.Errorf("failed to decode base64: %w", err)
 		}
 
 		secret.Data[string(user)] = v.Data["password"]
 	}
+	log.Print("======> ", *secret)
 
 	return secret, nil
 }
 
-func (p *Postgres) ToSecretListOption() []client.ListOption {
+func (p *Postgres) ToUserPasswordsSecretListOption() []client.ListOption {
 	return []client.ListOption{
+		client.InNamespace(p.ToPeripheralResourceNamespace()),
 		client.MatchingLabels(
 			map[string]string{
 				"application":  "spilo",
