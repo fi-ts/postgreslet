@@ -220,10 +220,10 @@ func (p *Postgres) ToKey() *types.NamespacedName {
 const SecretNamespace = "pgaas"
 
 func (p *Postgres) ToSecret(src *corev1.SecretList) (*corev1.Secret, error) {
-	new := &corev1.Secret{}
-	new.Namespace = SecretNamespace
-	new.Name = p.ToSecretName()
-	new.Type = corev1.SecretTypeOpaque
+	secret := &corev1.Secret{}
+	secret.Namespace = SecretNamespace
+	secret.Name = p.ToSecretName()
+	secret.Type = corev1.SecretTypeOpaque
 
 	// Fill in the contents of the new secret
 	for _, v := range src.Items {
@@ -232,10 +232,10 @@ func (p *Postgres) ToSecret(src *corev1.SecretList) (*corev1.Secret, error) {
 			return nil, fmt.Errorf("failed to decode base64: %w", err)
 		}
 
-		new.Data[string(user)] = v.Data["password"]
+		secret.Data[string(user)] = v.Data["password"]
 	}
 
-	return new, nil
+	return secret, nil
 }
 
 func (p *Postgres) ToSecretListOption() []client.ListOption {
