@@ -36,11 +36,23 @@ func (m *LBManager) CreateSvcLBIfNone(ctx context.Context, in *api.Postgres) err
 			return fmt.Errorf("failed to fetch Service of type LoadBalancer: %w", err)
 		}
 
-		nextFreePort, err := m.nextFreePort(ctx)
+		existingLBIP, nextFreePort, err := m.nextFreeSocket(ctx)
 		if err != nil {
 			return fmt.Errorf("failed to get a free port for creating Service of type LoadBalancer: %w", err)
 		}
-		if err := m.Create(ctx, in.ToSvcLB(m.LBIP, nextFreePort)); err != nil {
+		var lbIPToUse string
+		if m.LBIP != "" {
+			// a specific IP was configured in the config, so use that one
+			lbIPToUse = m.LBIP
+		} else if existingLBIP != "" {
+			// no ip was configured, but one is already in use, so use the existing one
+			lbIPToUse = existingLBIP
+		} else {
+			// nothing was configured, nothing exists yet, so use an empty address so a new loadbalancer will be created and assigned
+			lbIPToUse = ""
+		}
+
+		if err := m.Create(ctx, in.ToSvcLB(lbIPToUse, nextFreePort)); err != nil {
 			return fmt.Errorf("failed to create Service of type LoadBalancer: %w", err)
 		}
 		return nil
@@ -58,27 +70,35 @@ func (m *LBManager) DeleteSvcLB(ctx context.Context, in *api.Postgres) error {
 	return nil
 }
 
-func (m *LBManager) nextFreePort(ctx context.Context) (int32, error) {
+func (m *LBManager) nextFreeSocket(ctx context.Context) (string, int32, error) {
+	// TODO prevent concurrency issues when calculating port / ip.
+
+	existingLBIP := ""
+
 	lbs := &corev1.ServiceList{}
 	if err := m.List(ctx, lbs, client.MatchingLabels(api.SvcLoadBalancerLabel)); err != nil {
-		return 0, fmt.Errorf("failed to fetch the list of services of type LoadBalancer: %w", err)
+		return existingLBIP, 0, fmt.Errorf("failed to fetch the list of services of type LoadBalancer: %w", err)
 	}
 
 	if len(lbs.Items) == 0 {
-		return m.PortRangeStart, nil
+		return existingLBIP, m.PortRangeStart, nil
 	}
 
 	// Record weather any port is occupied
 	isOccupied := make([]bool, int(m.PortRangeSize))
 	for i := range lbs.Items {
-		isOccupied[lbs.Items[i].Spec.Ports[0].Port-m.PortRangeStart] = true
+		svc := lbs.Items[i]
+		isOccupied[svc.Spec.Ports[0].Port-m.PortRangeStart] = true
+		if svc.Spec.LoadBalancerIP != "" {
+			existingLBIP = svc.Spec.LoadBalancerIP
+		}
 	}
 
 	for i := range isOccupied {
 		if !isOccupied[i] {
-			return m.PortRangeStart + int32(i), nil
+			return existingLBIP, m.PortRangeStart + int32(i), nil
 		}
 	}
 
-	return 0, errors.New("no free port")
+	return existingLBIP, 0, errors.New("no free port")
 }
