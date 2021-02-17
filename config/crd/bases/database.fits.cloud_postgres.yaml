@@ -74,10 +74,6 @@ spec:
                     description: Schedule defines how often a backup should be made,
                       in cron format
                     type: string
-                  secretname:
-                    description: SecretName reference to the secret where the backup
-                      credentials are stored
-                    type: string
                 type: object
               description:
                 description: Description
