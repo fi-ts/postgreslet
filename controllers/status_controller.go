@@ -148,19 +148,6 @@ func (r *StatusReconciler) createOrUpdateSecret(ctx context.Context, in *pg.Post
 	}
 	log.Info("secret created or updated", "operation result", result)
 
-	if result == controllerutil.OperationResultCreated {
-		// todo: Consider removing secretName from Spec
-		//       if the secret name has a fixed relationship with postgres name:
-		//       secretNmae = f(postgresName)
-		//       Then, it's not a specification.
-		patch := client.MergeFrom(in.DeepCopy())
-		in.Spec.SecretName = secret.Name
-		if err := r.Control.Patch(ctx, in, patch); err != nil {
-			return fmt.Errorf("failed to patch postgres %w", err)
-		}
-		log.Info("postgres patched", "secret name", in.Spec.SecretName)
-	}
-
 	return nil
 }
 

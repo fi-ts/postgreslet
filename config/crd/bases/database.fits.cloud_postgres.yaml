@@ -113,10 +113,6 @@ spec:
               projectID:
                 description: ProjectID metal project ID
                 type: string
-              secretname:
-                description: SecretName reference to the secret where the user credentials
-                  are stored
-                type: string
               size:
                 description: Size of the database
                 properties:

@@ -79,8 +79,6 @@ type PostgresSpec struct {
 	Backup *Backup `json:"backup,omitempty"`
 	// AccessList defines access restrictions
 	AccessList *AccessList `json:"accessList,omitempty"`
-	// SecretName reference to the secret where the user credentials are stored
-	SecretName string `json:"secretname,omitempty"`
 }
 
 // AccessList defines the type of restrictions to access the database
