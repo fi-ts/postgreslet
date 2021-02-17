@@ -281,6 +281,7 @@ func (p *Postgres) ToUserPasswordsSecret(src *corev1.SecretList, scheme *runtime
 	// todo: Consider `p.Name + "-passwords", so the`
 	secret.Name = p.ToPeripheralResourceName() + "-passwords"
 	secret.Type = corev1.SecretTypeOpaque
+	secret.Data = map[string][]byte{}
 
 	// Fill in the contents of the new secret
 	for _, v := range src.Items {
