@@ -95,8 +95,6 @@ type Backup struct {
 	Retention int32 `json:"retention,omitempty"`
 	// Schedule defines how often a backup should be made, in cron format
 	Schedule string `json:"schedule,omitempty"`
-	// SecretName reference to the secret where the backup credentials are stored
-	SecretName string `json:"secretname,omitempty"`
 }
 
 // Size defines the size aspects of the database
@@ -306,6 +304,11 @@ func (p *Postgres) ToUserPasswordsSecret(src *corev1.SecretList, scheme *runtime
 // ToUserPasswordsSecretName returns the name of the secret containing user password pairs
 func (p *Postgres) ToUserPasswordsSecretName() string {
 	return p.Name + "-passwords"
+}
+
+// ToBackupSecretName returns the name of the secret containing backup credentials
+func (p *Postgres) ToBackupSecretName() string {
+	return p.Name + "-backup"
 }
 
 // ToUserPasswordsSecretListOption returns the argument for listing secrets
