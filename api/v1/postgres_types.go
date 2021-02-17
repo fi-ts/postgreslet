@@ -288,7 +288,7 @@ func (p *Postgres) ToUserPasswordsSecret(src *corev1.SecretList, scheme *runtime
 	secret := &corev1.Secret{}
 	secret.Namespace = p.Namespace
 	// todo: Consider `p.Name + "-passwords", so the`
-	secret.Name = p.ToPeripheralResourceName() + "-passwords"
+	secret.Name = p.ToUserPasswordsSecretName()
 	secret.Type = corev1.SecretTypeOpaque
 	secret.Data = map[string][]byte{}
 
@@ -303,6 +303,11 @@ func (p *Postgres) ToUserPasswordsSecret(src *corev1.SecretList, scheme *runtime
 	}
 
 	return secret, nil
+}
+
+// ToUserPasswordsSecretName returns the name of the secret containing user password pairs
+func (p *Postgres) ToUserPasswordsSecretName() string {
+	return p.Name + "-passwords"
 }
 
 // ToUserPasswordsSecretListOption returns the argument for listing secrets
