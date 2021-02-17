@@ -105,6 +105,8 @@ type Backup struct {
 type Size struct {
 	// CPU is in the format as pod.spec.resource.request.cpu
 	CPU string `json:"cpu,omitempty"`
+	// Memory is in the format as pod.spec.resource.request.memory
+	Memory string `json:"memory,omitempty"`
 	// SharedBuffer of the database
 	SharedBuffer string `json:"sharedBuffer,omitempty"`
 
@@ -198,6 +200,10 @@ func (p *Postgres) ToCWNP(port int) (*firewall.ClusterwideNetworkPolicy, error) 
 			}
 			ipblocks = append(ipblocks, ipblock)
 		}
+	} else {
+		// add an empty block so access is blocked
+		ipblock := networkingv1.IPBlock{}
+		ipblocks = append(ipblocks, ipblock)
 	}
 
 	policy := &firewall.ClusterwideNetworkPolicy{}
@@ -250,7 +256,10 @@ func (p *Postgres) ToSvcLB(lbIP string, lbPort int32) *corev1.Service {
 		"team":         p.generateTeamID(),
 	}
 
-	lb.Spec.LoadBalancerIP = lbIP
+	if len(lbIP) > 0 {
+		// if no ip is set, a new loadbalancer will be created automatically
+		lb.Spec.LoadBalancerIP = lbIP
+	}
 
 	return lb
 }
@@ -380,9 +389,13 @@ func (p *Postgres) ToZalandoPostgres() *ZalandoPostgres {
 				}
 				return &Resources{
 					ResourceRequests: &ResourceDescription{
-						CPU: p.Spec.Size.CPU,
+						CPU:    p.Spec.Size.CPU,
+						Memory: p.Spec.Size.Memory,
 					},
-					ResourceLimits: &ResourceDescription{}, // todo: Fill it out.
+					ResourceLimits: &ResourceDescription{
+						CPU:    p.Spec.Size.CPU,
+						Memory: p.Spec.Size.Memory,
+					},
 				}
 			}(),
 			TeamID: p.generateTeamID(),
