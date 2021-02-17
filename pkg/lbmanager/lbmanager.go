@@ -36,7 +36,7 @@ func (m *LBManager) CreateSvcLBIfNone(ctx context.Context, in *api.Postgres) err
 			return fmt.Errorf("failed to fetch Service of type LoadBalancer: %w", err)
 		}
 
-		nextFreePort, existingLBIP, err := m.nextFreeSocket(ctx)
+		existingLBIP, nextFreePort, err := m.nextFreeSocket(ctx)
 		if err != nil {
 			return fmt.Errorf("failed to get a free port for creating Service of type LoadBalancer: %w", err)
 		}
@@ -70,18 +70,18 @@ func (m *LBManager) DeleteSvcLB(ctx context.Context, in *api.Postgres) error {
 	return nil
 }
 
-func (m *LBManager) nextFreeSocket(ctx context.Context) (int32, string, error) {
+func (m *LBManager) nextFreeSocket(ctx context.Context) (string, int32, error) {
 	// TODO prevent concurrency issues when calculating port / ip.
 
 	existingLBIP := ""
 
 	lbs := &corev1.ServiceList{}
 	if err := m.List(ctx, lbs, client.MatchingLabels(api.SvcLoadBalancerLabel)); err != nil {
-		return 0, existingLBIP, fmt.Errorf("failed to fetch the list of services of type LoadBalancer: %w", err)
+		return existingLBIP, 0, fmt.Errorf("failed to fetch the list of services of type LoadBalancer: %w", err)
 	}
 
 	if len(lbs.Items) == 0 {
-		return m.PortRangeStart, existingLBIP, nil
+		return existingLBIP, m.PortRangeStart, nil
 	}
 
 	// Record weather any port is occupied
@@ -96,9 +96,9 @@ func (m *LBManager) nextFreeSocket(ctx context.Context) (int32, string, error) {
 
 	for i := range isOccupied {
 		if !isOccupied[i] {
-			return m.PortRangeStart + int32(i), existingLBIP, nil
+			return existingLBIP, m.PortRangeStart + int32(i), nil
 		}
 	}
 
-	return 0, existingLBIP, errors.New("no free port")
+	return existingLBIP, 0, errors.New("no free port")
 }
