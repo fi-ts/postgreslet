@@ -17,8 +17,11 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -76,8 +79,6 @@ type PostgresSpec struct {
 	Backup *Backup `json:"backup,omitempty"`
 	// AccessList defines access restrictions
 	AccessList *AccessList `json:"accessList,omitempty"`
-	// SecretName reference to the secret where the user credentials are stored
-	SecretName string `json:"secretname,omitempty"`
 }
 
 // AccessList defines the type of restrictions to access the database
@@ -278,6 +279,47 @@ func (p *Postgres) ToSvcLBNamespacedName() *types.NamespacedName {
 func (p *Postgres) ToPeripheralResourceName() string {
 
 	return p.generateTeamID() + "-" + p.generateDatabaseName()
+}
+
+// ToUserPasswordSecret returns the secret containing user password pairs
+func (p *Postgres) ToUserPasswordsSecret(src *corev1.SecretList, scheme *runtime.Scheme) (*corev1.Secret, error) {
+	secret := &corev1.Secret{}
+	secret.Namespace = p.Namespace
+	// todo: Consider `p.Name + "-passwords", so the`
+	secret.Name = p.ToUserPasswordsSecretName()
+	secret.Type = corev1.SecretTypeOpaque
+	secret.Data = map[string][]byte{}
+
+	// Fill in the contents of the new secret
+	for _, v := range src.Items {
+		secret.Data[string(v.Data["username"])] = v.Data["password"]
+	}
+
+	// Set the owner of the secret
+	if err := controllerutil.SetControllerReference(p, secret, scheme); err != nil {
+		return nil, err
+	}
+
+	return secret, nil
+}
+
+// ToUserPasswordsSecretName returns the name of the secret containing user password pairs
+func (p *Postgres) ToUserPasswordsSecretName() string {
+	return p.Name + "-passwords"
+}
+
+// ToUserPasswordsSecretListOption returns the argument for listing secrets
+func (p *Postgres) ToUserPasswordsSecretListOption() []client.ListOption {
+	return []client.ListOption{
+		client.InNamespace(p.ToPeripheralResourceNamespace()),
+		client.MatchingLabels(
+			map[string]string{
+				"application":  "spilo",
+				"cluster-name": p.ToPeripheralResourceName(),
+				"team":         p.generateTeamID(),
+			},
+		),
+	}
 }
 
 var alphaNumericRegExp *regexp.Regexp = regexp.MustCompile("[^a-zA-Z0-9]+")
