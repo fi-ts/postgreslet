@@ -197,9 +197,12 @@ func (m *OperatorManager) UninstallOperator(ctx context.Context, namespace strin
 		}
 	}
 
-	// todo: delete namespace
+	// delete pod environment configmap
+	if err := m.deletePodEnvironmentConfigMap(ctx, namespace); client.IgnoreNotFound(err) != nil {
+		return fmt.Errorf("error while deleting pod environment configmap: %v", err)
+	}
 
-	// TODO: delete pod environment configmap (if not already deleted with the namespace)
+	// todo: delete namespace
 
 	m.Log.Info("operator deleted")
 	return nil
@@ -291,12 +294,60 @@ func (m *OperatorManager) createNewRuntimeObject(ctx context.Context, objs []run
 
 // editConfigMap adds info to cm
 func (m *OperatorManager) editConfigMap(cm *v1.ConfigMap, namespace, s3BucketURL string) {
-	cm.Data["logical_backup_s3_bucket"] = s3BucketURL
+	// TODO re-enable
+	// cm.Data["logical_backup_s3_bucket"] = s3BucketURL
 	cm.Data["watched_namespace"] = namespace
 	// TODO don't use the same serviceaccount for operator and databases, see #88
 	cm.Data["pod_service_account_name"] = serviceAccountName
 	// set the reference to our custom pod environment configmap
 	cm.Data["pod_environment_configmap"] = PodEnvCMName
+	// TODO additional vars
+	// debug_logging: "true"
+	// docker_image: "{{ versions.spiloImage }}"
+	// enable_ebs_gp3_migration: "false"
+	// enable_master_load_balancer: "false"
+	// enable_pgversion_env_var: "true"
+	// enable_pod_disruption_budget: "true"
+	// enable_replica_load_balancer: "false"
+	// enable_sidecars: "true"
+	// enable_spilo_wal_path_compat: "true"
+	// enable_teams_api: "true"
+	// external_traffic_policy: "Cluster"
+	// logical_backup_docker_image: "{{ versions.logical_backupImage }}"
+	// log_s3_bucket: "{{ s3bucket.log_s3_bucket }}"
+	// wal_s3_bucket: "{{ s3bucket.wal_s3_bucket }}"
+	// logical_backup_s3_access_key_id: "{{ s3bucket.logical_backup_s3_access_key_id }}"
+	// logical_backup_s3_bucket: "{{ s3bucket.logical_backup_s3_bucket }}"
+	// logical_backup_s3_endpoint: "{{ s3bucket.logical_backup_s3_endpoint }}"
+	// logical_backup_s3_secret_access_key: "{{ s3bucket.logical_backup_s3_secret_access_key }}"
+	// logical_backup_s3_sse: "{{ s3bucket.logical_backup_s3_sse }}"
+	// logical_backup_schedule: "{{ s3bucket.logical_backup_schedule }}"
+	// master_dns_name_format: "{cluster}.{team}.{hostedzone}"
+	// pam_role_name: "{{ authentication.pam_role_name }}"
+	// pdb_name_format: "postgres-{cluster}-pdb"
+	// pod_deletion_wait_timeout: 10m
+	// pod_environment_configmap: "{{ pod_environment_cm.pod_environment_configmap }}"
+	// pod_label_wait_timeout: 10m
+	// pod_management_policy: "ordered_ready"
+	// pod_role_label: spilo-role
+	// pod_terminate_grace_period: 5m
+	// postgres_superuser_teams: "postgres_superusers"
+	// protected_role_names: "admin"
+	// ready_wait_interval: 3s
+	// ready_wait_timeout: 30s
+	// repair_period: 5m
+	// replica_dns_name_format: "{cluster}-repl.{team}.{hostedzone}"
+	// replication_username: standby
+	// resource_check_interval: 3s
+	// resource_check_timeout: 10m
+	// resync_period: 30m
+	// ring_log_lines: "100"
+	// secret_name_template: "{username}.{cluster}.credentials"
+	// spilo_privileged: "false"
+	// storage_resize_mode: "pvc"
+	// super_username: postgres
+	// team_admin_role: "admin"
+
 }
 
 // ensureCleanMetadata ensures obj has clean metadata
@@ -355,9 +406,25 @@ func (m *OperatorManager) createPodEnvironmentConfigMap(ctx context.Context, nam
 	if err := m.Create(ctx, cm); err != nil {
 		return objs, fmt.Errorf("error while creating the `runtime.Object`: %v", err)
 	}
-	m.Log.Info("new ConfigMap created")
+	m.Log.Info("new Pod Environment ConfigMap created")
 
 	return objs, nil
+}
+
+func (m *OperatorManager) deletePodEnvironmentConfigMap(ctx context.Context, namespace string) error {
+	cm := &v1.ConfigMap{}
+	if err := m.SetName(cm, PodEnvCMName); err != nil {
+		return fmt.Errorf("error while setting the namespace of the `runtime.Object` to %v: %v", namespace, err)
+	}
+	if err := m.SetNamespace(cm, namespace); err != nil {
+		return fmt.Errorf("error while setting the namespace of the `runtime.Object` to %v: %v", namespace, err)
+	}
+	if err := m.Delete(ctx, cm); err != nil {
+		return fmt.Errorf("error while deleting the `runtime.Object`: %v", err)
+	}
+	m.Log.Info("Pod Environment ConfigMap deleted")
+
+	return nil
 }
 
 // toInstanceMatchingLabels makes the matching labels for the pods of the instances operated by the operator
