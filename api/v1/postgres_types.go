@@ -87,7 +87,7 @@ type AccessList struct {
 // Backup configure parametes of the database backup
 const (
 	// S3URL defines the s3 endpoint URL for backup
-	BackupSecretS3URL = "s3url"
+	BackupSecretS3Endpoint = "s3Endpoint"
 	// S3BucketName defines the name of the S3 bucket for backup
 	BackupSecretS3BucketName = "s3BucketName"
 	// Retention defines how many days a backup will persist

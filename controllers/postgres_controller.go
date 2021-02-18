@@ -232,7 +232,7 @@ func (r *PostgresReconciler) ensureZalandoDependencies(ctx context.Context, p *p
 		return fmt.Errorf("error while getting the backup secret from control plane cluster: %v", err)
 	}
 	bucketName := string(backupSecret.Data[pg.BackupSecretS3BucketName])
-	awsEndpoint := string(backupSecret.Data[pg.BackupSecretS3URL])
+	awsEndpoint := string(backupSecret.Data[pg.BackupSecretS3Endpoint])
 	walES3Endpoint := "https+path://" + strings.TrimPrefix(awsEndpoint, "https://") // TODO find a cleaner way to do this...
 	awsAccessKeyID := string(backupSecret.Data[pg.BackupSecretAccessKey])
 	awsSecretAccessKey := string(backupSecret.Data[pg.BackupSecretSecretKey])
