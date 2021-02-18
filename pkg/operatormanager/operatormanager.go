@@ -34,6 +34,8 @@ var operatorPodMatchingLabels = client.MatchingLabels{"name": "postgres-operator
 // TODO: use different account for operator and database
 const serviceAccountName string = "postgres-operator"
 
+const podEnvCMName string = "postgres-pod-config"
+
 // OperatorManager manages the operator
 type OperatorManager struct {
 	client.Client
@@ -79,6 +81,15 @@ func (m *OperatorManager) InstallOperator(ctx context.Context, namespace, s3Buck
 	objs, err := m.ensureNamespace(ctx, namespace, objs)
 	if err != nil {
 		return objs, fmt.Errorf("error while ensuring the existence of namespace %v: %v", namespace, err)
+	}
+
+	// Add our custom pod environment configmap
+	data := map[string]string{
+		"KEY": "VALUE",
+	}
+	objs, err = m.createPodEnvironmentConfigMap(ctx, namespace, data, objs)
+	if err != nil {
+		return objs, fmt.Errorf("error while creating pod environment configmap %v: %v", namespace, err)
 	}
 
 	// Decode each YAML to `runtime.Object`, add the namespace to it and install it.
@@ -190,6 +201,8 @@ func (m *OperatorManager) UninstallOperator(ctx context.Context, namespace strin
 
 	// todo: delete namespace
 
+	// TODO: delete pod environment configmap (if not already deleted with the namespace)
+
 	m.Log.Info("operator deleted")
 	return nil
 }
@@ -284,6 +297,8 @@ func (m *OperatorManager) editConfigMap(cm *v1.ConfigMap, namespace, s3BucketURL
 	cm.Data["watched_namespace"] = namespace
 	// TODO don't use the same serviceaccount for operator and databases, see #88
 	cm.Data["pod_service_account_name"] = serviceAccountName
+	// set the reference to our custom pod environment configmap
+	cm.Data["pod_environment_configmap"] = podEnvCMName
 }
 
 // ensureCleanMetadata ensures obj has clean metadata
@@ -324,6 +339,25 @@ func (m *OperatorManager) ensureNamespace(ctx context.Context, namespace string,
 		// Append the created namespace to the list of the created `runtime.Object`s.
 		objs = append(objs, nsObj)
 	}
+
+	return objs, nil
+}
+
+// createPodEnvironmentConfigMap creates a new ConfigMap with additional environment variables for the pods
+func (m *OperatorManager) createPodEnvironmentConfigMap(ctx context.Context, namespace string, data map[string]string, objs []runtime.Object) ([]runtime.Object, error) {
+	cm := &v1.ConfigMap{
+		Data: data,
+	}
+	if err := m.SetName(cm, podEnvCMName); err != nil {
+		return objs, fmt.Errorf("error while setting the namespace of the `runtime.Object` to %v: %v", namespace, err)
+	}
+	if err := m.SetNamespace(cm, namespace); err != nil {
+		return objs, fmt.Errorf("error while setting the namespace of the `runtime.Object` to %v: %v", namespace, err)
+	}
+	if err := m.Create(ctx, cm); err != nil {
+		return objs, fmt.Errorf("error while creating the `runtime.Object`: %v", err)
+	}
+	m.Log.Info("new ConfigMap created")
 
 	return objs, nil
 }
