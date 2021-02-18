@@ -84,9 +84,7 @@ func (m *OperatorManager) InstallOperator(ctx context.Context, namespace, s3Buck
 	}
 
 	// Add our (initially empty) custom pod environment configmap
-	data := map[string]string{
-		"KEY": "VALUE",
-	}
+	data := map[string]string{}
 	objs, err = m.createPodEnvironmentConfigMap(ctx, namespace, data, objs)
 	if err != nil {
 		return objs, fmt.Errorf("error while creating pod environment configmap %v: %v", namespace, err)

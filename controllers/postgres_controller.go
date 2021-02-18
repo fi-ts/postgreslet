@@ -9,6 +9,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -214,53 +215,69 @@ func (r *PostgresReconciler) createZalandoPostgresql(ctx context.Context, z *pg.
 }
 
 // ensureZalandoDependencies makes sure Zalando resources are installed in the service-cluster.
-func (r *PostgresReconciler) ensureZalandoDependencies(ctx context.Context, pg *pg.Postgres) error {
-	namespace := pg.ToPeripheralResourceNamespace()
+func (r *PostgresReconciler) ensureZalandoDependencies(ctx context.Context, p *pg.Postgres) error {
+	namespace := p.ToPeripheralResourceNamespace()
 	isInstalled, err := r.IsOperatorInstalled(ctx, namespace)
 	if err != nil {
 		return fmt.Errorf("error while querying if zalando dependencies are installed: %v", err)
 	}
 
-	// TODO fetch secret
+	// fetch secret
+	backupSecret := &v1.Secret{}
+	backupNamespace := types.NamespacedName{
+		Name:      p.ToBackupSecretName(),
+		Namespace: p.Namespace,
+	}
+	if err := r.Client.Get(ctx, backupNamespace, backupSecret); err != nil {
+		return fmt.Errorf("error while getting the backup secret from control plane cluster: %v", err)
+	}
+	bucketName := "pg-" + p.Spec.ProjectID
+	awsEndpoint := string(backupSecret.Data[pg.BackupSecretS3BucketURL])
+	walES3Endpoint := "https+path://" + strings.TrimPrefix(awsEndpoint, "https://") // TODO find a cleaner way to do this...
+	awsAccessKeyID := string(backupSecret.Data[pg.BackupSecretAccessKey])
+	awsSecretAccessKey := string(backupSecret.Data[pg.BackupSecretSecretKey])
+	backupSchedule := string(backupSecret.Data[pg.BackupSecretSchedule])
+	backupNumToRetain := string(backupSecret.Data[pg.BackupSecretRetention])
 
 	if !isInstalled {
-		_, err := r.InstallOperator(ctx, namespace, "bucketUrlFromSecret") // TODO use real bucket url from secret
+		_, err := r.InstallOperator(ctx, namespace, awsEndpoint+"/"+bucketName) // TODO check the s3BucketUrl...
 		if err != nil {
 			return fmt.Errorf("error while installing zalando dependencies: %v", err)
 		}
 	}
 
-	// TODO update pod environment configmap
-	// read secret, get keys from const v1.BackupS3BucketURL, ...
+	// create updated content for configmap
 	data := map[string]string{
 		"USE_WALG_BACKUP":                  "true",
 		"USE_WALG_RESTORE":                 "true",
-		"WALE_S3_PREFIX":                   "s3://philipptest/$(SCOPE)",       // pg-<PROJECT> instead of philipptest
-		"WALG_S3_PREFIX":                   "s3://philipptest/$(SCOPE)",       // pg-<PROJECT> instead of philipptest
-		"CLONE_WALG_S3_PREFIX":             "s3://philipptest/$(CLONE_SCOPE)", // pg-<PROJECT> instead of philipptest
+		"WALE_S3_PREFIX":                   "s3://" + bucketName + "/$(SCOPE)",
+		"WALG_S3_PREFIX":                   "s3://" + bucketName + "/$(SCOPE)",
+		"CLONE_WALG_S3_PREFIX":             "s3://" + bucketName + "/$(CLONE_SCOPE)",
 		"WALE_BACKUP_THRESHOLD_PERCENTAGE": "100",
-		"AWS_ENDPOINT":                     "https://s3.test-01-fra-equ01.metal-pod.dev",      // per project (currently in pg.Spec.Backup.X)
-		"WALE_S3_ENDPOINT":                 "https+path://s3.test-01-fra-equ01.metal-pod.dev", // same as above, but slightly modified
-		"AWS_ACCESS_KEY_ID":                "J0A19QU1OHTYLIWZ7N81",                            // backup secret
-		"AWS_SECRET_ACCESS_KEY":            "qD0ONOagvSasg6Ab2cbx1WDKmvFretypJdsINjcb",        // backup secret
+		"AWS_ENDPOINT":                     awsEndpoint,
+		"WALE_S3_ENDPOINT":                 walES3Endpoint, // same as above, but slightly modified
+		"AWS_ACCESS_KEY_ID":                awsAccessKeyID,
+		"AWS_SECRET_ACCESS_KEY":            awsSecretAccessKey,
 		"AWS_S3_FORCE_PATH_STYLE":          "true",
 		"AWS_REGION":                       "us-east-1",
-		"WALG_DISABLE_S3_SSE":              "true",         // disable server side encryption
-		"WALG_S3_SSE":                      "",             // server side encryptio key
-		"BACKUP_SCHEDULE":                  "0 */24 * * *", // per project (currently in pg.Spec.Backup.X)
-		"BACKUP_NUM_TO_RETAIN":             "14",           // per project (currently in pg.Spec.Backup.X)
+		"WALG_DISABLE_S3_SSE":              "true", // disable server side encryption
+		"WALG_S3_SSE":                      "",     // server side encryptio key
+		"BACKUP_SCHEDULE":                  backupSchedule,
+		"BACKUP_NUM_TO_RETAIN":             backupNumToRetain,
 	}
 
 	cm := &v1.ConfigMap{}
 	ns := types.NamespacedName{
 		Name:      operatormanager.PodEnvCMName,
-		Namespace: pg.ToPeripheralResourceNamespace(),
+		Namespace: p.ToPeripheralResourceNamespace(),
 	}
 	if err := r.Service.Get(ctx, ns, cm); err != nil {
-		return fmt.Errorf("error while getting the pod environment configmap: %v", err)
+		return fmt.Errorf("error while getting the pod environment configmap from service cluster: %v", err)
 	}
 	cm.Data = data
-	//TODO update configmap
+	if err := r.Service.Update(ctx, cm); err != nil {
+		return fmt.Errorf("error while updating the pod environment configmap in service cluster: %v", err)
+	}
 
 	return nil
 }
