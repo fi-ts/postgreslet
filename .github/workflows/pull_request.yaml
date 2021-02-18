@@ -38,5 +38,6 @@ jobs:
     - name: Push Docker image
       run: |
         # pull request images are prefixed with 'pr' to prevent them from overriding released images
+        export DOCKER_TAG=pr-${GITHUB_HEAD_REF}
         make docker-push
       if: steps.fork.outputs.is_fork_pr == 'false'
