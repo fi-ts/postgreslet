@@ -14,6 +14,7 @@ import (
 	"github.com/go-logr/logr"
 	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
 	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 
 	firewall "github.com/metal-stack/firewall-controller/api/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -219,12 +220,47 @@ func (r *PostgresReconciler) ensureZalandoDependencies(ctx context.Context, pg *
 	if err != nil {
 		return fmt.Errorf("error while querying if zalando dependencies are installed: %v", err)
 	}
+
+	// TODO fetch secret
+
 	if !isInstalled {
-		_, err := r.InstallOperator(ctx, namespace, pg.Spec.Backup.S3BucketURL)
+		_, err := r.InstallOperator(ctx, namespace, "bucketUrlFromSecret") // TODO use real bucket url from secret
 		if err != nil {
 			return fmt.Errorf("error while installing zalando dependencies: %v", err)
 		}
 	}
+
+	// TODO update pod environment configmap
+	// read secret, get keys from const v1.BackupS3BucketURL, ...
+	data := map[string]string{
+		"USE_WALG_BACKUP":                  "true",
+		"USE_WALG_RESTORE":                 "true",
+		"WALE_S3_PREFIX":                   "s3://philipptest/$(SCOPE)",       // pg-<PROJECT> instead of philipptest
+		"WALG_S3_PREFIX":                   "s3://philipptest/$(SCOPE)",       // pg-<PROJECT> instead of philipptest
+		"CLONE_WALG_S3_PREFIX":             "s3://philipptest/$(CLONE_SCOPE)", // pg-<PROJECT> instead of philipptest
+		"WALE_BACKUP_THRESHOLD_PERCENTAGE": "100",
+		"AWS_ENDPOINT":                     "https://s3.test-01-fra-equ01.metal-pod.dev",      // per project (currently in pg.Spec.Backup.X)
+		"WALE_S3_ENDPOINT":                 "https+path://s3.test-01-fra-equ01.metal-pod.dev", // same as above, but slightly modified
+		"AWS_ACCESS_KEY_ID":                "J0A19QU1OHTYLIWZ7N81",                            // backup secret
+		"AWS_SECRET_ACCESS_KEY":            "qD0ONOagvSasg6Ab2cbx1WDKmvFretypJdsINjcb",        // backup secret
+		"AWS_S3_FORCE_PATH_STYLE":          "true",
+		"AWS_REGION":                       "us-east-1",
+		"WALG_DISABLE_S3_SSE":              "true",         // disable server side encryption
+		"WALG_S3_SSE":                      "",             // server side encryptio key
+		"BACKUP_SCHEDULE":                  "0 */24 * * *", // per project (currently in pg.Spec.Backup.X)
+		"BACKUP_NUM_TO_RETAIN":             "14",           // per project (currently in pg.Spec.Backup.X)
+	}
+
+	cm := &v1.ConfigMap{}
+	ns := types.NamespacedName{
+		Name:      operatormanager.PodEnvCMName,
+		Namespace: pg.ToPeripheralResourceNamespace(),
+	}
+	if err := r.Service.Get(ctx, ns, cm); err != nil {
+		return fmt.Errorf("error while getting the pod environment configmap: %v", err)
+	}
+	cm.Data = data
+	//TODO update configmap
 
 	return nil
 }

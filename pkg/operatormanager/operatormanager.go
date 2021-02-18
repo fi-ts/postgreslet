@@ -34,7 +34,7 @@ var operatorPodMatchingLabels = client.MatchingLabels{"name": "postgres-operator
 // TODO: use different account for operator and database
 const serviceAccountName string = "postgres-operator"
 
-const podEnvCMName string = "postgres-pod-config"
+const PodEnvCMName string = "postgres-pod-config"
 
 // OperatorManager manages the operator
 type OperatorManager struct {
@@ -83,7 +83,7 @@ func (m *OperatorManager) InstallOperator(ctx context.Context, namespace, s3Buck
 		return objs, fmt.Errorf("error while ensuring the existence of namespace %v: %v", namespace, err)
 	}
 
-	// Add our custom pod environment configmap
+	// Add our (initially empty) custom pod environment configmap
 	data := map[string]string{
 		"KEY": "VALUE",
 	}
@@ -114,26 +114,35 @@ func (m *OperatorManager) InstallOperator(ctx context.Context, namespace, s3Buck
 
 // IsOperatorDeletable returns true when there's no running instance operated by the operator
 func (m *OperatorManager) IsOperatorDeletable(ctx context.Context, namespace string) (bool, error) {
-	setList := &appsv1.StatefulSetList{}
-	if err := m.List(ctx, setList, client.InNamespace(namespace), m.toInstanceMatchingLabels(namespace)); client.IgnoreNotFound(err) != nil {
-		return false, fmt.Errorf("error while fetching the list of statefulsets operated by the operator: %w", err)
+	pods := &corev1.PodList{}
+	if err := m.List(ctx, pods, client.InNamespace(namespace), m.toInstanceMatchingLabels(namespace)); err != nil {
+		if errors.IsNotFound(err) {
+			m.Log.Info("operator is deletable")
+			return true, nil
+		}
+		return false, fmt.Errorf("error while fetching the list of instances operated by the operator: %v", err)
 	}
-	if setList != nil && len(setList.Items) != 0 {
-		m.Log.Info("statefulset still running")
-		return false, nil
+	if len(pods.Items) == 0 {
+		m.Log.Info("operator is deletable")
+		return true, nil
 	}
+
+	// todo: Check statefulset as well. Issue #83
 
 	services := &corev1.ServiceList{}
-	if err := m.List(ctx, services, client.InNamespace(namespace), m.toInstanceMatchingLabels(namespace)); client.IgnoreNotFound(err) != nil {
-		return false, fmt.Errorf("error while fetching the list of services operated by the operator: %w", err)
+	if err := m.List(ctx, services, client.InNamespace(namespace), m.toInstanceMatchingLabels(namespace)); err != nil {
+		if errors.IsNotFound(err) {
+			m.Log.Info("operator is deletable")
+			return true, nil
+		}
+		return false, fmt.Errorf("error while fetching the list of instances operated by the operator: %v", err)
 	}
-	if services != nil && len(services.Items) != 0 {
-		m.Log.Info("services still running")
-		return false, nil
+	if len(services.Items) == 0 {
+		m.Log.Info("operator is deletable")
+		return true, nil
 	}
 
-	m.Log.Info("operator deletable")
-	return true, nil
+	return false, nil
 }
 
 // IsOperatorInstalled returns true when the operator is installed
@@ -289,7 +298,7 @@ func (m *OperatorManager) editConfigMap(cm *v1.ConfigMap, namespace, s3BucketURL
 	// TODO don't use the same serviceaccount for operator and databases, see #88
 	cm.Data["pod_service_account_name"] = serviceAccountName
 	// set the reference to our custom pod environment configmap
-	cm.Data["pod_environment_configmap"] = podEnvCMName
+	cm.Data["pod_environment_configmap"] = PodEnvCMName
 }
 
 // ensureCleanMetadata ensures obj has clean metadata
@@ -339,7 +348,7 @@ func (m *OperatorManager) createPodEnvironmentConfigMap(ctx context.Context, nam
 	cm := &v1.ConfigMap{
 		Data: data,
 	}
-	if err := m.SetName(cm, podEnvCMName); err != nil {
+	if err := m.SetName(cm, PodEnvCMName); err != nil {
 		return objs, fmt.Errorf("error while setting the namespace of the `runtime.Object` to %v: %v", namespace, err)
 	}
 	if err := m.SetNamespace(cm, namespace); err != nil {
