@@ -91,12 +91,12 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			return ctrl.Result{}, err
 		}
 
-		isIdle, err := r.IsOperatorDeletable(ctx, namespace)
+		deletable, err := r.IsOperatorDeletable(ctx, namespace)
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("error while checking if the operator is idle: %v", err)
 		}
-		if !isIdle {
-			log.Info("operator is not idle")
+		if !deletable {
+			log.Info("operator not deletable")
 			return ctrl.Result{Requeue: true}, nil
 		}
 		if err := r.UninstallOperator(ctx, namespace); err != nil {
@@ -157,7 +157,7 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	}
 
 	// Check if socket port is ready
-	port :=instance.Status.Socket.Port
+	port := instance.Status.Socket.Port
 	if port == 0 {
 		log.Info("socket port not ready")
 		return ctrl.Result{Requeue: true}, nil
