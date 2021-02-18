@@ -81,22 +81,9 @@ spec:
               maintenance:
                 description: 'todo: add default Maintenance defines automatic maintenance
                   of the database'
-                properties:
-                  timeWindow:
-                    description: TimeWindow defines when the maintenance should happen
-                    properties:
-                      end:
-                        format: date-time
-                        type: string
-                      start:
-                        format: date-time
-                        type: string
-                    type: object
-                  weekday:
-                    description: Weekday defines when the operator is allowed to do
-                      maintenance
-                    type: integer
-                type: object
+                items:
+                  type: string
+                type: array
               numberOfInstances:
                 default: 1
                 description: NumberOfInstances number of replicas

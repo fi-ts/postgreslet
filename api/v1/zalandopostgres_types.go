@@ -6,8 +6,6 @@
 package v1
 
 import (
-	"time"
-
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -31,20 +29,20 @@ type ZalandoPostgres struct {
 }
 
 type ZalandoPostgresSpec struct {
-	MaintenanceWindows []MaintenanceWindow `json:"maintenanceWindows,omitempty"`
-	NumberOfInstances  int32               `json:"numberOfInstances"`
-	PostgresqlParam    PostgresqlParam     `json:"postgresql"`
-	Resources          *Resources          `json:"resources,omitempty"`
-	TeamID             string              `json:"teamId"`
-	Volume             Volume              `json:"volume"`
+	MaintenanceWindows []string        `json:"maintenanceWindows,omitempty"`
+	NumberOfInstances  int32           `json:"numberOfInstances"`
+	PostgresqlParam    PostgresqlParam `json:"postgresql"`
+	Resources          *Resources      `json:"resources,omitempty"`
+	TeamID             string          `json:"teamId"`
+	Volume             Volume          `json:"volume"`
 }
 
-type MaintenanceWindow struct {
-	Everyday  bool         `json:"everyday,omitempty"`
-	Weekday   time.Weekday `json:"weekday,omitempty"`
-	StartTime metav1.Time  `json:"startTime,omitempty"`
-	EndTime   metav1.Time  `json:"endTime,omitempty"`
-}
+// type MaintenanceWindow struct {
+// 	Everyday  bool         `json:"everyday,omitempty"`
+// 	Weekday   time.Weekday `json:"weekday,omitempty"`
+// 	StartTime metav1.Time  `json:"startTime,omitempty"`
+// 	EndTime   metav1.Time  `json:"endTime,omitempty"`
+// }
 
 type PostgresqlParam struct {
 	PgVersion string `json:"version"`

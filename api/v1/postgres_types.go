@@ -8,7 +8,6 @@ package v1
 
 import (
 	"fmt"
-	"time"
 
 	"regexp"
 
@@ -73,7 +72,7 @@ type PostgresSpec struct {
 
 	// todo: add default
 	// Maintenance defines automatic maintenance of the database
-	Maintenance *Maintenance `json:"maintenance,omitempty"`
+	Maintenance []string `json:"maintenance,omitempty"`
 
 	// todo: add default
 	// Backup parametes of the database backup
@@ -134,12 +133,12 @@ type TimeWindow struct {
 }
 
 // Maintenance configures database maintenance
-type Maintenance struct {
-	// Weekday defines when the operator is allowed to do maintenance
-	Weekday Weekday `json:"weekday,omitempty"`
-	// TimeWindow defines when the maintenance should happen
-	TimeWindow TimeWindow `json:"timeWindow,omitempty"`
-}
+// type Maintenance struct {
+// 	// Weekday defines when the operator is allowed to do maintenance
+// 	Weekday Weekday `json:"weekday,omitempty"`
+// 	// TimeWindow defines when the maintenance should happen
+// 	TimeWindow TimeWindow `json:"timeWindow,omitempty"`
+// }
 
 // PostgresStatus defines the observed state of Postgres
 type PostgresStatus struct {
@@ -370,24 +369,25 @@ func (p *Postgres) ToZalandoPostgres() *ZalandoPostgres {
 			Labels:    map[string]string{LabelName: string(p.UID)},
 		},
 		Spec: ZalandoPostgresSpec{
-			MaintenanceWindows: func() []MaintenanceWindow {
-				if p.Spec.Maintenance == nil {
-					return nil
-				}
-				isEvery := p.Spec.Maintenance.Weekday == All
-				return []MaintenanceWindow{
-					{Everyday: isEvery,
-						Weekday: func() time.Weekday {
-							if isEvery {
-								return time.Weekday(0)
-							}
-							return time.Weekday(p.Spec.Maintenance.Weekday)
-						}(),
-						StartTime: p.Spec.Maintenance.TimeWindow.Start,
-						EndTime:   p.Spec.Maintenance.TimeWindow.End,
-					},
-				}
-			}(),
+			MaintenanceWindows: p.Spec.Maintenance,
+			// MaintenanceWindows: func() []MaintenanceWindow {
+			// 	if p.Spec.Maintenance == nil {
+			// 		return nil
+			// 	}
+			// 	isEvery := p.Spec.Maintenance.Weekday == All
+			// 	return []MaintenanceWindow{
+			// 		{Everyday: isEvery,
+			// 			Weekday: func() time.Weekday {
+			// 				if isEvery {
+			// 					return time.Weekday(0)
+			// 				}
+			// 				return time.Weekday(p.Spec.Maintenance.Weekday)
+			// 			}(),
+			// 			StartTime: p.Spec.Maintenance.TimeWindow.Start,
+			// 			EndTime:   p.Spec.Maintenance.TimeWindow.End,
+			// 		},
+			// 	}
+			// }(),
 			NumberOfInstances: p.Spec.NumberOfInstances,
 			PostgresqlParam:   PostgresqlParam{PgVersion: p.Spec.Version},
 			Resources: func() *Resources {
@@ -429,25 +429,27 @@ func (p *Postgres) ToPatchedZalandoPostgresql(z *zalando.Postgresql) *zalando.Po
 	// todo: Check if the validation should be performed here.
 	z.Spec.Volume.Size = p.Spec.Size.StorageSize
 
-	z.Spec.MaintenanceWindows = func() []zalando.MaintenanceWindow {
-		if p.Spec.Maintenance == nil {
-			return nil
-		}
-		isEvery := p.Spec.Maintenance.Weekday == All
-		return []zalando.MaintenanceWindow{
-			{
-				Everyday: isEvery,
-				Weekday: func() time.Weekday {
-					if isEvery {
-						return time.Weekday(0)
-					}
-					return time.Weekday(p.Spec.Maintenance.Weekday)
-				}(),
-				StartTime: p.Spec.Maintenance.TimeWindow.Start,
-				EndTime:   p.Spec.Maintenance.TimeWindow.End,
-			},
-		}
-	}()
+	// todo: Parse the string
+	// z.spec.MaintenanceWindows = p.Spec.Maintenance
+	// z.Spec.MaintenanceWindows = func() []zalando.MaintenanceWindow {
+	// 	if p.Spec.Maintenance == nil {
+	// 		return nil
+	// 	}
+	// 	isEvery := p.Spec.Maintenance.Weekday == All
+	// 	return []zalando.MaintenanceWindow{
+	// 		{
+	// 			Everyday: isEvery,
+	// 			Weekday: func() time.Weekday {
+	// 				if isEvery {
+	// 					return time.Weekday(0)
+	// 				}
+	// 				return time.Weekday(p.Spec.Maintenance.Weekday)
+	// 			}(),
+	// 			StartTime: p.Spec.Maintenance.TimeWindow.Start,
+	// 			EndTime:   p.Spec.Maintenance.TimeWindow.End,
+	// 		},
+	// 	}
+	// }()
 
 	return z
 }

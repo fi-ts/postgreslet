@@ -36,20 +36,7 @@ spec:
             properties:
               maintenanceWindows:
                 items:
-                  properties:
-                    endTime:
-                      format: date-time
-                      type: string
-                    everyday:
-                      type: boolean
-                    startTime:
-                      format: date-time
-                      type: string
-                    weekday:
-                      description: A Weekday specifies a day of the week (Sunday =
-                        0, ...).
-                      type: integer
-                  type: object
+                  type: string
                 type: array
               numberOfInstances:
                 format: int32
