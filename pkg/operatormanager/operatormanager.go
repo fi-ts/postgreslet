@@ -22,6 +22,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -84,8 +85,7 @@ func (m *OperatorManager) InstallOperator(ctx context.Context, namespace, s3Buck
 	}
 
 	// Add our (initially empty) custom pod environment configmap
-	data := map[string]string{}
-	objs, err = m.createPodEnvironmentConfigMap(ctx, namespace, data, objs)
+	objs, err = m.ensurePodEnvironmentConfigMap(ctx, namespace, objs)
 	if err != nil {
 		return objs, fmt.Errorf("error while creating pod environment configmap %v: %v", namespace, err)
 	}
@@ -393,18 +393,27 @@ func (m *OperatorManager) ensureNamespace(ctx context.Context, namespace string,
 }
 
 // createPodEnvironmentConfigMap creates a new ConfigMap with additional environment variables for the pods
-func (m *OperatorManager) createPodEnvironmentConfigMap(ctx context.Context, namespace string, data map[string]string, objs []runtime.Object) ([]runtime.Object, error) {
-	cm := &v1.ConfigMap{
-		Data: data,
+func (m *OperatorManager) ensurePodEnvironmentConfigMap(ctx context.Context, namespace string, objs []runtime.Object) ([]runtime.Object, error) {
+	ns := types.NamespacedName{
+		Namespace: namespace,
+		Name:      PodEnvCMName,
 	}
+	if err := m.Get(ctx, ns, &v1.ConfigMap{}); err == nil {
+		// configmap already exists, nothing to do here
+		m.Log.Info("Pod Environment ConfigMap already exists")
+		return objs, nil
+	}
+
+	cm := &v1.ConfigMap{}
 	if err := m.SetName(cm, PodEnvCMName); err != nil {
-		return objs, fmt.Errorf("error while setting the namespace of the `runtime.Object` to %v: %v", namespace, err)
+		return objs, fmt.Errorf("error while setting the name of the new Pod Environment ConfigMap to %v: %v", namespace, err)
 	}
 	if err := m.SetNamespace(cm, namespace); err != nil {
-		return objs, fmt.Errorf("error while setting the namespace of the `runtime.Object` to %v: %v", namespace, err)
+		return objs, fmt.Errorf("error while setting the namespace of the new Pod Environment ConfigMap to %v: %v", namespace, err)
 	}
+
 	if err := m.Create(ctx, cm); err != nil {
-		return objs, fmt.Errorf("error while creating the `runtime.Object`: %v", err)
+		return objs, fmt.Errorf("error while creating the new Pod Environment ConfigMap: %v", err)
 	}
 	m.Log.Info("new Pod Environment ConfigMap created")
 
@@ -414,13 +423,13 @@ func (m *OperatorManager) createPodEnvironmentConfigMap(ctx context.Context, nam
 func (m *OperatorManager) deletePodEnvironmentConfigMap(ctx context.Context, namespace string) error {
 	cm := &v1.ConfigMap{}
 	if err := m.SetName(cm, PodEnvCMName); err != nil {
-		return fmt.Errorf("error while setting the namespace of the `runtime.Object` to %v: %v", namespace, err)
+		return fmt.Errorf("error while setting the name of the Pod Environment ConfigMap to delete to %v: %v", PodEnvCMName, err)
 	}
 	if err := m.SetNamespace(cm, namespace); err != nil {
-		return fmt.Errorf("error while setting the namespace of the `runtime.Object` to %v: %v", namespace, err)
+		return fmt.Errorf("error while setting the namespace of the Pod Environment ConfigMap to delete to %v: %v", namespace, err)
 	}
 	if err := m.Delete(ctx, cm); err != nil {
-		return fmt.Errorf("error while deleting the `runtime.Object`: %v", err)
+		return fmt.Errorf("error while deleting the Pod Environment ConfigMap: %v", err)
 	}
 	m.Log.Info("Pod Environment ConfigMap deleted")
 
