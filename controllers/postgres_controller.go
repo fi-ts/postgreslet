@@ -91,12 +91,12 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			return ctrl.Result{}, err
 		}
 
-		isIdle, err := r.IsOperatorDeletable(ctx, namespace)
+		deletable, err := r.IsOperatorDeletable(ctx, namespace)
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("error while checking if the operator is idle: %v", err)
 		}
-		if !isIdle {
-			log.Info("operator is not idle")
+		if !deletable {
+			log.Info("operator not deletable")
 			return ctrl.Result{Requeue: true}, nil
 		}
 		if err := r.UninstallOperator(ctx, namespace); err != nil {
@@ -156,9 +156,15 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		return ctrl.Result{}, err
 	}
 
-	// todo: Check the port. The default port of postgres is used.
+	// Check if socket port is ready
+	port := instance.Status.Socket.Port
+	if port == 0 {
+		log.Info("socket port not ready")
+		return ctrl.Result{Requeue: true}, nil
+	}
+
 	// Update status will be handled by the StatusReconciler, based on the Zalando Status
-	if err := r.createOrUpdateCWNP(ctx, instance, 5432); err != nil {
+	if err := r.createOrUpdateCWNP(ctx, instance, int(port)); err != nil {
 		return ctrl.Result{}, fmt.Errorf("unable to create or update corresponding CRD ClusterwideNetworkPolicy: %W", err)
 	}
 

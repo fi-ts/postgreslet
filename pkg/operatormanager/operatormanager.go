@@ -114,35 +114,26 @@ func (m *OperatorManager) InstallOperator(ctx context.Context, namespace, s3Buck
 
 // IsOperatorDeletable returns true when there's no running instance operated by the operator
 func (m *OperatorManager) IsOperatorDeletable(ctx context.Context, namespace string) (bool, error) {
-	pods := &corev1.PodList{}
-	if err := m.List(ctx, pods, client.InNamespace(namespace), m.toInstanceMatchingLabels(namespace)); err != nil {
-		if errors.IsNotFound(err) {
-			m.Log.Info("operator is deletable")
-			return true, nil
-		}
-		return false, fmt.Errorf("error while fetching the list of instances operated by the operator: %v", err)
+	setList := &appsv1.StatefulSetList{}
+	if err := m.List(ctx, setList, client.InNamespace(namespace), m.toInstanceMatchingLabels(namespace)); client.IgnoreNotFound(err) != nil {
+		return false, fmt.Errorf("error while fetching the list of statefulsets operated by the operator: %w", err)
 	}
-	if len(pods.Items) == 0 {
-		m.Log.Info("operator is deletable")
-		return true, nil
+	if setList != nil && len(setList.Items) != 0 {
+		m.Log.Info("statefulset still running")
+		return false, nil
 	}
-
-	// todo: Check statefulset as well. Issue #83
 
 	services := &corev1.ServiceList{}
-	if err := m.List(ctx, services, client.InNamespace(namespace), m.toInstanceMatchingLabels(namespace)); err != nil {
-		if errors.IsNotFound(err) {
-			m.Log.Info("operator is deletable")
-			return true, nil
-		}
-		return false, fmt.Errorf("error while fetching the list of instances operated by the operator: %v", err)
+	if err := m.List(ctx, services, client.InNamespace(namespace), m.toInstanceMatchingLabels(namespace)); client.IgnoreNotFound(err) != nil {
+		return false, fmt.Errorf("error while fetching the list of services operated by the operator: %w", err)
 	}
-	if len(services.Items) == 0 {
-		m.Log.Info("operator is deletable")
-		return true, nil
+	if services != nil && len(services.Items) != 0 {
+		m.Log.Info("services still running")
+		return false, nil
 	}
 
-	return false, nil
+	m.Log.Info("operator deletable")
+	return true, nil
 }
 
 // IsOperatorInstalled returns true when the operator is installed
