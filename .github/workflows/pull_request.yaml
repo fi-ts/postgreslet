@@ -32,12 +32,12 @@ jobs:
 
     - name: Build Docker image
       run: |
-        export DOCKER_TAG=pr-${GITHUB_REF_HEAD##*/}
+        export DOCKER_TAG=pr-${GITHUB_HEAD_REF##*/}
         make docker-build
 
     - name: Push Docker image
       run: |
         # pull request images are prefixed with 'pr' to prevent them from overriding released images
-        export DOCKER_TAG=pr-${GITHUB_REF_HEAD##*/}
+        export DOCKER_TAG=pr-${GITHUB_HEAD_REF##*/}
         make docker-push
       if: steps.fork.outputs.is_fork_pr == 'false'
