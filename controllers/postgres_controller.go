@@ -13,13 +13,13 @@ import (
 
 	"github.com/go-logr/logr"
 	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
-	corev1 "k8s.io/api/core/v1"
+
+	// corev1 "k8s.io/api/core/v1"
 
 	firewall "github.com/metal-stack/firewall-controller/api/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -161,54 +161,70 @@ func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context
 		if !errors.IsNotFound(err) {
 			return fmt.Errorf("failed to fetch zalando postgresql: %w", err)
 		}
-		return r.createZalandoPostgresql(ctx, instance)
+
+		u, err := instance.ToUnstructuredZalandoPostgresql(nil)
+		if err != nil {
+			return fmt.Errorf("failed to convert to unstructured zalando postgresql: %w", err)
+		}
+
+		if err := r.Service.Create(ctx, u); err != nil {
+			return fmt.Errorf("failed to create zalando postgresql: %w", err)
+		}
+		log.Info("zalando postgresql created", "zalando postgresql", u)
+
+		return nil
 	}
 
-	// Update zalando postgresql.
+	// Update zalando postgresql
 	mergeFrom := client.MergeFrom(rawZ.DeepCopy())
-	patched := instance.ToPatchedZalandoPostgresql(rawZ)
-	if err := r.Service.Patch(ctx, patched, mergeFrom); err != nil {
+
+	u, err := instance.ToUnstructuredZalandoPostgresql(rawZ)
+	if err != nil {
+		return fmt.Errorf("failed to convert to unstructured zalando postgresql: %w", err)
+	}
+	if err := r.Service.Patch(ctx, u, mergeFrom); err != nil {
 		return fmt.Errorf("failed to update zalando postgresql: %w", err)
 	}
-	log.Info("zalando postgresql updated", "namespace", patched.Namespace, "name", patched.Name)
+	log.Info("zalando postgresql updated", "zalando postgresql", u)
 
 	return nil
 }
 
-func (r *PostgresReconciler) createZalandoPostgresql(ctx context.Context, instance *pg.Postgres) error {
-	z := instance.ToZalandoPostgres()
-	namespacedName := types.NamespacedName{Namespace: z.Namespace, Name: z.Name}
-	log := r.Log.WithValues("ns/name", namespacedName)
+// func (r *PostgresReconciler) createZalandoPostgresql(ctx context.Context, instance *pg.Postgres) error {
+// 	z := instance.ToZalandoPostgres()
+// 	namespacedName := types.NamespacedName{Namespace: z.Namespace, Name: z.Name}
+// 	log := r.Log.WithValues("ns/name", namespacedName)
 
-	// Make sure the namespace exists in the worker-cluster.
-	ns := z.Namespace
-	if err := r.Service.Get(ctx, client.ObjectKey{Name: ns}, &corev1.Namespace{}); err != nil {
-		// errors other than `not found`
-		if !errors.IsNotFound(err) {
-			return err
-		}
+// 	// todo: Remove this. Ensuring namaspace is covered in operator intallation.
+// 	// // Make sure the namespace exists in the worker-cluster.
+// 	// ns := z.Namespace
+// 	// if err := r.Service.Get(ctx, client.ObjectKey{Name: ns}, &corev1.Namespace{}); err != nil {
+// 	// 	// errors other than `not found`
+// 	// 	if !errors.IsNotFound(err) {
+// 	// 		return err
+// 	// 	}
 
-		// Create the namespace.
-		nsObj := &corev1.Namespace{}
-		nsObj.Name = ns
-		if err = r.Service.Create(ctx, nsObj); err != nil {
-			return err
-		}
-	}
+// 	// 	// Create the namespace.
+// 	// 	nsObj := &corev1.Namespace{}
+// 	// 	nsObj.Name = ns
+// 	// 	if err = r.Service.Create(ctx, nsObj); err != nil {
+// 	// 		return err
+// 	// 	}
+// 	// }
 
-	u, err := z.ToUnstructured()
-	if err != nil {
-		log.Error(err, "error while converting to unstructured")
-		return err
-	}
+// 	u, err := z.ToUnstructured()
+// 	if err != nil {
+// 		log.Error(err, "error while converting to unstructured")
+// 		return err
+// 	}
 
-	if err := r.Service.Create(ctx, u); err != nil {
-		log.Error(err, "error while creating zalando postgresql")
-		return err
-	}
+// 	if err := r.Service.Create(ctx, u); err != nil {
+// 		log.Error(err, "error while creating zalando postgresql")
+// 		return err
+// 	}
 
-	return nil
-}
+// 	return nil
+// }
 
 // ensureZalandoDependencies makes sure Zalando resources are installed in the service-cluster.
 func (r *PostgresReconciler) ensureZalandoDependencies(ctx context.Context, pg *pg.Postgres) error {

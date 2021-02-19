@@ -6,6 +6,8 @@
 package v1
 
 import (
+	"log"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -14,10 +16,6 @@ import (
 
 // ZalandoPostgresTypeMeta is the `TypeMeta` of the zalando's `Postgresql` type.
 // Only this `TypeMeta` should be used for the resources in this file.
-var ZalandoPostgresTypeMeta = metav1.TypeMeta{
-	APIVersion: "acid.zalan.do/v1",
-	Kind:       "postgresql",
-}
 
 // +kubebuilder:object:root=true
 
@@ -91,6 +89,9 @@ func (z *ZalandoPostgres) ToUnstructured() (*unstructured.Unstructured, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	log.Println("======> func ToUnstructured: ", u)
+
 	return &unstructured.Unstructured{
 		Object: u,
 	}, nil
