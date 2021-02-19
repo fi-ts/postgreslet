@@ -9,7 +9,7 @@ package controllers
 import (
 	"context"
 	"fmt"
-	"strings"
+	"net/url"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -231,9 +231,20 @@ func (r *PostgresReconciler) ensureZalandoDependencies(ctx context.Context, p *p
 	if err := r.Client.Get(ctx, backupNamespace, backupSecret); err != nil {
 		return fmt.Errorf("error while getting the backup secret from control plane cluster: %v", err)
 	}
+
+	s3url, err := url.Parse(string(backupSecret.Data[pg.BackupSecretS3Endpoint]))
+	if err != nil {
+		return fmt.Errorf("error while parsing the s3 endpoint url in the backup secret: %v", err)
+	}
+	// use the s3 endpoint as provided
+	awsEndpoint := s3url.String()
+	// modify the scheme to 'https+path'
+	s3url.Scheme = "https+path"
+	// use the modified s3 endpoint
+	walES3Endpoint := s3url.String()
+
+	// use the rest as provided in the secret
 	bucketName := string(backupSecret.Data[pg.BackupSecretS3BucketName])
-	awsEndpoint := string(backupSecret.Data[pg.BackupSecretS3Endpoint])
-	walES3Endpoint := "https+path://" + strings.TrimPrefix(awsEndpoint, "https://") // TODO find a cleaner way to do this...
 	awsAccessKeyID := string(backupSecret.Data[pg.BackupSecretAccessKey])
 	awsSecretAccessKey := string(backupSecret.Data[pg.BackupSecretSecretKey])
 	backupSchedule := string(backupSecret.Data[pg.BackupSecretSchedule])
