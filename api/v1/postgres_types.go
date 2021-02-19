@@ -13,6 +13,7 @@ import (
 	"regexp"
 
 	firewall "github.com/metal-stack/firewall-controller/api/v1"
+	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
 	"inet.af/netaddr"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
@@ -408,6 +409,51 @@ func (p *Postgres) ToZalandoPostgres() *ZalandoPostgres {
 			Volume: Volume{Size: p.Spec.Size.StorageSize},
 		},
 	}
+}
+
+func (p *Postgres) ToPatchedZalandoPostgresql(z *zalando.Postgresql) *zalando.Postgresql {
+	if p.HasSourceRanges() {
+		z.Spec.AllowedSourceRanges = p.Spec.AccessList.SourceRanges
+	}
+
+	z.Spec.NumberOfInstances = p.Spec.NumberOfInstances
+
+	// todo: Check if the validation should be performed here.
+	z.Spec.PostgresqlParam.PgVersion = p.Spec.Version
+
+	z.Spec.ResourceRequests.CPU = p.Spec.Size.CPU
+	z.Spec.ResourceRequests.Memory = p.Spec.Size.Memory
+	z.Spec.ResourceLimits.CPU = p.Spec.Size.CPU
+	z.Spec.ResourceLimits.Memory = p.Spec.Size.Memory
+
+	// todo: Check if the validation should be performed here.
+	z.Spec.Volume.Size = p.Spec.Size.StorageSize
+
+	z.Spec.MaintenanceWindows = func() []zalando.MaintenanceWindow {
+		if p.Spec.Maintenance == nil {
+			return nil
+		}
+		isEvery := p.Spec.Maintenance.Weekday == All
+		return []zalando.MaintenanceWindow{
+			{
+				Everyday: isEvery,
+				Weekday: func() time.Weekday {
+					if isEvery {
+						return time.Weekday(0)
+					}
+					return time.Weekday(p.Spec.Maintenance.Weekday)
+				}(),
+				StartTime: p.Spec.Maintenance.TimeWindow.Start,
+				EndTime:   p.Spec.Maintenance.TimeWindow.End,
+			},
+		}
+	}()
+
+	return z
+}
+
+func (p *Postgres) ToZalandoPostgresqlMatchingLabels() client.MatchingLabels {
+	return client.MatchingLabels{LabelName: string(p.UID)}
 }
 
 const PostgresFinalizerName = "postgres.finalizers.database.fits.cloud"

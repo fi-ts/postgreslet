@@ -67,14 +67,11 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		return ctrl.Result{}, nil
 	}
 
-	z := instance.ToZalandoPostgres()
-
-	matchingLabels := client.MatchingLabels{pg.LabelName: string(instance.UID)}
-	// we use z.Namespace so the calculation of the name is encapsuled in ToZalandoPostgres()
-	namespace := z.Namespace
-
 	// Delete
 	if instance.IsBeingDeleted() {
+		matchingLabels := instance.ToZalandoPostgresqlMatchingLabels()
+		namespace := instance.ToPeripheralResourceNamespace()
+
 		if err := r.deleteCWNP(ctx, instance); client.IgnoreNotFound(err) != nil { // todo: remove ignorenotfound
 			return ctrl.Result{}, err
 		}
@@ -126,30 +123,8 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		return ctrl.Result{}, fmt.Errorf("error while ensuring Zalando dependencies: %v", err)
 	}
 
-	// Get zalando postgresql and create one if none.
-	rawZ, err := r.getZPostgresql(ctx, matchingLabels, namespace)
-	if err != nil {
-		log.Info("unable to fetch zalando postgresql", "error", err)
-		// errors other than `NotFound`
-		if !errors.IsNotFound(err) {
-			return requeue, err
-		}
-		log.Info("creating zalando postgresql", "ns/name", z)
-
-		return r.createZalandoPostgresql(ctx, z)
-	}
-
-	// Update zalando postgresql.
-	if rawZ.Name != "" {
-		namespacedName := types.NamespacedName{Namespace: rawZ.Namespace, Name: rawZ.Name}
-		log.Info("updating zalando postgresql", "ns/name", namespacedName)
-		patch := client.MergeFrom(rawZ.DeepCopy())
-		patchRawZ(rawZ, instance)
-		if err := r.Service.Patch(ctx, rawZ, patch); err != nil {
-			log.Error(err, "error while updating zalando postgresql", "ns/name", namespacedName)
-			return requeue, err
-		}
-		log.Info("zalando postgresql updated", "ns/name", namespacedName)
+	if err := r.createOrUpdateZalandoPostgresql(ctx, instance, log); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to create or update zalando postgresql: %w", err)
 	}
 
 	if err := r.CreateSvcLBIfNone(ctx, instance); err != nil {
@@ -178,7 +153,30 @@ func (r *PostgresReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func (r *PostgresReconciler) createZalandoPostgresql(ctx context.Context, z *pg.ZalandoPostgres) (ctrl.Result, error) {
+func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context, instance *pg.Postgres, log logr.Logger) error {
+	// Get zalando postgresql and create one if none.
+	rawZ, err := r.getZalandoPostgresql(ctx, instance)
+	if err != nil {
+		// errors other than `NotFound`
+		if !errors.IsNotFound(err) {
+			return fmt.Errorf("failed to fetch zalando postgresql: %w", err)
+		}
+		return r.createZalandoPostgresql(ctx, instance)
+	}
+
+	// Update zalando postgresql.
+	mergeFrom := client.MergeFrom(rawZ.DeepCopy())
+	patched := instance.ToPatchedZalandoPostgresql(rawZ)
+	if err := r.Service.Patch(ctx, patched, mergeFrom); err != nil {
+		return fmt.Errorf("failed to update zalando postgresql: %w", err)
+	}
+	log.Info("zalando postgresql updated", "namespace", patched.Namespace, "name", patched.Name)
+
+	return nil
+}
+
+func (r *PostgresReconciler) createZalandoPostgresql(ctx context.Context, instance *pg.Postgres) error {
+	z := instance.ToZalandoPostgres()
 	namespacedName := types.NamespacedName{Namespace: z.Namespace, Name: z.Name}
 	log := r.Log.WithValues("ns/name", namespacedName)
 
@@ -187,29 +185,29 @@ func (r *PostgresReconciler) createZalandoPostgresql(ctx context.Context, z *pg.
 	if err := r.Service.Get(ctx, client.ObjectKey{Name: ns}, &corev1.Namespace{}); err != nil {
 		// errors other than `not found`
 		if !errors.IsNotFound(err) {
-			return ctrl.Result{}, err
+			return err
 		}
 
 		// Create the namespace.
 		nsObj := &corev1.Namespace{}
 		nsObj.Name = ns
 		if err = r.Service.Create(ctx, nsObj); err != nil {
-			return ctrl.Result{}, err
+			return err
 		}
 	}
 
 	u, err := z.ToUnstructured()
 	if err != nil {
 		log.Error(err, "error while converting to unstructured")
-		return ctrl.Result{}, err
+		return err
 	}
 
 	if err := r.Service.Create(ctx, u); err != nil {
 		log.Error(err, "error while creating zalando postgresql")
-		return ctrl.Result{}, err
+		return err
 	}
 
-	return ctrl.Result{}, nil
+	return nil
 }
 
 // ensureZalandoDependencies makes sure Zalando resources are installed in the service-cluster.
@@ -260,47 +258,6 @@ func (r *PostgresReconciler) deleteZPostgresqlByLabels(ctx context.Context, matc
 	return nil
 }
 
-func patchRawZ(out *zalando.Postgresql, in *pg.Postgres) {
-	if in.HasSourceRanges() {
-		out.Spec.AllowedSourceRanges = in.Spec.AccessList.SourceRanges
-	}
-
-	out.Spec.NumberOfInstances = in.Spec.NumberOfInstances
-
-	// todo: Check if the validation should be performed here.
-	out.Spec.PostgresqlParam.PgVersion = in.Spec.Version
-
-	out.Spec.ResourceRequests.CPU = in.Spec.Size.CPU
-	out.Spec.ResourceRequests.Memory = in.Spec.Size.Memory
-	out.Spec.ResourceLimits.CPU = in.Spec.Size.CPU
-	out.Spec.ResourceLimits.Memory = in.Spec.Size.Memory
-
-	// todo: Check if the validation should be performed here.
-	out.Spec.Volume.Size = in.Spec.Size.StorageSize
-
-	out.Spec.MaintenanceWindows = func() []zalando.MaintenanceWindow {
-		if in.Spec.Maintenance == nil {
-			return nil
-		}
-		isEvery := in.Spec.Maintenance.Weekday == pg.All
-		return []zalando.MaintenanceWindow{
-			{
-				Everyday: isEvery,
-				Weekday: func() time.Weekday {
-					if isEvery {
-						return time.Weekday(0)
-					}
-					return time.Weekday(in.Spec.Maintenance.Weekday)
-				}(),
-				StartTime: in.Spec.Maintenance.TimeWindow.Start,
-				EndTime:   in.Spec.Maintenance.TimeWindow.End,
-			},
-		}
-	}()
-
-	// todo: in.Spec.Backup
-}
-
 // todo: Change to `controllerutl.CreateOrPatch`
 // createOrUpdateCWNP will create an ingress firewall rule on the firewall in front of the k8s cluster
 // based on the spec.AccessList.SourceRanges given.
@@ -333,8 +290,11 @@ func (r *PostgresReconciler) deleteCWNP(ctx context.Context, in *pg.Postgres) er
 }
 
 // Returns *only one* Zalndo Postgresql resource with the given label, returns an error if not unique.
-func (r *PostgresReconciler) getZPostgresql(ctx context.Context, matchingLabel client.MatchingLabels, namespace string) (*zalando.Postgresql, error) {
-	items, err := r.getZPostgresqlByLabels(ctx, matchingLabel, namespace)
+func (r *PostgresReconciler) getZalandoPostgresql(ctx context.Context, instance *pg.Postgres) (*zalando.Postgresql, error) {
+	matchingLabels := instance.ToZalandoPostgresqlMatchingLabels()
+	namespace := instance.ToPeripheralResourceNamespace()
+
+	items, err := r.getZPostgresqlByLabels(ctx, matchingLabels, namespace)
 	if err != nil {
 		return nil, err
 	}
