@@ -190,42 +190,6 @@ func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context
 	return nil
 }
 
-// func (r *PostgresReconciler) createZalandoPostgresql(ctx context.Context, instance *pg.Postgres) error {
-// 	z := instance.ToZalandoPostgres()
-// 	namespacedName := types.NamespacedName{Namespace: z.Namespace, Name: z.Name}
-// 	log := r.Log.WithValues("ns/name", namespacedName)
-
-// 	// todo: Remove this. Ensuring namaspace is covered in operator intallation.
-// 	// // Make sure the namespace exists in the worker-cluster.
-// 	// ns := z.Namespace
-// 	// if err := r.Service.Get(ctx, client.ObjectKey{Name: ns}, &corev1.Namespace{}); err != nil {
-// 	// 	// errors other than `not found`
-// 	// 	if !errors.IsNotFound(err) {
-// 	// 		return err
-// 	// 	}
-
-// 	// 	// Create the namespace.
-// 	// 	nsObj := &corev1.Namespace{}
-// 	// 	nsObj.Name = ns
-// 	// 	if err = r.Service.Create(ctx, nsObj); err != nil {
-// 	// 		return err
-// 	// 	}
-// 	// }
-
-// 	u, err := z.ToUnstructured()
-// 	if err != nil {
-// 		log.Error(err, "error while converting to unstructured")
-// 		return err
-// 	}
-
-// 	if err := r.Service.Create(ctx, u); err != nil {
-// 		log.Error(err, "error while creating zalando postgresql")
-// 		return err
-// 	}
-
-// 	return nil
-// }
-
 // ensureZalandoDependencies makes sure Zalando resources are installed in the service-cluster.
 func (r *PostgresReconciler) ensureZalandoDependencies(ctx context.Context, pg *pg.Postgres) error {
 	namespace := pg.ToPeripheralResourceNamespace()
