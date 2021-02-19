@@ -133,14 +133,6 @@ type TimeWindow struct {
 	End   metav1.Time `json:"end,omitempty"`
 }
 
-// Maintenance configures database maintenance
-// type Maintenance struct {
-// 	// Weekday defines when the operator is allowed to do maintenance
-// 	Weekday Weekday `json:"weekday,omitempty"`
-// 	// TimeWindow defines when the maintenance should happen
-// 	TimeWindow TimeWindow `json:"timeWindow,omitempty"`
-// }
-
 // PostgresStatus defines the observed state of Postgres
 type PostgresStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
@@ -356,10 +348,6 @@ func (p *Postgres) generateDatabaseName() string {
 
 func (p *Postgres) ToPeripheralResourceNamespace() string {
 	return p.Spec.ProjectID
-}
-
-func (p *Postgres) toCloneClusterName() string {
-	return p.ToPeripheralResourceName() + "-clone"
 }
 
 // Name of the label referencing the owning Postgres resource in the control cluster
