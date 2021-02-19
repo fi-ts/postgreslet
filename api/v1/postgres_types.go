@@ -93,9 +93,10 @@ const (
 	// Retention defines how many days a backup will persist
 	BackupSecretRetention = "retention"
 	// Schedule defines how often a backup should be made, in cron format
-	BackupSecretSchedule  = "schedule"
-	BackupSecretAccessKey = "accesskey"
-	BackupSecretSecretKey = "secretkey"
+	BackupSecretSchedule   = "schedule"
+	BackupSecretAccessKey  = "accesskey"
+	BackupSecretSecretKey  = "secretkey"
+	BackupSecretProjectKey = "project"
 )
 
 // Size defines the size aspects of the database
