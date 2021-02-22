@@ -39,6 +39,7 @@ manager: generate fmt vet
 						-X 'github.com/metal-stack/v.GitSHA1=$(SHA)' \
 						-X 'github.com/metal-stack/v.BuildDate=$(BUILDDATE)'" \
 	-o bin/manager main.go
+	strip bin/manager
 
 # Run against the configured Kubernetes cluster in ~/.kube/config
 run: generate fmt vet manifests install-crd-cwnp

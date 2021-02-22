@@ -53,8 +53,7 @@ type PostgresReconciler struct {
 // +kubebuilder:rbac:groups=database.fits.cloud,resources=postgres/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=acid.zalan.do,resources=postgresqls,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=acid.zalan.do,resources=postgresqls/status,verbs=get;list;watch
-func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-	ctx := context.Background()
+func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := r.Log.WithValues("postgres", req.NamespacedName)
 
 	log.Info("fetchting postgres")

@@ -35,8 +35,7 @@ type StatusReconciler struct {
 // Reconcile updates the status of the remote Postgres object based on the status of the local zalando object.
 // +kubebuilder:rbac:groups=acid.zalan.do,resources=postgresqls,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=acid.zalan.do,resources=postgresqls/status,verbs=get;update;patch
-func (r *StatusReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-	ctx := context.Background()
+func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := r.Log.WithValues("postgresql", req.NamespacedName)
 
 	log.Info("fetching postgresql")

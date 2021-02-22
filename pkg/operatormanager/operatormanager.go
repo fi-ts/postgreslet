@@ -42,7 +42,7 @@ type OperatorManager struct {
 	client.Client
 	runtime.Decoder
 	list *corev1.List
-	Log  logr.Logger
+	log  logr.Logger
 	meta.MetadataAccessor
 	*runtime.Scheme
 	pspName string
@@ -69,14 +69,14 @@ func New(client client.Client, fileName string, scheme *runtime.Scheme, log logr
 		Decoder:          deserializer,
 		list:             list,
 		Scheme:           scheme,
-		Log:              log,
+		log:              log,
 		pspName:          pspName,
 	}, nil
 }
 
 // InstallOperator installs the operator Stored in `OperatorManager`
-func (m *OperatorManager) InstallOperator(ctx context.Context, namespace, s3BucketURL string) ([]runtime.Object, error) {
-	objs := []runtime.Object{}
+func (m *OperatorManager) InstallOperator(ctx context.Context, namespace, s3BucketURL string) ([]client.Object, error) {
+	objs := []client.Object{}
 
 	// Make sure the namespace exists.
 	objs, err := m.ensureNamespace(ctx, namespace, objs)
@@ -90,15 +90,19 @@ func (m *OperatorManager) InstallOperator(ctx context.Context, namespace, s3Buck
 		return objs, fmt.Errorf("error while creating pod environment configmap %v: %v", namespace, err)
 	}
 
-	// Decode each YAML to `runtime.Object`, add the namespace to it and install it.
+	// Decode each YAML to `client.Object`, add the namespace to it and install it.
 	for _, item := range m.list.Items {
 		obj, _, err := m.Decoder.Decode(item.Raw, nil, nil)
 		if err != nil {
-			return objs, fmt.Errorf("error while converting yaml to `runtime.Object`: %v", err)
+			return objs, fmt.Errorf("error while converting yaml to `client.Object`: %v", err)
 		}
 
-		if objs, err := m.createNewRuntimeObject(ctx, objs, obj, namespace, s3BucketURL); err != nil {
-			return objs, fmt.Errorf("error while creating the `runtime.Object`: %v", err)
+		cltObject, ok := obj.(client.Object)
+		if !ok {
+			return objs, fmt.Errorf("unable to cast into client.Object")
+		}
+		if objs, err := m.createNewClientObject(ctx, objs, cltObject, namespace, s3BucketURL); err != nil {
+			return objs, fmt.Errorf("error while creating the `client.Object`: %v", err)
 		}
 	}
 
@@ -106,7 +110,7 @@ func (m *OperatorManager) InstallOperator(ctx context.Context, namespace, s3Buck
 		return objs, fmt.Errorf("error while waiting for the readiness of the operator: %v", err)
 	}
 
-	m.Log.Info("operator installed")
+	m.log.Info("operator installed")
 	return objs, nil
 }
 
@@ -115,13 +119,13 @@ func (m *OperatorManager) IsOperatorDeletable(ctx context.Context, namespace str
 	pods := &corev1.PodList{}
 	if err := m.List(ctx, pods, client.InNamespace(namespace), m.toInstanceMatchingLabels(namespace)); err != nil {
 		if errors.IsNotFound(err) {
-			m.Log.Info("operator is deletable")
+			m.log.Info("operator is deletable")
 			return true, nil
 		}
 		return false, fmt.Errorf("error while fetching the list of instances operated by the operator: %v", err)
 	}
 	if len(pods.Items) == 0 {
-		m.Log.Info("operator is deletable")
+		m.log.Info("operator is deletable")
 		return true, nil
 	}
 
@@ -130,13 +134,13 @@ func (m *OperatorManager) IsOperatorDeletable(ctx context.Context, namespace str
 	services := &corev1.ServiceList{}
 	if err := m.List(ctx, services, client.InNamespace(namespace), m.toInstanceMatchingLabels(namespace)); err != nil {
 		if errors.IsNotFound(err) {
-			m.Log.Info("operator is deletable")
+			m.log.Info("operator is deletable")
 			return true, nil
 		}
 		return false, fmt.Errorf("error while fetching the list of instances operated by the operator: %v", err)
 	}
 	if len(services.Items) == 0 {
-		m.Log.Info("operator is deletable")
+		m.log.Info("operator is deletable")
 		return true, nil
 	}
 
@@ -156,7 +160,7 @@ func (m *OperatorManager) IsOperatorInstalled(ctx context.Context, namespace str
 	if len(pods.Items) == 0 {
 		return false, nil
 	}
-	m.Log.Info("operator is installed")
+	m.log.Info("operator is installed")
 	return true, nil
 }
 
@@ -188,7 +192,11 @@ func (m *OperatorManager) UninstallOperator(ctx context.Context, namespace strin
 				}
 			}
 		default:
-			if err := m.Delete(ctx, v); err != nil {
+			cltObject, ok := v.(client.Object)
+			if !ok {
+				return fmt.Errorf("unable to cast into client.Object")
+			}
+			if err := m.Delete(ctx, cltObject); err != nil {
 				if errors.IsNotFound(err) {
 					return nil
 				}
@@ -204,18 +212,18 @@ func (m *OperatorManager) UninstallOperator(ctx context.Context, namespace strin
 
 	// todo: delete namespace
 
-	m.Log.Info("operator deleted")
+	m.log.Info("operator deleted")
 	return nil
 }
 
-// createNewRuntimeObject adds namespace to obj and creates or patches it
-func (m *OperatorManager) createNewRuntimeObject(ctx context.Context, objs []runtime.Object, obj runtime.Object, namespace, s3BucketURL string) ([]runtime.Object, error) {
+// createNewClientObject adds namespace to obj and creates or patches it
+func (m *OperatorManager) createNewClientObject(ctx context.Context, objs []client.Object, obj client.Object, namespace, s3BucketURL string) ([]client.Object, error) {
 	if err := m.ensureCleanMetadata(obj); err != nil {
-		return objs, fmt.Errorf("error while ensuring the metadata of the `runtime.Object` is clean: %v", err)
+		return objs, fmt.Errorf("error while ensuring the metadata of the `client.Object` is clean: %v", err)
 	}
 
 	if err := m.SetNamespace(obj, namespace); err != nil {
-		return objs, fmt.Errorf("error while setting the namespace of the `runtime.Object` to %v: %v", namespace, err)
+		return objs, fmt.Errorf("error while setting the namespace of the `client.Object` to %v: %v", namespace, err)
 	}
 
 	key, err := m.toObjectKey(obj, namespace)
@@ -224,10 +232,10 @@ func (m *OperatorManager) createNewRuntimeObject(ctx context.Context, objs []run
 	}
 	switch v := obj.(type) {
 	case *v1.ServiceAccount:
-		m.Log.Info("handling ServiceAccount")
+		m.log.Info("handling ServiceAccount")
 		err = m.Get(ctx, key, &v1.ServiceAccount{})
 	case *rbacv1.ClusterRole:
-		m.Log.Info("handling ClusterRole")
+		m.log.Info("handling ClusterRole")
 		// ClusterRole is not namespaced.
 		key.Namespace = ""
 		err = m.Get(ctx, key, &rbacv1.ClusterRole{})
@@ -240,7 +248,7 @@ func (m *OperatorManager) createNewRuntimeObject(ctx context.Context, objs []run
 		}
 		v.Rules = append(v.Rules, pspPolicyRule)
 	case *rbacv1.ClusterRoleBinding:
-		m.Log.Info("handling ClusterRoleBinding")
+		m.log.Info("handling ClusterRoleBinding")
 		// Set the namespace of the ServiceAccount in the ClusterRoleBinding.
 		for i, s := range v.Subjects {
 			if s.Kind == "ServiceAccount" {
@@ -260,33 +268,33 @@ func (m *OperatorManager) createNewRuntimeObject(ctx context.Context, objs []run
 			if err := m.Patch(ctx, got, patch); err != nil {
 				return objs, fmt.Errorf("error while patching the `ClusterRoleBinding`: %v", err)
 			}
-			m.Log.Info("ClusterRoleBinding patched")
+			m.log.Info("ClusterRoleBinding patched")
 		}
 	case *v1.ConfigMap:
-		m.Log.Info("handling ConfigMap")
+		m.log.Info("handling ConfigMap")
 		m.editConfigMap(v, namespace, s3BucketURL)
 		err = m.Get(ctx, key, &v1.ConfigMap{})
 	case *v1.Service:
-		m.Log.Info("handling Service")
+		m.log.Info("handling Service")
 		err = m.Get(ctx, key, &v1.Service{})
 	case *appsv1.Deployment:
-		m.Log.Info("handling Deployment")
+		m.log.Info("handling Deployment")
 		err = m.Get(ctx, key, &appsv1.Deployment{})
 	default:
-		return objs, errs.New("unknown `runtime.Object`")
+		return objs, errs.New("unknown `client.Object`")
 	}
 	if err != nil {
 		if errors.IsNotFound(err) {
 			if err := m.Create(ctx, obj); err != nil {
-				return objs, fmt.Errorf("error while creating the `runtime.Object`: %v", err)
+				return objs, fmt.Errorf("error while creating the `client.Object`: %v", err)
 			}
-			m.Log.Info("new `runtime.Object` created")
+			m.log.Info("new `client.Object` created")
 
 			// Append the newly created obj.
 			objs = append(objs, obj)
 			return objs, nil
 		}
-		return objs, fmt.Errorf("error while fetching the `runtime.Object`: %v", err)
+		return objs, fmt.Errorf("error while fetching the `client.Object`: %v", err)
 	}
 
 	return objs, nil
@@ -371,7 +379,7 @@ func (m *OperatorManager) ensureCleanMetadata(obj runtime.Object) error {
 }
 
 // ensureNamespace ensures namespace exists
-func (m *OperatorManager) ensureNamespace(ctx context.Context, namespace string, objs []runtime.Object) ([]runtime.Object, error) {
+func (m *OperatorManager) ensureNamespace(ctx context.Context, namespace string, objs []client.Object) ([]client.Object, error) {
 	if err := m.Get(ctx, client.ObjectKey{Name: namespace}, &corev1.Namespace{}); err != nil {
 		// errors other than `not found`
 		if !errors.IsNotFound(err) {
@@ -385,7 +393,7 @@ func (m *OperatorManager) ensureNamespace(ctx context.Context, namespace string,
 			return nil, fmt.Errorf("error while creating namespace %v: %v", namespace, err)
 		}
 
-		// Append the created namespace to the list of the created `runtime.Object`s.
+		// Append the created namespace to the list of the created `client.Object`s.
 		objs = append(objs, nsObj)
 	}
 
@@ -393,14 +401,14 @@ func (m *OperatorManager) ensureNamespace(ctx context.Context, namespace string,
 }
 
 // createPodEnvironmentConfigMap creates a new ConfigMap with additional environment variables for the pods
-func (m *OperatorManager) ensurePodEnvironmentConfigMap(ctx context.Context, namespace string, objs []runtime.Object) ([]runtime.Object, error) {
+func (m *OperatorManager) ensurePodEnvironmentConfigMap(ctx context.Context, namespace string, objs []client.Object) ([]client.Object, error) {
 	ns := types.NamespacedName{
 		Namespace: namespace,
 		Name:      PodEnvCMName,
 	}
 	if err := m.Get(ctx, ns, &v1.ConfigMap{}); err == nil {
 		// configmap already exists, nothing to do here
-		m.Log.Info("Pod Environment ConfigMap already exists")
+		m.log.Info("Pod Environment ConfigMap already exists")
 		return objs, nil
 	}
 
@@ -415,7 +423,7 @@ func (m *OperatorManager) ensurePodEnvironmentConfigMap(ctx context.Context, nam
 	if err := m.Create(ctx, cm); err != nil {
 		return objs, fmt.Errorf("error while creating the new Pod Environment ConfigMap: %v", err)
 	}
-	m.Log.Info("new Pod Environment ConfigMap created")
+	m.log.Info("new Pod Environment ConfigMap created")
 
 	return objs, nil
 }
@@ -431,7 +439,7 @@ func (m *OperatorManager) deletePodEnvironmentConfigMap(ctx context.Context, nam
 	if err := m.Delete(ctx, cm); err != nil {
 		return fmt.Errorf("error while deleting the Pod Environment ConfigMap: %v", err)
 	}
-	m.Log.Info("Pod Environment ConfigMap deleted")
+	m.log.Info("Pod Environment ConfigMap deleted")
 
 	return nil
 }
