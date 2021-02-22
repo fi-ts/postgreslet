@@ -201,9 +201,15 @@ func (m *OperatorManager) UninstallOperator(ctx context.Context, namespace strin
 		return fmt.Errorf("error while deleting pod environment configmap: %w", err)
 	}
 
-	// todo: delete namespace
+	// Delete the namespace.
+	nsObj := &corev1.Namespace{}
+	nsObj.Name = namespace
+	if err := m.Delete(ctx, nsObj); err != nil {
+		return fmt.Errorf("error while deleting namespace %v: %w", namespace, err)
+	}
+	m.log.Info("namespace deleted")
 
-	m.log.Info("operator deleted")
+	m.log.Info("operator and related ressources deleted")
 	return nil
 }
 
