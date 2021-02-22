@@ -12,7 +12,6 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/ViaQ/logerr/log"
 	"github.com/go-logr/logr"
 	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -234,6 +233,7 @@ func (r *PostgresReconciler) ensureZalandoDependencies(ctx context.Context, p *p
 }
 
 func (r *PostgresReconciler) createOrUpdateBackupConfig(ctx context.Context, p *pg.Postgres) error {
+	log := r.Log.WithValues("postgres", p.UID)
 	if p.Spec.BackupSecretRef == "" {
 		log.Info("No configured backupSecretRef found, skipping configuration of postgres backup")
 		return nil
