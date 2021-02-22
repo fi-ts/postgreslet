@@ -94,7 +94,7 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 			return ctrl.Result{}, fmt.Errorf("error while checking if the operator is idle: %w", err)
 		}
 		if !deletable {
-			log.Info("operator not deletable")
+			log.Info("operator not deletable, requeueing")
 			return ctrl.Result{Requeue: true}, nil
 		}
 		if err := r.UninstallOperator(ctx, namespace); err != nil {
