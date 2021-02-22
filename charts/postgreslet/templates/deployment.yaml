@@ -21,6 +21,9 @@ spec:
       {{- end }}
       labels:
         control-plane: controller-manager
+{{- if .Values.addRandomLabel }}
+        random-label-to-force-reload: {{ randAlphaNum 12 | quote }}
+{{- end }}
         {{- include "postgreslet.selectorLabels" . | nindent 8 }}
     spec:
       {{- with .Values.imagePullSecrets }}
