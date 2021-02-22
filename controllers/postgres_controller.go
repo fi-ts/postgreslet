@@ -93,11 +93,12 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("error while checking if the operator is idle: %w", err)
 		}
-		if deletable {
-			log.Info("operator deletable")
-			if err := r.UninstallOperator(ctx, namespace); err != nil {
-				return ctrl.Result{}, fmt.Errorf("error while uninstalling operator: %w", err)
-			}
+		if !deletable {
+			log.Info("operator not deletable")
+			return ctrl.Result{Requeue: true}, nil
+		}
+		if err := r.UninstallOperator(ctx, namespace); err != nil {
+			return ctrl.Result{}, fmt.Errorf("error while uninstalling operator: %w", err)
 		}
 
 		instance.RemoveFinalizer(pg.PostgresFinalizerName)
