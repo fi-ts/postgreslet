@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/ViaQ/logerr/log"
 	"github.com/go-logr/logr"
 	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -218,10 +219,30 @@ func (r *PostgresReconciler) ensureZalandoDependencies(ctx context.Context, p *p
 		return fmt.Errorf("error while querying if zalando dependencies are installed: %w", err)
 	}
 
+	if !isInstalled {
+		_, err := r.InstallOperator(ctx, namespace)
+		if err != nil {
+			return fmt.Errorf("error while installing zalando dependencies: %w", err)
+		}
+	}
+
+	if err := r.createOrUpdateBackupConfig(ctx, p); err != nil {
+		return fmt.Errorf("error while creating backup config: %w", err)
+	}
+
+	return nil
+}
+
+func (r *PostgresReconciler) createOrUpdateBackupConfig(ctx context.Context, p *pg.Postgres) error {
+	if p.Spec.BackupSecretRef == "" {
+		log.Info("No configured backupSecretRef found, skipping configuration of postgres backup")
+		return nil
+	}
+
 	// fetch secret
 	backupSecret := &v1.Secret{}
 	backupNamespace := types.NamespacedName{
-		Name:      p.ToBackupSecretName(),
+		Name:      p.Spec.BackupSecretRef,
 		Namespace: p.Namespace,
 	}
 	if err := r.Client.Get(ctx, backupNamespace, backupSecret); err != nil {
@@ -246,14 +267,7 @@ func (r *PostgresReconciler) ensureZalandoDependencies(ctx context.Context, p *p
 	backupSchedule := string(backupSecret.Data[pg.BackupSecretSchedule])
 	backupNumToRetain := string(backupSecret.Data[pg.BackupSecretRetention])
 
-	if !isInstalled {
-		_, err := r.InstallOperator(ctx, namespace)
-		if err != nil {
-			return fmt.Errorf("error while installing zalando dependencies: %w", err)
-		}
-	}
-
-	// create updated content for configmap
+	// create updated content for pod environment configmap
 	data := map[string]string{
 		"USE_WALG_BACKUP":                  "true",
 		"USE_WALG_RESTORE":                 "true",
