@@ -38,7 +38,7 @@ func New(conf *rest.Config, scheme *runtime.Scheme, log logr.Logger) (*CRDInstal
 		Scheme: scheme,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("error while creating new k8s client: %v", err)
+		return nil, fmt.Errorf("error while creating new k8s client: %w", err)
 	}
 	log.Info("new `CRDInstaller` created")
 	return &CRDInstaller{
@@ -52,12 +52,12 @@ func New(conf *rest.Config, scheme *runtime.Scheme, log logr.Logger) (*CRDInstal
 func (i *CRDInstaller) Install(filePath string) error {
 	bytes, err := ioutil.ReadFile(filePath)
 	if err != nil {
-		return fmt.Errorf("error while reading CRD file: %v", err)
+		return fmt.Errorf("error while reading CRD file: %w", err)
 	}
 
 	obj, _, err := serializer.NewCodecFactory(i.Scheme).UniversalDeserializer().Decode(bytes, nil, nil)
 	if err != nil {
-		return fmt.Errorf("error while deserializing bytes: %v", err)
+		return fmt.Errorf("error while deserializing bytes: %w", err)
 	}
 
 	crdRead, ok := obj.(*apiextensionsv1.CustomResourceDefinition)
@@ -76,11 +76,11 @@ func (i *CRDInstaller) Install(filePath string) error {
 	crdFetched := &apiextensionsv1.CustomResourceDefinition{}
 	if err := i.Get(ctx, client.ObjectKey{Name: name}, crdFetched); err != nil {
 		if !apierrors.IsNotFound(err) {
-			return fmt.Errorf("error while fetching CRD Postgresql: %v", err)
+			return fmt.Errorf("error while fetching CRD Postgresql: %w", err)
 		}
 
 		if err := i.Create(ctx, crdRead); err != nil {
-			return fmt.Errorf("error while creating CRD Postgresql: %v", err)
+			return fmt.Errorf("error while creating CRD Postgresql: %w", err)
 		}
 		i.Log.Info("CRD newly installed")
 		return nil
