@@ -75,9 +75,6 @@ type PostgresSpec struct {
 	// Maintenance defines automatic maintenance of the database
 	Maintenance *Maintenance `json:"maintenance,omitempty"`
 
-	// todo: add default
-	// Backup parametes of the database backup
-	Backup *Backup `json:"backup,omitempty"`
 	// AccessList defines access restrictions
 	AccessList *AccessList `json:"accessList,omitempty"`
 }
@@ -89,14 +86,19 @@ type AccessList struct {
 }
 
 // Backup configure parametes of the database backup
-type Backup struct {
-	// S3BucketURL defines the URL of the S3 bucket for backup
-	S3BucketURL string `json:"s3BucketURL,omitempty"`
+const (
+	// S3URL defines the s3 endpoint URL for backup
+	BackupSecretS3Endpoint = "s3Endpoint"
+	// S3BucketName defines the name of the S3 bucket for backup
+	BackupSecretS3BucketName = "s3BucketName"
 	// Retention defines how many days a backup will persist
-	Retention int32 `json:"retention,omitempty"`
+	BackupSecretRetention = "retention"
 	// Schedule defines how often a backup should be made, in cron format
-	Schedule string `json:"schedule,omitempty"`
-}
+	BackupSecretSchedule   = "schedule"
+	BackupSecretAccessKey  = "accesskey"
+	BackupSecretSecretKey  = "secretkey"
+	BackupSecretProjectKey = "project"
+)
 
 // Size defines the size aspects of the database
 type Size struct {
@@ -309,7 +311,7 @@ func (p *Postgres) ToUserPasswordsSecretName() string {
 
 // ToBackupSecretName returns the name of the secret containing backup credentials
 func (p *Postgres) ToBackupSecretName() string {
-	return p.Name + "-backup"
+	return p.Spec.ProjectID + "-backup"
 }
 
 // ToUserPasswordsSecretListOption returns the argument for listing secrets

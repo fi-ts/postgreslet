@@ -22,6 +22,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -33,6 +34,8 @@ var operatorPodMatchingLabels = client.MatchingLabels{"name": "postgres-operator
 // TODO: create new account per namespace
 // TODO: use different account for operator and database
 const serviceAccountName string = "postgres-operator"
+
+const PodEnvCMName string = "postgres-pod-config"
 
 // OperatorManager manages the operator
 type OperatorManager struct {
@@ -81,6 +84,12 @@ func (m *OperatorManager) InstallOperator(ctx context.Context, namespace, s3Buck
 		return objs, fmt.Errorf("error while ensuring the existence of namespace %v: %v", namespace, err)
 	}
 
+	// Add our (initially empty) custom pod environment configmap
+	objs, err = m.ensurePodEnvironmentConfigMap(ctx, namespace, objs)
+	if err != nil {
+		return objs, fmt.Errorf("error while creating pod environment configmap %v: %v", namespace, err)
+	}
+
 	// Decode each YAML to `runtime.Object`, add the namespace to it and install it.
 	for _, item := range m.list.Items {
 		obj, _, err := m.Decoder.Decode(item.Raw, nil, nil)
@@ -103,26 +112,35 @@ func (m *OperatorManager) InstallOperator(ctx context.Context, namespace, s3Buck
 
 // IsOperatorDeletable returns true when there's no running instance operated by the operator
 func (m *OperatorManager) IsOperatorDeletable(ctx context.Context, namespace string) (bool, error) {
-	setList := &appsv1.StatefulSetList{}
-	if err := m.List(ctx, setList, client.InNamespace(namespace), m.toInstanceMatchingLabels(namespace)); client.IgnoreNotFound(err) != nil {
-		return false, fmt.Errorf("error while fetching the list of statefulsets operated by the operator: %w", err)
+	pods := &corev1.PodList{}
+	if err := m.List(ctx, pods, client.InNamespace(namespace), m.toInstanceMatchingLabels(namespace)); err != nil {
+		if errors.IsNotFound(err) {
+			m.Log.Info("operator is deletable")
+			return true, nil
+		}
+		return false, fmt.Errorf("error while fetching the list of instances operated by the operator: %v", err)
 	}
-	if setList != nil && len(setList.Items) != 0 {
-		m.Log.Info("statefulset still running")
-		return false, nil
+	if len(pods.Items) == 0 {
+		m.Log.Info("operator is deletable")
+		return true, nil
 	}
+
+	// todo: Check statefulset as well. Issue #83
 
 	services := &corev1.ServiceList{}
-	if err := m.List(ctx, services, client.InNamespace(namespace), m.toInstanceMatchingLabels(namespace)); client.IgnoreNotFound(err) != nil {
-		return false, fmt.Errorf("error while fetching the list of services operated by the operator: %w", err)
+	if err := m.List(ctx, services, client.InNamespace(namespace), m.toInstanceMatchingLabels(namespace)); err != nil {
+		if errors.IsNotFound(err) {
+			m.Log.Info("operator is deletable")
+			return true, nil
+		}
+		return false, fmt.Errorf("error while fetching the list of instances operated by the operator: %v", err)
 	}
-	if services != nil && len(services.Items) != 0 {
-		m.Log.Info("services still running")
-		return false, nil
+	if len(services.Items) == 0 {
+		m.Log.Info("operator is deletable")
+		return true, nil
 	}
 
-	m.Log.Info("operator deletable")
-	return true, nil
+	return false, nil
 }
 
 // IsOperatorInstalled returns true when the operator is installed
@@ -177,6 +195,11 @@ func (m *OperatorManager) UninstallOperator(ctx context.Context, namespace strin
 				return fmt.Errorf("error while deleting %v: %v", v, err)
 			}
 		}
+	}
+
+	// delete pod environment configmap
+	if err := m.deletePodEnvironmentConfigMap(ctx, namespace); client.IgnoreNotFound(err) != nil {
+		return fmt.Errorf("error while deleting pod environment configmap: %v", err)
 	}
 
 	// todo: delete namespace
@@ -271,10 +294,60 @@ func (m *OperatorManager) createNewRuntimeObject(ctx context.Context, objs []run
 
 // editConfigMap adds info to cm
 func (m *OperatorManager) editConfigMap(cm *v1.ConfigMap, namespace, s3BucketURL string) {
-	cm.Data["logical_backup_s3_bucket"] = s3BucketURL
+	// TODO re-enable
+	// cm.Data["logical_backup_s3_bucket"] = s3BucketURL
 	cm.Data["watched_namespace"] = namespace
 	// TODO don't use the same serviceaccount for operator and databases, see #88
 	cm.Data["pod_service_account_name"] = serviceAccountName
+	// set the reference to our custom pod environment configmap
+	cm.Data["pod_environment_configmap"] = PodEnvCMName
+	// TODO additional vars
+	// debug_logging: "true"
+	// docker_image: "{{ versions.spiloImage }}"
+	// enable_ebs_gp3_migration: "false"
+	// enable_master_load_balancer: "false"
+	// enable_pgversion_env_var: "true"
+	// enable_pod_disruption_budget: "true"
+	// enable_replica_load_balancer: "false"
+	// enable_sidecars: "true"
+	// enable_spilo_wal_path_compat: "true"
+	// enable_teams_api: "true"
+	// external_traffic_policy: "Cluster"
+	// logical_backup_docker_image: "{{ versions.logical_backupImage }}"
+	// log_s3_bucket: "{{ s3bucket.log_s3_bucket }}"
+	// wal_s3_bucket: "{{ s3bucket.wal_s3_bucket }}"
+	// logical_backup_s3_access_key_id: "{{ s3bucket.logical_backup_s3_access_key_id }}"
+	// logical_backup_s3_bucket: "{{ s3bucket.logical_backup_s3_bucket }}"
+	// logical_backup_s3_endpoint: "{{ s3bucket.logical_backup_s3_endpoint }}"
+	// logical_backup_s3_secret_access_key: "{{ s3bucket.logical_backup_s3_secret_access_key }}"
+	// logical_backup_s3_sse: "{{ s3bucket.logical_backup_s3_sse }}"
+	// logical_backup_schedule: "{{ s3bucket.logical_backup_schedule }}"
+	// master_dns_name_format: "{cluster}.{team}.{hostedzone}"
+	// pam_role_name: "{{ authentication.pam_role_name }}"
+	// pdb_name_format: "postgres-{cluster}-pdb"
+	// pod_deletion_wait_timeout: 10m
+	// pod_environment_configmap: "{{ pod_environment_cm.pod_environment_configmap }}"
+	// pod_label_wait_timeout: 10m
+	// pod_management_policy: "ordered_ready"
+	// pod_role_label: spilo-role
+	// pod_terminate_grace_period: 5m
+	// postgres_superuser_teams: "postgres_superusers"
+	// protected_role_names: "admin"
+	// ready_wait_interval: 3s
+	// ready_wait_timeout: 30s
+	// repair_period: 5m
+	// replica_dns_name_format: "{cluster}-repl.{team}.{hostedzone}"
+	// replication_username: standby
+	// resource_check_interval: 3s
+	// resource_check_timeout: 10m
+	// resync_period: 30m
+	// ring_log_lines: "100"
+	// secret_name_template: "{username}.{cluster}.credentials"
+	// spilo_privileged: "false"
+	// storage_resize_mode: "pvc"
+	// super_username: postgres
+	// team_admin_role: "admin"
+
 }
 
 // ensureCleanMetadata ensures obj has clean metadata
@@ -317,6 +390,50 @@ func (m *OperatorManager) ensureNamespace(ctx context.Context, namespace string,
 	}
 
 	return objs, nil
+}
+
+// createPodEnvironmentConfigMap creates a new ConfigMap with additional environment variables for the pods
+func (m *OperatorManager) ensurePodEnvironmentConfigMap(ctx context.Context, namespace string, objs []runtime.Object) ([]runtime.Object, error) {
+	ns := types.NamespacedName{
+		Namespace: namespace,
+		Name:      PodEnvCMName,
+	}
+	if err := m.Get(ctx, ns, &v1.ConfigMap{}); err == nil {
+		// configmap already exists, nothing to do here
+		m.Log.Info("Pod Environment ConfigMap already exists")
+		return objs, nil
+	}
+
+	cm := &v1.ConfigMap{}
+	if err := m.SetName(cm, PodEnvCMName); err != nil {
+		return objs, fmt.Errorf("error while setting the name of the new Pod Environment ConfigMap to %v: %v", namespace, err)
+	}
+	if err := m.SetNamespace(cm, namespace); err != nil {
+		return objs, fmt.Errorf("error while setting the namespace of the new Pod Environment ConfigMap to %v: %v", namespace, err)
+	}
+
+	if err := m.Create(ctx, cm); err != nil {
+		return objs, fmt.Errorf("error while creating the new Pod Environment ConfigMap: %v", err)
+	}
+	m.Log.Info("new Pod Environment ConfigMap created")
+
+	return objs, nil
+}
+
+func (m *OperatorManager) deletePodEnvironmentConfigMap(ctx context.Context, namespace string) error {
+	cm := &v1.ConfigMap{}
+	if err := m.SetName(cm, PodEnvCMName); err != nil {
+		return fmt.Errorf("error while setting the name of the Pod Environment ConfigMap to delete to %v: %v", PodEnvCMName, err)
+	}
+	if err := m.SetNamespace(cm, namespace); err != nil {
+		return fmt.Errorf("error while setting the namespace of the Pod Environment ConfigMap to delete to %v: %v", namespace, err)
+	}
+	if err := m.Delete(ctx, cm); err != nil {
+		return fmt.Errorf("error while deleting the Pod Environment ConfigMap: %v", err)
+	}
+	m.Log.Info("Pod Environment ConfigMap deleted")
+
+	return nil
 }
 
 // toInstanceMatchingLabels makes the matching labels for the pods of the instances operated by the operator

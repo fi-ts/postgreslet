@@ -9,11 +9,13 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"time"
 
 	"github.com/go-logr/logr"
 	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
 	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 
 	firewall "github.com/metal-stack/firewall-controller/api/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -211,17 +213,79 @@ func (r *PostgresReconciler) createZalandoPostgresql(ctx context.Context, instan
 }
 
 // ensureZalandoDependencies makes sure Zalando resources are installed in the service-cluster.
-func (r *PostgresReconciler) ensureZalandoDependencies(ctx context.Context, pg *pg.Postgres) error {
-	namespace := pg.ToPeripheralResourceNamespace()
+func (r *PostgresReconciler) ensureZalandoDependencies(ctx context.Context, p *pg.Postgres) error {
+	namespace := p.ToPeripheralResourceNamespace()
 	isInstalled, err := r.IsOperatorInstalled(ctx, namespace)
 	if err != nil {
 		return fmt.Errorf("error while querying if zalando dependencies are installed: %v", err)
 	}
+
+	// fetch secret
+	backupSecret := &v1.Secret{}
+	backupNamespace := types.NamespacedName{
+		Name:      p.ToBackupSecretName(),
+		Namespace: p.Namespace,
+	}
+	if err := r.Client.Get(ctx, backupNamespace, backupSecret); err != nil {
+		return fmt.Errorf("error while getting the backup secret from control plane cluster: %v", err)
+	}
+
+	s3url, err := url.Parse(string(backupSecret.Data[pg.BackupSecretS3Endpoint]))
+	if err != nil {
+		return fmt.Errorf("error while parsing the s3 endpoint url in the backup secret: %v", err)
+	}
+	// use the s3 endpoint as provided
+	awsEndpoint := s3url.String()
+	// modify the scheme to 'https+path'
+	s3url.Scheme = "https+path"
+	// use the modified s3 endpoint
+	walES3Endpoint := s3url.String()
+
+	// use the rest as provided in the secret
+	bucketName := string(backupSecret.Data[pg.BackupSecretS3BucketName])
+	awsAccessKeyID := string(backupSecret.Data[pg.BackupSecretAccessKey])
+	awsSecretAccessKey := string(backupSecret.Data[pg.BackupSecretSecretKey])
+	backupSchedule := string(backupSecret.Data[pg.BackupSecretSchedule])
+	backupNumToRetain := string(backupSecret.Data[pg.BackupSecretRetention])
+
 	if !isInstalled {
-		_, err := r.InstallOperator(ctx, namespace, pg.Spec.Backup.S3BucketURL)
+		_, err := r.InstallOperator(ctx, namespace, awsEndpoint+"/"+bucketName) // TODO check the s3BucketUrl...
 		if err != nil {
 			return fmt.Errorf("error while installing zalando dependencies: %v", err)
 		}
+	}
+
+	// create updated content for configmap
+	data := map[string]string{
+		"USE_WALG_BACKUP":                  "true",
+		"USE_WALG_RESTORE":                 "true",
+		"WALE_S3_PREFIX":                   "s3://" + bucketName + "/$(SCOPE)",
+		"WALG_S3_PREFIX":                   "s3://" + bucketName + "/$(SCOPE)",
+		"CLONE_WALG_S3_PREFIX":             "s3://" + bucketName + "/$(CLONE_SCOPE)",
+		"WALE_BACKUP_THRESHOLD_PERCENTAGE": "100",
+		"AWS_ENDPOINT":                     awsEndpoint,
+		"WALE_S3_ENDPOINT":                 walES3Endpoint, // same as above, but slightly modified
+		"AWS_ACCESS_KEY_ID":                awsAccessKeyID,
+		"AWS_SECRET_ACCESS_KEY":            awsSecretAccessKey,
+		"AWS_S3_FORCE_PATH_STYLE":          "true",
+		"AWS_REGION":                       "us-east-1",
+		"WALG_DISABLE_S3_SSE":              "true", // disable server side encryption
+		"WALG_S3_SSE":                      "",     // server side encryptio key
+		"BACKUP_SCHEDULE":                  backupSchedule,
+		"BACKUP_NUM_TO_RETAIN":             backupNumToRetain,
+	}
+
+	cm := &v1.ConfigMap{}
+	ns := types.NamespacedName{
+		Name:      operatormanager.PodEnvCMName,
+		Namespace: p.ToPeripheralResourceNamespace(),
+	}
+	if err := r.Service.Get(ctx, ns, cm); err != nil {
+		return fmt.Errorf("error while getting the pod environment configmap from service cluster: %v", err)
+	}
+	cm.Data = data
+	if err := r.Service.Update(ctx, cm); err != nil {
+		return fmt.Errorf("error while updating the pod environment configmap in service cluster: %v", err)
 	}
 
 	return nil
