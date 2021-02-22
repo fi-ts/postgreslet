@@ -360,7 +360,7 @@ func (p *Postgres) generateDatabaseName() string {
 }
 
 func (p *Postgres) ToPeripheralResourceNamespace() string {
-	return p.Spec.ProjectID
+	return p.generateDatabaseName()
 }
 
 // Name of the label referencing the owning Postgres resource in the control cluster
