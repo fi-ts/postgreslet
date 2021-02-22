@@ -198,6 +198,10 @@ func (r *PostgresReconciler) createZalandoPostgresql(ctx context.Context, instan
 		}
 	}
 
+	// TODO make configurable
+	log.Info("Enabling logical backup", "zalando", z)
+	z.Spec.EnableLogicalBackup = true
+
 	u, err := z.ToUnstructured()
 	if err != nil {
 		log.Error(err, "error while converting to unstructured")
@@ -248,8 +252,18 @@ func (r *PostgresReconciler) ensureZalandoDependencies(ctx context.Context, p *p
 	backupSchedule := string(backupSecret.Data[pg.BackupSecretSchedule])
 	backupNumToRetain := string(backupSecret.Data[pg.BackupSecretRetention])
 
+	backupConf := operatormanager.LogicalBackupConfig{
+		S3Endpoint: awsEndpoint,
+		// TODO use different bucket for logical backups?
+		S3BucketName:      bucketName,
+		S3AccessKeyID:     awsAccessKeyID,
+		S3SecretAccessKey: awsSecretAccessKey,
+		// TODO use different schedule
+		Schedule: "*/5 * * * *",
+	}
+
 	if !isInstalled {
-		_, err := r.InstallOperator(ctx, namespace, awsEndpoint+"/"+bucketName) // TODO check the s3BucketUrl...
+		_, err := r.InstallOperator(ctx, namespace, backupConf)
 		if err != nil {
 			return fmt.Errorf("error while installing zalando dependencies: %v", err)
 		}

@@ -75,7 +75,7 @@ func New(client client.Client, fileName string, scheme *runtime.Scheme, log logr
 }
 
 // InstallOperator installs the operator Stored in `OperatorManager`
-func (m *OperatorManager) InstallOperator(ctx context.Context, namespace, s3BucketURL string) ([]runtime.Object, error) {
+func (m *OperatorManager) InstallOperator(ctx context.Context, namespace string, backupConfig LogicalBackupConfig) ([]runtime.Object, error) {
 	objs := []runtime.Object{}
 
 	// Make sure the namespace exists.
@@ -97,7 +97,7 @@ func (m *OperatorManager) InstallOperator(ctx context.Context, namespace, s3Buck
 			return objs, fmt.Errorf("error while converting yaml to `runtime.Object`: %v", err)
 		}
 
-		if objs, err := m.createNewRuntimeObject(ctx, objs, obj, namespace, s3BucketURL); err != nil {
+		if objs, err := m.createNewRuntimeObject(ctx, objs, obj, namespace, backupConfig); err != nil {
 			return objs, fmt.Errorf("error while creating the `runtime.Object`: %v", err)
 		}
 	}
@@ -209,7 +209,7 @@ func (m *OperatorManager) UninstallOperator(ctx context.Context, namespace strin
 }
 
 // createNewRuntimeObject adds namespace to obj and creates or patches it
-func (m *OperatorManager) createNewRuntimeObject(ctx context.Context, objs []runtime.Object, obj runtime.Object, namespace, s3BucketURL string) ([]runtime.Object, error) {
+func (m *OperatorManager) createNewRuntimeObject(ctx context.Context, objs []runtime.Object, obj runtime.Object, namespace string, backupConf LogicalBackupConfig) ([]runtime.Object, error) {
 	if err := m.ensureCleanMetadata(obj); err != nil {
 		return objs, fmt.Errorf("error while ensuring the metadata of the `runtime.Object` is clean: %v", err)
 	}
@@ -264,7 +264,7 @@ func (m *OperatorManager) createNewRuntimeObject(ctx context.Context, objs []run
 		}
 	case *v1.ConfigMap:
 		m.Log.Info("handling ConfigMap")
-		m.editConfigMap(v, namespace, s3BucketURL)
+		m.editConfigMap(v, namespace, backupConf)
 		err = m.Get(ctx, key, &v1.ConfigMap{})
 	case *v1.Service:
 		m.Log.Info("handling Service")
@@ -292,10 +292,21 @@ func (m *OperatorManager) createNewRuntimeObject(ctx context.Context, objs []run
 	return objs, nil
 }
 
+type LogicalBackupConfig struct {
+	S3Endpoint        string
+	S3BucketName      string
+	S3AccessKeyID     string
+	S3SecretAccessKey string
+	Schedule          string
+}
+
 // editConfigMap adds info to cm
-func (m *OperatorManager) editConfigMap(cm *v1.ConfigMap, namespace, s3BucketURL string) {
-	// TODO re-enable
-	// cm.Data["logical_backup_s3_bucket"] = s3BucketURL
+func (m *OperatorManager) editConfigMap(cm *v1.ConfigMap, namespace string, config LogicalBackupConfig) {
+	cm.Data["logical_backup_s3_access_key_id"] = config.S3AccessKeyID
+	cm.Data["logical_backup_s3_secret_access_key"] = config.S3SecretAccessKey
+	cm.Data["logical_backup_s3_endpoint"] = config.S3Endpoint
+	cm.Data["logical_backup_s3_bucket"] = config.S3BucketName
+	cm.Data["logical_backup_schedule"] = config.Schedule
 	cm.Data["watched_namespace"] = namespace
 	// TODO don't use the same serviceaccount for operator and databases, see #88
 	cm.Data["pod_service_account_name"] = serviceAccountName

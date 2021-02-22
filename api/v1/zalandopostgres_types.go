@@ -31,12 +31,13 @@ type ZalandoPostgres struct {
 }
 
 type ZalandoPostgresSpec struct {
-	MaintenanceWindows []MaintenanceWindow `json:"maintenanceWindows,omitempty"`
-	NumberOfInstances  int32               `json:"numberOfInstances"`
-	PostgresqlParam    PostgresqlParam     `json:"postgresql"`
-	Resources          *Resources          `json:"resources,omitempty"`
-	TeamID             string              `json:"teamId"`
-	Volume             Volume              `json:"volume"`
+	MaintenanceWindows  []MaintenanceWindow `json:"maintenanceWindows,omitempty"`
+	NumberOfInstances   int32               `json:"numberOfInstances"`
+	PostgresqlParam     PostgresqlParam     `json:"postgresql"`
+	Resources           *Resources          `json:"resources,omitempty"`
+	TeamID              string              `json:"teamId"`
+	Volume              Volume              `json:"volume"`
+	EnableLogicalBackup bool                `json:"enableLogicalBackup,omitempty"`
 }
 
 type MaintenanceWindow struct {
