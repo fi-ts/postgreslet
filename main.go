@@ -7,12 +7,11 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"net"
 	"os"
-	"os/signal"
-	"syscall"
 
 	"github.com/metal-stack/v"
 	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
@@ -166,33 +165,19 @@ func main() {
 	}
 	// +kubebuilder:scaffold:builder
 
+	ctx := context.Background()
+
 	setupLog.Info("starting service cluster manager", "version", v.V)
 	go func() {
-		if err := svcClusterMgr.Start(setupSignalHandler()); err != nil {
+		if err := svcClusterMgr.Start(ctx); err != nil {
 			setupLog.Error(err, "problem running service cluster manager")
 			os.Exit(1)
 		}
 	}()
 
 	setupLog.Info("starting control plane cluster manager", "version", v.V)
-	if err := ctrlPlaneClusterMgr.Start(setupSignalHandler()); err != nil {
+	if err := ctrlPlaneClusterMgr.Start(ctx); err != nil {
 		setupLog.Error(err, "problem running control plane cluster manager")
 		os.Exit(1)
 	}
-}
-
-// setupSignalHandler is the same function as `signals.SetupSignalHandler` except it doesn't panic when it gets called twice.
-func setupSignalHandler() <-chan struct{} {
-	stop := make(chan struct{})
-	c := make(chan os.Signal, 2)
-	signal.Notify(c, []os.Signal{syscall.SIGINT, syscall.SIGTERM}...)
-	go func() {
-		<-c
-		close(stop)
-
-		// Exit upon the second SIGINT or SIGTERM.
-		<-c
-		os.Exit(1)
-	}()
-	return stop
 }

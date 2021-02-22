@@ -53,8 +53,7 @@ type PostgresReconciler struct {
 // +kubebuilder:rbac:groups=database.fits.cloud,resources=postgres/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=acid.zalan.do,resources=postgresqls,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=acid.zalan.do,resources=postgresqls/status,verbs=get;list;watch
-func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-	ctx := context.Background()
+func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := r.Log.WithValues("postgres", req.NamespacedName)
 
 	log.Info("fetchting postgres")
@@ -92,14 +91,13 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 		deletable, err := r.IsOperatorDeletable(ctx, namespace)
 		if err != nil {
-			return ctrl.Result{}, fmt.Errorf("error while checking if the operator is idle: %v", err)
+			return ctrl.Result{}, fmt.Errorf("error while checking if the operator is idle: %w", err)
 		}
-		if !deletable {
-			log.Info("operator not deletable")
-			return ctrl.Result{Requeue: true}, nil
-		}
-		if err := r.UninstallOperator(ctx, namespace); err != nil {
-			return ctrl.Result{}, fmt.Errorf("error while uninstalling operator: %v", err)
+		if deletable {
+			log.Info("operator deletable")
+			if err := r.UninstallOperator(ctx, namespace); err != nil {
+				return ctrl.Result{}, fmt.Errorf("error while uninstalling operator: %w", err)
+			}
 		}
 
 		instance.RemoveFinalizer(pg.PostgresFinalizerName)
@@ -114,7 +112,7 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		log.Info("finalizer being added")
 		instance.AddFinalizer(pg.PostgresFinalizerName)
 		if err := r.Update(ctx, instance); err != nil {
-			return requeue, fmt.Errorf("error while adding finalizer: %v", err)
+			return requeue, fmt.Errorf("error while adding finalizer: %w", err)
 		}
 		log.Info("finalizer added")
 		return ctrl.Result{}, nil
@@ -122,7 +120,7 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 	// Check if zalando dependencies are installed. If not, install them.
 	if err := r.ensureZalandoDependencies(ctx, instance); err != nil {
-		return ctrl.Result{}, fmt.Errorf("error while ensuring Zalando dependencies: %v", err)
+		return ctrl.Result{}, fmt.Errorf("error while ensuring Zalando dependencies: %w", err)
 	}
 
 	if err := r.createOrUpdateZalandoPostgresql(ctx, instance, log); err != nil {
@@ -142,7 +140,7 @@ func (r *PostgresReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 	// Update status will be handled by the StatusReconciler, based on the Zalando Status
 	if err := r.createOrUpdateCWNP(ctx, instance, int(port)); err != nil {
-		return ctrl.Result{}, fmt.Errorf("unable to create or update corresponding CRD ClusterwideNetworkPolicy: %W", err)
+		return ctrl.Result{}, fmt.Errorf("unable to create or update corresponding CRD ClusterwideNetworkPolicy: %w", err)
 	}
 
 	return ctrl.Result{}, nil
@@ -217,7 +215,7 @@ func (r *PostgresReconciler) ensureZalandoDependencies(ctx context.Context, p *p
 	namespace := p.ToPeripheralResourceNamespace()
 	isInstalled, err := r.IsOperatorInstalled(ctx, namespace)
 	if err != nil {
-		return fmt.Errorf("error while querying if zalando dependencies are installed: %v", err)
+		return fmt.Errorf("error while querying if zalando dependencies are installed: %w", err)
 	}
 
 	// fetch secret
@@ -227,12 +225,12 @@ func (r *PostgresReconciler) ensureZalandoDependencies(ctx context.Context, p *p
 		Namespace: p.Namespace,
 	}
 	if err := r.Client.Get(ctx, backupNamespace, backupSecret); err != nil {
-		return fmt.Errorf("error while getting the backup secret from control plane cluster: %v", err)
+		return fmt.Errorf("error while getting the backup secret from control plane cluster: %w", err)
 	}
 
 	s3url, err := url.Parse(string(backupSecret.Data[pg.BackupSecretS3Endpoint]))
 	if err != nil {
-		return fmt.Errorf("error while parsing the s3 endpoint url in the backup secret: %v", err)
+		return fmt.Errorf("error while parsing the s3 endpoint url in the backup secret: %w", err)
 	}
 	// use the s3 endpoint as provided
 	awsEndpoint := s3url.String()
@@ -251,7 +249,7 @@ func (r *PostgresReconciler) ensureZalandoDependencies(ctx context.Context, p *p
 	if !isInstalled {
 		_, err := r.InstallOperator(ctx, namespace, awsEndpoint+"/"+bucketName) // TODO check the s3BucketUrl...
 		if err != nil {
-			return fmt.Errorf("error while installing zalando dependencies: %v", err)
+			return fmt.Errorf("error while installing zalando dependencies: %w", err)
 		}
 	}
 
@@ -281,11 +279,11 @@ func (r *PostgresReconciler) ensureZalandoDependencies(ctx context.Context, p *p
 		Namespace: p.ToPeripheralResourceNamespace(),
 	}
 	if err := r.Service.Get(ctx, ns, cm); err != nil {
-		return fmt.Errorf("error while getting the pod environment configmap from service cluster: %v", err)
+		return fmt.Errorf("error while getting the pod environment configmap from service cluster: %w", err)
 	}
 	cm.Data = data
 	if err := r.Service.Update(ctx, cm); err != nil {
-		return fmt.Errorf("error while updating the pod environment configmap in service cluster: %v", err)
+		return fmt.Errorf("error while updating the pod environment configmap in service cluster: %w", err)
 	}
 
 	return nil
@@ -311,10 +309,10 @@ func (r *PostgresReconciler) deleteZPostgresqlByLabels(ctx context.Context, matc
 		return err
 	}
 
-	for _, rawZ := range items {
-		log := r.Log.WithValues("zalando postgrsql", rawZ)
-		if err := r.Service.Delete(ctx, &rawZ); err != nil {
-			return fmt.Errorf("error while deleting zalando postgresql: %v", err)
+	for i, rawZ := range items {
+		log := r.Log.WithValues("zalando postgresql", rawZ)
+		if err := r.Service.Delete(ctx, &items[i]); err != nil {
+			return fmt.Errorf("error while deleting zalando postgresql: %w", err)
 		}
 		log.Info("zalando postgresql deleted")
 	}
@@ -336,7 +334,7 @@ func (r *PostgresReconciler) createOrUpdateCWNP(ctx context.Context, in *pg.Post
 	if _, err := controllerutil.CreateOrUpdate(ctx, r.Service, key, func() error {
 		key.Spec.Ingress = policy.Spec.Ingress
 		return nil
-	}); err != nil {
+	}); err != nil && !errors.IsAlreadyExists(err) {
 		return fmt.Errorf("unable to deploy CRD ClusterwideNetworkPolicy: %w", err)
 	}
 
