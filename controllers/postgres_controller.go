@@ -247,7 +247,7 @@ func (r *PostgresReconciler) ensureZalandoDependencies(ctx context.Context, p *p
 	backupNumToRetain := string(backupSecret.Data[pg.BackupSecretRetention])
 
 	if !isInstalled {
-		_, err := r.InstallOperator(ctx, namespace, awsEndpoint+"/"+bucketName) // TODO check the s3BucketUrl...
+		_, err := r.InstallOperator(ctx, namespace)
 		if err != nil {
 			return fmt.Errorf("error while installing zalando dependencies: %w", err)
 		}
