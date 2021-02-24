@@ -149,11 +149,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	// if err = (&databasev1.Postgres{}).SetupWebhookWithManager(mgr); err != nil {
-	// 	setupLog.Error(err, "unable to create webhook", "webhook", "Postgres")
-	// 	os.Exit(1)
-	// }
-
 	if err = (&controllers.StatusReconciler{
 		Client:  svcClusterMgr.GetClient(),
 		Control: ctrlPlaneClusterMgr.GetClient(),
@@ -166,6 +161,9 @@ func main() {
 	// +kubebuilder:scaffold:builder
 
 	ctx := context.Background()
+
+	// update all existing operators to the current version
+	opMgr.UpdateAllOperators(ctx)
 
 	setupLog.Info("starting service cluster manager", "version", v.V)
 	go func() {

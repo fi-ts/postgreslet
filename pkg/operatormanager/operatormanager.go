@@ -28,6 +28,7 @@ import (
 )
 
 // operatorPodMatchingLabels is for listing operator pods
+// TODO also use custom labels from SvcLoadBalancerLabel like 'postgres.database.fits.cloud/managed-by'
 var operatorPodMatchingLabels = client.MatchingLabels{"name": "postgres-operator"}
 
 // The serviceAccount name to use for the database pods.
@@ -74,8 +75,8 @@ func New(client client.Client, fileName string, scheme *runtime.Scheme, log logr
 	}, nil
 }
 
-// InstallOperator installs the operator Stored in `OperatorManager`
-func (m *OperatorManager) InstallOperator(ctx context.Context, namespace string) ([]client.Object, error) {
+// InstallOrUpdateOperator installs or updates the operator Stored in `OperatorManager`
+func (m *OperatorManager) InstallOrUpdateOperator(ctx context.Context, namespace string) ([]client.Object, error) {
 	objs := []client.Object{}
 
 	// Make sure the namespace exists.
@@ -215,27 +216,31 @@ func (m *OperatorManager) UninstallOperator(ctx context.Context, namespace strin
 
 // createNewClientObject adds namespace to obj and creates or patches it
 func (m *OperatorManager) createNewClientObject(ctx context.Context, objs []client.Object, obj client.Object, namespace string) ([]client.Object, error) {
+	// remove any unwanted annotations, uids etc. Remember, these objects come straight from the YAML.
 	if err := m.ensureCleanMetadata(obj); err != nil {
 		return objs, fmt.Errorf("error while ensuring the metadata of the `client.Object` is clean: %w", err)
 	}
 
+	// use our current namespace, not the one from the YAML
 	if err := m.SetNamespace(obj, namespace); err != nil {
 		return objs, fmt.Errorf("error while setting the namespace of the `client.Object` to %v: %w", namespace, err)
 	}
 
+	// TODO add custom labels from SvcLoadBalancerLabel like 'postgres.database.fits.cloud/managed-by'
+
+	// generate a proper object key for each object
 	key, err := m.toObjectKey(obj, namespace)
 	if err != nil {
 		return objs, fmt.Errorf("error while making the object key: %w", err)
 	}
+
+	// perform different modifications on the parsed objects based on their kind
 	switch v := obj.(type) {
 	case *v1.ServiceAccount:
 		m.log.Info("handling ServiceAccount")
 		err = m.Get(ctx, key, &v1.ServiceAccount{})
 	case *rbacv1.ClusterRole:
 		m.log.Info("handling ClusterRole")
-		// ClusterRole is not namespaced.
-		key.Namespace = ""
-		err = m.Get(ctx, key, &rbacv1.ClusterRole{})
 		// Add our psp
 		pspPolicyRule := rbacv1.PolicyRule{
 			APIGroups:     []string{"extensions"},
@@ -244,6 +249,10 @@ func (m *OperatorManager) createNewClientObject(ctx context.Context, objs []clie
 			ResourceNames: []string{m.pspName},
 		}
 		v.Rules = append(v.Rules, pspPolicyRule)
+
+		// ClusterRole is not namespaced.
+		key.Namespace = ""
+		err = m.Get(ctx, key, &rbacv1.ClusterRole{})
 	case *rbacv1.ClusterRoleBinding:
 		m.log.Info("handling ClusterRoleBinding")
 		// Set the namespace of the ServiceAccount in the ClusterRoleBinding.
@@ -266,6 +275,8 @@ func (m *OperatorManager) createNewClientObject(ctx context.Context, objs []clie
 				return objs, fmt.Errorf("error while patching the `ClusterRoleBinding`: %w", err)
 			}
 			m.log.Info("ClusterRoleBinding patched")
+			// we already patched the object, no need to go through the update path at the bottom of this function
+			return objs, nil
 		}
 	case *v1.ConfigMap:
 		m.log.Info("handling ConfigMap")
@@ -280,8 +291,10 @@ func (m *OperatorManager) createNewClientObject(ctx context.Context, objs []clie
 	default:
 		return objs, errs.New("unknown `client.Object`")
 	}
+
 	if err != nil {
 		if errors.IsNotFound(err) {
+			// the object (with that objectKey) does not exist yet, so we create it
 			if err := m.Create(ctx, obj); err != nil {
 				return objs, fmt.Errorf("error while creating the `client.Object`: %w", err)
 			}
@@ -291,7 +304,13 @@ func (m *OperatorManager) createNewClientObject(ctx context.Context, objs []clie
 			objs = append(objs, obj)
 			return objs, nil
 		}
+		// something else went horribly wrong, abort
 		return objs, fmt.Errorf("error while fetching the `client.Object`: %w", err)
+	}
+
+	// if we made it this far, the object already exists, so we just update it
+	if err := m.Update(ctx, obj); err != nil {
+		return objs, fmt.Errorf("error while updating the `client.Object`: %w", err)
 	}
 
 	return objs, nil
@@ -492,5 +511,25 @@ func (m *OperatorManager) waitTillOperatorReady(ctx context.Context, timeout tim
 		return err
 	}
 
+	return nil
+}
+
+func (m *OperatorManager) UpdateAllOperators(ctx context.Context) error {
+	// fetch all operators (running or otherwise)
+	m.log.Info("Fetching all existing postgres operators")
+	pods := &corev1.PodList{}
+	opts := []client.ListOption{
+		operatorPodMatchingLabels,
+	}
+	if err := m.List(ctx, pods, opts...); err != nil {
+		return client.IgnoreNotFound(err)
+	}
+	// update each namespace
+	for _, pod := range pods.Items {
+		m.log.Info("Updating postgres operator installation in namespace %w", pod.Namespace)
+		m.InstallOrUpdateOperator(ctx, pod.Namespace)
+	}
+
+	m.log.Info("Done updating existing postgres operator installations")
 	return nil
 }
