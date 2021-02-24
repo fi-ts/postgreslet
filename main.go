@@ -129,7 +129,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	opMgr, err := operatormanager.New(svcClusterMgr.GetClient(), "external/svc-postgres-operator.yaml", scheme, ctrl.Log.WithName("OperatorManager"), pspName)
+	opMgr, err := operatormanager.New(svcClusterConf, "external/svc-postgres-operator.yaml", scheme, ctrl.Log.WithName("OperatorManager"), pspName)
 	if err != nil {
 		setupLog.Error(err, "unable to create `OperatorManager`")
 		os.Exit(1)

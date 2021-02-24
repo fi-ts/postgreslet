@@ -24,6 +24,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -50,7 +51,15 @@ type OperatorManager struct {
 }
 
 // New creates a new `OperatorManager`
-func New(client client.Client, fileName string, scheme *runtime.Scheme, log logr.Logger, pspName string) (*OperatorManager, error) {
+func New(conf *rest.Config, fileName string, scheme *runtime.Scheme, log logr.Logger, pspName string) (*OperatorManager, error) {
+	// Use no-cache client to avoid waiting for cashing.
+	client, err := client.New(conf, client.Options{
+		Scheme: scheme,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("error while creating new k8s client: %w", err)
+	}
+
 	bb, err := ioutil.ReadFile(fileName)
 	if err != nil {
 		return nil, fmt.Errorf("error while reading operator yaml file: %w", err)
