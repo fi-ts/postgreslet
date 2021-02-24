@@ -181,6 +181,10 @@ func (r *PostgresReconciler) createZalandoPostgresql(ctx context.Context, instan
 	namespacedName := types.NamespacedName{Namespace: z.Namespace, Name: z.Name}
 	log := r.Log.WithValues("ns/name", namespacedName)
 
+	// Add custom labels (used in combination with the inherited_labels feature of the operator)
+	z.Labels[pg.TenantLabelName] = instance.Spec.Tenant
+	z.Labels[pg.ProjectIDLabelName] = instance.Spec.ProjectID
+
 	// Make sure the namespace exists in the worker-cluster.
 	ns := z.Namespace
 	if err := r.Service.Get(ctx, client.ObjectKey{Name: ns}, &corev1.Namespace{}); err != nil {
