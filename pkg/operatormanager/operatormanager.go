@@ -295,7 +295,7 @@ func (m *OperatorManager) createNewClientObject(ctx context.Context, objs []clie
 		m.log.Info("handling Service")
 		got := v1.Service{}
 		err = m.Get(ctx, key, &got)
-		if err != nil {
+		if err == nil {
 			// Copy the ResourceVersion
 			v.ObjectMeta.ResourceVersion = got.ObjectMeta.ResourceVersion
 			// Copy the ClusterIP
