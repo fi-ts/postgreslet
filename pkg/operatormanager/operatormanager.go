@@ -278,7 +278,6 @@ func (m *OperatorManager) createNewClientObject(ctx context.Context, objs []clie
 		got := &rbacv1.ClusterRoleBinding{}
 		err = m.Get(ctx, key, got)
 		if err == nil {
-			// TODO also patch the rest of the ClusterRoleBindung, not just the subjects
 			patch := client.MergeFrom(got.DeepCopy())
 			got.Subjects = append(got.Subjects, v.Subjects[0])
 			if err := m.Patch(ctx, got, patch); err != nil {
@@ -297,13 +296,10 @@ func (m *OperatorManager) createNewClientObject(ctx context.Context, objs []clie
 		got := v1.Service{}
 		err = m.Get(ctx, key, &got)
 		if err == nil {
-			patch := client.MergeFrom(got.DeepCopy())
-			if err := m.Patch(ctx, obj, patch); err != nil {
-				return objs, fmt.Errorf("error while patching the `Service`: %w", err)
-			}
-			m.log.Info("Service patched")
-			// we already patched the object, no need to go through the update path at the bottom of this function
-			return objs, nil
+			// Copy the ResourceVersion
+			v.ObjectMeta.ResourceVersion = got.ObjectMeta.ResourceVersion
+			// Copy the ClusterIP
+			v.Spec.ClusterIP = got.Spec.ClusterIP
 		}
 	case *appsv1.Deployment:
 		m.log.Info("handling Deployment")
