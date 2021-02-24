@@ -75,7 +75,7 @@ func New(client client.Client, fileName string, scheme *runtime.Scheme, log logr
 }
 
 // InstallOperator installs the operator Stored in `OperatorManager`
-func (m *OperatorManager) InstallOperator(ctx context.Context, namespace, s3BucketURL string) ([]client.Object, error) {
+func (m *OperatorManager) InstallOperator(ctx context.Context, namespace string) ([]client.Object, error) {
 	objs := []client.Object{}
 
 	// Make sure the namespace exists.
@@ -101,7 +101,7 @@ func (m *OperatorManager) InstallOperator(ctx context.Context, namespace, s3Buck
 		if !ok {
 			return objs, fmt.Errorf("unable to cast into client.Object")
 		}
-		if objs, err := m.createNewClientObject(ctx, objs, cltObject, namespace, s3BucketURL); err != nil {
+		if objs, err := m.createNewClientObject(ctx, objs, cltObject, namespace); err != nil {
 			return objs, fmt.Errorf("error while creating the `client.Object`: %w", err)
 		}
 	}
@@ -116,35 +116,26 @@ func (m *OperatorManager) InstallOperator(ctx context.Context, namespace, s3Buck
 
 // IsOperatorDeletable returns true when there's no running instance operated by the operator
 func (m *OperatorManager) IsOperatorDeletable(ctx context.Context, namespace string) (bool, error) {
-	pods := &corev1.PodList{}
-	if err := m.List(ctx, pods, client.InNamespace(namespace), m.toInstanceMatchingLabels(namespace)); err != nil {
-		if errors.IsNotFound(err) {
-			m.log.Info("operator is deletable")
-			return true, nil
-		}
-		return false, fmt.Errorf("error while fetching the list of instances operated by the operator: %w", err)
+	setList := &appsv1.StatefulSetList{}
+	if err := m.List(ctx, setList, client.InNamespace(namespace), m.toInstanceMatchingLabels(namespace)); client.IgnoreNotFound(err) != nil {
+		return false, fmt.Errorf("error while fetching the list of statefulsets operated by the operator: %w", err)
 	}
-	if len(pods.Items) == 0 {
-		m.log.Info("operator is deletable")
-		return true, nil
+	if setList != nil && len(setList.Items) != 0 {
+		m.log.Info("statefulset still running")
+		return false, nil
 	}
-
-	// todo: Check statefulset as well. Issue #83
 
 	services := &corev1.ServiceList{}
-	if err := m.List(ctx, services, client.InNamespace(namespace), m.toInstanceMatchingLabels(namespace)); err != nil {
-		if errors.IsNotFound(err) {
-			m.log.Info("operator is deletable")
-			return true, nil
-		}
-		return false, fmt.Errorf("error while fetching the list of instances operated by the operator: %w", err)
+	if err := m.List(ctx, services, client.InNamespace(namespace), m.toInstanceMatchingLabels(namespace)); client.IgnoreNotFound(err) != nil {
+		return false, fmt.Errorf("error while fetching the list of services operated by the operator: %w", err)
 	}
-	if len(services.Items) == 0 {
-		m.log.Info("operator is deletable")
-		return true, nil
+	if services != nil && len(services.Items) != 0 {
+		m.log.Info("services still running")
+		return false, nil
 	}
 
-	return false, nil
+	m.log.Info("operator deletable")
+	return true, nil
 }
 
 // IsOperatorInstalled returns true when the operator is installed
@@ -210,14 +201,20 @@ func (m *OperatorManager) UninstallOperator(ctx context.Context, namespace strin
 		return fmt.Errorf("error while deleting pod environment configmap: %w", err)
 	}
 
-	// todo: delete namespace
+	// Delete the namespace.
+	nsObj := &corev1.Namespace{}
+	nsObj.Name = namespace
+	if err := m.Delete(ctx, nsObj); err != nil {
+		return fmt.Errorf("error while deleting namespace %v: %w", namespace, err)
+	}
+	m.log.Info("namespace deleted")
 
-	m.log.Info("operator deleted")
+	m.log.Info("operator and related ressources deleted")
 	return nil
 }
 
 // createNewClientObject adds namespace to obj and creates or patches it
-func (m *OperatorManager) createNewClientObject(ctx context.Context, objs []client.Object, obj client.Object, namespace, s3BucketURL string) ([]client.Object, error) {
+func (m *OperatorManager) createNewClientObject(ctx context.Context, objs []client.Object, obj client.Object, namespace string) ([]client.Object, error) {
 	if err := m.ensureCleanMetadata(obj); err != nil {
 		return objs, fmt.Errorf("error while ensuring the metadata of the `client.Object` is clean: %w", err)
 	}
@@ -272,7 +269,7 @@ func (m *OperatorManager) createNewClientObject(ctx context.Context, objs []clie
 		}
 	case *v1.ConfigMap:
 		m.log.Info("handling ConfigMap")
-		m.editConfigMap(v, namespace, s3BucketURL)
+		m.editConfigMap(v, namespace)
 		err = m.Get(ctx, key, &v1.ConfigMap{})
 	case *v1.Service:
 		m.log.Info("handling Service")
@@ -301,9 +298,7 @@ func (m *OperatorManager) createNewClientObject(ctx context.Context, objs []clie
 }
 
 // editConfigMap adds info to cm
-func (m *OperatorManager) editConfigMap(cm *v1.ConfigMap, namespace, s3BucketURL string) {
-	// TODO re-enable
-	// cm.Data["logical_backup_s3_bucket"] = s3BucketURL
+func (m *OperatorManager) editConfigMap(cm *v1.ConfigMap, namespace string) {
 	cm.Data["watched_namespace"] = namespace
 	// TODO don't use the same serviceaccount for operator and databases, see #88
 	cm.Data["pod_service_account_name"] = serviceAccountName

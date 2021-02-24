@@ -77,6 +77,9 @@ type PostgresSpec struct {
 
 	// AccessList defines access restrictions
 	AccessList *AccessList `json:"accessList,omitempty"`
+
+	// BackupSecretRef reference to the secret where the backup credentials are stored
+	BackupSecretRef string `json:"backupSecretRef,omitempty"`
 }
 
 // AccessList defines the type of restrictions to access the database
@@ -359,7 +362,7 @@ func (p *Postgres) generateDatabaseName() string {
 }
 
 func (p *Postgres) ToPeripheralResourceNamespace() string {
-	return p.Spec.ProjectID
+	return p.generateDatabaseName()
 }
 
 // Name of the label referencing the owning Postgres resource in the control cluster

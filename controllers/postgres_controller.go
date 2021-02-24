@@ -93,11 +93,12 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("error while checking if the operator is idle: %w", err)
 		}
-		if deletable {
-			log.Info("operator deletable")
-			if err := r.UninstallOperator(ctx, namespace); err != nil {
-				return ctrl.Result{}, fmt.Errorf("error while uninstalling operator: %w", err)
-			}
+		if !deletable {
+			log.Info("operator not deletable, requeueing")
+			return ctrl.Result{Requeue: true}, nil
+		}
+		if err := r.UninstallOperator(ctx, namespace); err != nil {
+			return ctrl.Result{}, fmt.Errorf("error while uninstalling operator: %w", err)
 		}
 
 		instance.RemoveFinalizer(pg.PostgresFinalizerName)
@@ -218,10 +219,31 @@ func (r *PostgresReconciler) ensureZalandoDependencies(ctx context.Context, p *p
 		return fmt.Errorf("error while querying if zalando dependencies are installed: %w", err)
 	}
 
+	if !isInstalled {
+		_, err := r.InstallOperator(ctx, namespace)
+		if err != nil {
+			return fmt.Errorf("error while installing zalando dependencies: %w", err)
+		}
+	}
+
+	if err := r.createOrUpdateBackupConfig(ctx, p); err != nil {
+		return fmt.Errorf("error while creating backup config: %w", err)
+	}
+
+	return nil
+}
+
+func (r *PostgresReconciler) createOrUpdateBackupConfig(ctx context.Context, p *pg.Postgres) error {
+	log := r.Log.WithValues("postgres", p.UID)
+	if p.Spec.BackupSecretRef == "" {
+		log.Info("No configured backupSecretRef found, skipping configuration of postgres backup")
+		return nil
+	}
+
 	// fetch secret
 	backupSecret := &v1.Secret{}
 	backupNamespace := types.NamespacedName{
-		Name:      p.ToBackupSecretName(),
+		Name:      p.Spec.BackupSecretRef,
 		Namespace: p.Namespace,
 	}
 	if err := r.Client.Get(ctx, backupNamespace, backupSecret); err != nil {
@@ -246,14 +268,7 @@ func (r *PostgresReconciler) ensureZalandoDependencies(ctx context.Context, p *p
 	backupSchedule := string(backupSecret.Data[pg.BackupSecretSchedule])
 	backupNumToRetain := string(backupSecret.Data[pg.BackupSecretRetention])
 
-	if !isInstalled {
-		_, err := r.InstallOperator(ctx, namespace, awsEndpoint+"/"+bucketName) // TODO check the s3BucketUrl...
-		if err != nil {
-			return fmt.Errorf("error while installing zalando dependencies: %w", err)
-		}
-	}
-
-	// create updated content for configmap
+	// create updated content for pod environment configmap
 	data := map[string]string{
 		"USE_WALG_BACKUP":                  "true",
 		"USE_WALG_RESTORE":                 "true",
