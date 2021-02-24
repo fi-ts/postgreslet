@@ -293,7 +293,14 @@ func (m *OperatorManager) createNewClientObject(ctx context.Context, objs []clie
 		err = m.Get(ctx, key, &v1.ConfigMap{})
 	case *v1.Service:
 		m.log.Info("handling Service")
-		err = m.Get(ctx, key, &v1.Service{})
+		got := v1.Service{}
+		err = m.Get(ctx, key, &got)
+		if err != nil {
+			// Copy the ResourceVersion
+			v.ObjectMeta.ResourceVersion = got.ObjectMeta.ResourceVersion
+			// Copy the ClusterIP
+			v.Spec.ClusterIP = got.Spec.ClusterIP
+		}
 	case *appsv1.Deployment:
 		m.log.Info("handling Deployment")
 		err = m.Get(ctx, key, &appsv1.Deployment{})
