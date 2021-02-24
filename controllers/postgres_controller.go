@@ -16,6 +16,7 @@ import (
 	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/client-go/tools/record"
 
 	firewall "github.com/metal-stack/firewall-controller/api/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -46,6 +47,7 @@ type PostgresReconciler struct {
 	PartitionID, Tenant string
 	*operatormanager.OperatorManager
 	*lbmanager.LBManager
+	recorder record.EventRecorder
 }
 
 // Reconcile is the entry point for postgres reconciliation.
@@ -144,11 +146,13 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, fmt.Errorf("unable to create or update corresponding CRD ClusterwideNetworkPolicy: %w", err)
 	}
 
+	r.recorder.Event(instance, "Normal", "Reconciled", "postgres successfully")
 	return ctrl.Result{}, nil
 }
 
 // SetupWithManager informs mgr when this reconciler should be called.
 func (r *PostgresReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	r.recorder = mgr.GetEventRecorderFor("PostgresController")
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&pg.Postgres{}).
 		Complete(r)
