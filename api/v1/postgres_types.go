@@ -153,6 +153,8 @@ type PostgresStatus struct {
 	Description string `json:"description,omitempty"`
 
 	Socket Socket `json:"socket,omitempty"`
+
+	ChildReference string `json:"childReference,omitempty"`
 }
 
 // Socket represents load-balancer socket of Postgres
