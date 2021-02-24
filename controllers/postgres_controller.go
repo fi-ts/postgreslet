@@ -146,7 +146,7 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, fmt.Errorf("unable to create or update corresponding CRD ClusterwideNetworkPolicy: %w", err)
 	}
 
-	// r.recorder.Event(instance, "Normal", "Reconciled", "postgres successfully")
+	r.recorder.Event(instance, "Normal", "Reconciled", "postgres successfully")
 	return ctrl.Result{}, nil
 }
 
