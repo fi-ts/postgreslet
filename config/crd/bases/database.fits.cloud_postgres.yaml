@@ -59,22 +59,10 @@ spec:
                       type: string
                     type: array
                 type: object
-              backup:
-                description: 'todo: add default Backup parametes of the database backup'
-                properties:
-                  retention:
-                    description: Retention defines how many days a backup will persist
-                    format: int32
-                    type: integer
-                  s3BucketURL:
-                    description: S3BucketURL defines the URL of the S3 bucket for
-                      backup
-                    type: string
-                  schedule:
-                    description: Schedule defines how often a backup should be made,
-                      in cron format
-                    type: string
-                type: object
+              backupSecretRef:
+                description: BackupSecretRef reference to the secret where the backup
+                  credentials are stored
+                type: string
               description:
                 description: Description
                 type: string
