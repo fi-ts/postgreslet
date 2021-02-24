@@ -527,7 +527,9 @@ func (m *OperatorManager) UpdateAllOperators(ctx context.Context) error {
 	// update each namespace
 	for _, pod := range pods.Items {
 		m.log.Info("Updating postgres operator installation in namespace %w", pod.Namespace)
-		m.InstallOrUpdateOperator(ctx, pod.Namespace)
+		if _, err := m.InstallOrUpdateOperator(ctx, pod.Namespace); err != nil {
+			return err
+		}
 	}
 
 	m.log.Info("Done updating existing postgres operator installations")

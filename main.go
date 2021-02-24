@@ -163,7 +163,9 @@ func main() {
 	ctx := context.Background()
 
 	// update all existing operators to the current version
-	opMgr.UpdateAllOperators(ctx)
+	if err := opMgr.UpdateAllOperators(ctx); err != nil {
+		setupLog.Error(err, "error updating the postgres operators")
+	}
 
 	setupLog.Info("starting service cluster manager", "version", v.V)
 	go func() {
