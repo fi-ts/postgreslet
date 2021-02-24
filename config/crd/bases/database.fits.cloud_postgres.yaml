@@ -59,22 +59,6 @@ spec:
                       type: string
                     type: array
                 type: object
-              backup:
-                description: 'todo: add default Backup parametes of the database backup'
-                properties:
-                  retention:
-                    description: Retention defines how many days a backup will persist
-                    format: int32
-                    type: integer
-                  s3BucketURL:
-                    description: S3BucketURL defines the URL of the S3 bucket for
-                      backup
-                    type: string
-                  schedule:
-                    description: Schedule defines how often a backup should be made,
-                      in cron format
-                    type: string
-                type: object
               description:
                 description: Description
                 type: string
@@ -141,6 +125,8 @@ spec:
           status:
             description: PostgresStatus defines the observed state of Postgres
             properties:
+              childReference:
+                type: string
               description:
                 description: 'INSERT ADDITIONAL STATUS FIELD - define observed state
                   of cluster Important: Run "make" to regenerate code after modifying
