@@ -88,8 +88,9 @@ func (m *LBManager) nextFreeSocket(ctx context.Context) (string, int32, error) {
 	isOccupied := make([]bool, int(m.PortRangeSize))
 	for i := range lbs.Items {
 		svc := lbs.Items[i]
-		// TODO panic: runtime error: index out of range [-23920]
-		isOccupied[svc.Spec.Ports[0].Port-m.PortRangeStart] = true
+		if len(svc.Spec.Ports) > 0 {
+			isOccupied[svc.Spec.Ports[0].Port-m.PortRangeStart] = true
+		}
 		if svc.Spec.LoadBalancerIP != "" {
 			existingLBIP = svc.Spec.LoadBalancerIP
 		}
