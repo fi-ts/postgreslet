@@ -368,6 +368,8 @@ func (p *Postgres) ToPeripheralResourceNamespace() string {
 
 // Name of the label referencing the owning Postgres resource in the control cluster
 const LabelName string = "postgres.database.fits.cloud/uuid"
+const TenantLabelName string = "postgres.database.fits.cloud/tenant"
+const ProjectIDLabelName string = "postgres.database.fits.cloud/project-id"
 
 func (p *Postgres) ToZalandoPostgres() *ZalandoPostgres {
 	return &ZalandoPostgres{

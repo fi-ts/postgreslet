@@ -11,8 +11,10 @@ import (
 	errs "errors"
 	"fmt"
 	"io/ioutil"
+	"strings"
 	"time"
 
+	pg "github.com/fi-ts/postgreslet/api/v1"
 	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -304,6 +306,10 @@ func (m *OperatorManager) editConfigMap(cm *v1.ConfigMap, namespace string) {
 	cm.Data["pod_service_account_name"] = serviceAccountName
 	// set the reference to our custom pod environment configmap
 	cm.Data["pod_environment_configmap"] = PodEnvCMName
+	// set the list of inherited labels that will be passed on to the pods
+	s := []string{pg.TenantLabelName, pg.ProjectIDLabelName}
+	// TODO maybe use a precompiled string here
+	cm.Data["inherited_labels"] = strings.Join(s, ",")
 	// TODO additional vars
 	// debug_logging: "true"
 	// docker_image: "{{ versions.spiloImage }}"
