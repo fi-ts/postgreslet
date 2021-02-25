@@ -154,7 +154,7 @@ type PostgresStatus struct {
 
 	Socket Socket `json:"socket,omitempty"`
 
-	ChildReference string `json:"childReference,omitempty"`
+	ChildName string `json:"childName,omitempty"`
 }
 
 // Socket represents load-balancer socket of Postgres
@@ -362,11 +362,14 @@ func (p *Postgres) generateDatabaseName() string {
 }
 
 func (p *Postgres) ToPeripheralResourceNamespace() string {
-	return p.generateDatabaseName()
+	// as we have one namespace per database, we simplify things by also using the database name as namespace name
+	return p.ToPeripheralResourceName()
 }
 
 // Name of the label referencing the owning Postgres resource in the control cluster
 const LabelName string = "postgres.database.fits.cloud/uuid"
+const TenantLabelName string = "postgres.database.fits.cloud/tenant"
+const ProjectIDLabelName string = "postgres.database.fits.cloud/project-id"
 
 func (p *Postgres) ToZalandoPostgres() *ZalandoPostgres {
 	return &ZalandoPostgres{
