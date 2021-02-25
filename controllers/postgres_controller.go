@@ -16,6 +16,7 @@ import (
 	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/client-go/tools/record"
 
 	firewall "github.com/metal-stack/firewall-controller/api/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -46,6 +47,7 @@ type PostgresReconciler struct {
 	PartitionID, Tenant string
 	*operatormanager.OperatorManager
 	*lbmanager.LBManager
+	recorder record.EventRecorder
 }
 
 // Reconcile is the entry point for postgres reconciliation.
@@ -59,6 +61,7 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	log.Info("fetchting postgres")
 	instance := &pg.Postgres{}
 	if err := r.Get(ctx, req.NamespacedName, instance); err != nil {
+		r.recorder.Eventf(instance, "Warning", "Error", "failed to get resource: %v", err)
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 	log.Info("postgres fetched", "postgres", instance)
@@ -74,11 +77,13 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		namespace := instance.ToPeripheralResourceNamespace()
 
 		if err := r.deleteCWNP(ctx, instance); client.IgnoreNotFound(err) != nil { // todo: remove ignorenotfound
+			r.recorder.Event(instance, "Warning", "Error", "failed to delete ClusterwideNetworkPolicy")
 			return ctrl.Result{}, err
 		}
 		log.Info("corresponding CRD ClusterwideNetworkPolicy deleted")
 
 		if err := r.DeleteSvcLB(ctx, instance); err != nil {
+			r.recorder.Eventf(instance, "Warning", "Error", "failed to delete Service: %v", err)
 			return ctrl.Result{}, err
 		}
 		log.Info("corresponding Service of type LoadBalancer deleted")
@@ -86,23 +91,28 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		log.Info("deleting owned zalando postgresql")
 
 		if err := r.deleteZPostgresqlByLabels(ctx, matchingLabels, namespace); err != nil {
+			r.recorder.Eventf(instance, "Warning", "Error", "failed to delete Zalando resource: %v", err)
 			return ctrl.Result{}, err
 		}
 
 		deletable, err := r.IsOperatorDeletable(ctx, namespace)
 		if err != nil {
+			r.recorder.Eventf(instance, "Warning", "Error", "failed to check if the operator is idle: %v", err)
 			return ctrl.Result{}, fmt.Errorf("error while checking if the operator is idle: %w", err)
 		}
 		if !deletable {
-			log.Info("operator not deletable, requeueing")
+			r.recorder.Event(instance, "Warning", "Self-Reconcilation", "operator not yet deletable, requeueing")
+			log.Info("operator not yet deletable, requeueing")
 			return ctrl.Result{Requeue: true}, nil
 		}
 		if err := r.UninstallOperator(ctx, namespace); err != nil {
+			r.recorder.Eventf(instance, "Warning", "Error", "failed to uninstall operator: %v", err)
 			return ctrl.Result{}, fmt.Errorf("error while uninstalling operator: %w", err)
 		}
 
 		instance.RemoveFinalizer(pg.PostgresFinalizerName)
 		if err := r.Update(ctx, instance); err != nil {
+			r.recorder.Eventf(instance, "Warning", "Self-Reconcilation", "failed to remove finalizer: %v", err)
 			return requeue, err
 		}
 		return ctrl.Result{}, nil
@@ -113,6 +123,7 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		log.Info("finalizer being added")
 		instance.AddFinalizer(pg.PostgresFinalizerName)
 		if err := r.Update(ctx, instance); err != nil {
+			r.recorder.Eventf(instance, "Warning", "Self-Reconcilation", "failed to add finalizer: %v", err)
 			return requeue, fmt.Errorf("error while adding finalizer: %w", err)
 		}
 		log.Info("finalizer added")
@@ -121,34 +132,41 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 
 	// Check if zalando dependencies are installed. If not, install them.
 	if err := r.ensureZalandoDependencies(ctx, instance); err != nil {
+		r.recorder.Eventf(instance, "Warning", "Error", "failed to install operator: %v", err)
 		return ctrl.Result{}, fmt.Errorf("error while ensuring Zalando dependencies: %w", err)
 	}
 
 	if err := r.createOrUpdateZalandoPostgresql(ctx, instance, log); err != nil {
+		r.recorder.Eventf(instance, "Warning", "Error", "failed to create Zalando resource: %v", err)
 		return ctrl.Result{}, fmt.Errorf("failed to create or update zalando postgresql: %w", err)
 	}
 
 	if err := r.CreateSvcLBIfNone(ctx, instance); err != nil {
+		r.recorder.Eventf(instance, "Warning", "Error", "failed to create Service: %v", err)
 		return ctrl.Result{}, err
 	}
 
 	// Check if socket port is ready
 	port := instance.Status.Socket.Port
 	if port == 0 {
+		r.recorder.Event(instance, "Warning", "Self-Reconcilation", "socket port not ready")
 		log.Info("socket port not ready")
-		return ctrl.Result{Requeue: true}, nil
+		return requeue, nil
 	}
 
 	// Update status will be handled by the StatusReconciler, based on the Zalando Status
 	if err := r.createOrUpdateCWNP(ctx, instance, int(port)); err != nil {
+		r.recorder.Event(instance, "Warning", "Error", "failed to create or update ClusterwideNetworkPolicy")
 		return ctrl.Result{}, fmt.Errorf("unable to create or update corresponding CRD ClusterwideNetworkPolicy: %w", err)
 	}
 
+	r.recorder.Event(instance, "Normal", "Reconciled", "postgres up to date")
 	return ctrl.Result{}, nil
 }
 
 // SetupWithManager informs mgr when this reconciler should be called.
 func (r *PostgresReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	r.recorder = mgr.GetEventRecorderFor("PostgresController")
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&pg.Postgres{}).
 		Complete(r)
