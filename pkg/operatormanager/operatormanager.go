@@ -426,7 +426,9 @@ func (m *OperatorManager) ensureNamespace(ctx context.Context, namespace string,
 		// Create the namespace.
 		nsObj := &corev1.Namespace{}
 		nsObj.Name = namespace
-		nsObj.ObjectMeta.Labels[pg.ManagedByLabelName] = pg.ManagedByLabelValue
+		nsObj.ObjectMeta.Labels = map[string]string{
+			pg.ManagedByLabelName: pg.ManagedByLabelValue,
+		}
 		if err := m.Create(ctx, nsObj); err != nil {
 			return nil, fmt.Errorf("error while creating namespace %v: %w", namespace, err)
 		}
