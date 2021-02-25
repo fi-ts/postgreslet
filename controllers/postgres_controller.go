@@ -242,7 +242,7 @@ func (r *PostgresReconciler) ensureZalandoDependencies(ctx context.Context, p *p
 	}
 
 	if !isInstalled {
-		_, err := r.InstallOperator(ctx, namespace)
+		_, err := r.InstallOrUpdateOperator(ctx, namespace)
 		if err != nil {
 			return fmt.Errorf("error while installing zalando dependencies: %w", err)
 		}

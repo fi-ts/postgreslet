@@ -129,7 +129,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	opMgr, err := operatormanager.New(svcClusterMgr.GetClient(), "external/svc-postgres-operator.yaml", scheme, ctrl.Log.WithName("OperatorManager"), pspName)
+	opMgr, err := operatormanager.New(svcClusterConf, "external/svc-postgres-operator.yaml", scheme, ctrl.Log.WithName("OperatorManager"), pspName)
 	if err != nil {
 		setupLog.Error(err, "unable to create `OperatorManager`")
 		os.Exit(1)
@@ -149,11 +149,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	// if err = (&databasev1.Postgres{}).SetupWebhookWithManager(mgr); err != nil {
-	// 	setupLog.Error(err, "unable to create webhook", "webhook", "Postgres")
-	// 	os.Exit(1)
-	// }
-
 	if err = (&controllers.StatusReconciler{
 		Client:  svcClusterMgr.GetClient(),
 		Control: ctrlPlaneClusterMgr.GetClient(),
@@ -166,6 +161,11 @@ func main() {
 	// +kubebuilder:scaffold:builder
 
 	ctx := context.Background()
+
+	// update all existing operators to the current version
+	if err := opMgr.UpdateAllOperators(ctx); err != nil {
+		setupLog.Error(err, "error updating the postgres operators")
+	}
 
 	setupLog.Info("starting service cluster manager", "version", v.V)
 	go func() {

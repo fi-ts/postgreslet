@@ -99,16 +99,16 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{}, retryErr
 	}
 
-	// todo: not found is not an error
 	lb := &corev1.Service{}
-	if err := r.Client.Get(ctx, *owner.ToSvcLBNamespacedName(), lb); err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to fetch the corresponding Service of type LoadBalancer: %w", err)
-	}
-	owner.Status.Socket.IP = lb.Spec.LoadBalancerIP
-	owner.Status.Socket.Port = lb.Spec.Ports[0].Port
+	if err := r.Client.Get(ctx, *owner.ToSvcLBNamespacedName(), lb); err == nil {
+		owner.Status.Socket.IP = lb.Spec.LoadBalancerIP
+		owner.Status.Socket.Port = lb.Spec.Ports[0].Port
 
-	if err := r.Control.Status().Update(ctx, &owner); err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to update lbSocket of Postgres: %w", err)
+		if err := r.Control.Status().Update(ctx, &owner); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to update lbSocket of Postgres: %w", err)
+		}
+	} else {
+		log.Error(err, "failed to fetch the corresponding Service of type LoadBalancer")
 	}
 
 	// Fetch the list of operator-generated secrets
@@ -155,7 +155,7 @@ func (r *StatusReconciler) createOrUpdateSecret(ctx context.Context, in *pg.Post
 
 // Extract the UID of the owner object by reading the value of a certain label
 func deriveOwnerData(instance *zalando.Postgresql) (types.UID, error) {
-	value, ok := instance.ObjectMeta.Labels[pg.LabelName]
+	value, ok := instance.ObjectMeta.Labels[pg.UIDLabelName]
 	if !ok {
 		return "", fmt.Errorf("Could not derive owner reference")
 	}
