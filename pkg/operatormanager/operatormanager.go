@@ -30,16 +30,19 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// operatorPodMatchingLabels is for listing operator pods
-// TODO also use custom labels from SvcLoadBalancerLabel like 'postgres.database.fits.cloud/managed-by'
-var operatorPodMatchingLabels = client.MatchingLabels{"name": "postgres-operator"}
-
 // The serviceAccount name to use for the database pods.
 // TODO: create new account per namespace
 // TODO: use different account for operator and database
 const serviceAccountName string = "postgres-operator"
 
+// PodEnvCMName Name of the pod environment configmap to create and use
 const PodEnvCMName string = "postgres-pod-config"
+
+const operatorPodLabelName string = "name"
+const operatorPodLabelValue string = "postgres-operator"
+
+// operatorPodMatchingLabels is for listing operator pods
+var operatorPodMatchingLabels = client.MatchingLabels{operatorPodLabelName: operatorPodLabelValue}
 
 // OperatorManager manages the operator
 type OperatorManager struct {
@@ -237,7 +240,10 @@ func (m *OperatorManager) createNewClientObject(ctx context.Context, objs []clie
 		return objs, fmt.Errorf("error while setting the namespace of the `client.Object` to %v: %w", namespace, err)
 	}
 
-	// TODO add custom labels from SvcLoadBalancerLabel like 'postgres.database.fits.cloud/managed-by'
+	// Add our custom label to all resources
+	l := obj.GetLabels()
+	l[pg.ManagedByLabelName] = pg.ManagedByLabelValue
+	obj.SetLabels(l)
 
 	// generate a proper object key for each object
 	key, err := m.toObjectKey(obj, namespace)
@@ -536,12 +542,17 @@ func (m *OperatorManager) waitTillOperatorReady(ctx context.Context, timeout tim
 	return nil
 }
 
+// UpdateAllOperators Updates the manifests of all postgres operators managed by the postgreslet
 func (m *OperatorManager) UpdateAllOperators(ctx context.Context) error {
 	// fetch all operators (running or otherwise)
 	m.log.Info("Fetching all existing postgres operators")
+	matchingLabels := client.MatchingLabels{
+		operatorPodLabelName:  operatorPodLabelValue,
+		pg.ManagedByLabelName: pg.ManagedByLabelValue,
+	}
 	pods := &corev1.PodList{}
 	opts := []client.ListOption{
-		operatorPodMatchingLabels,
+		matchingLabels,
 	}
 	if err := m.List(ctx, pods, opts...); err != nil {
 		return client.IgnoreNotFound(err)

@@ -155,7 +155,7 @@ func (r *StatusReconciler) createOrUpdateSecret(ctx context.Context, in *pg.Post
 
 // Extract the UID of the owner object by reading the value of a certain label
 func deriveOwnerData(instance *zalando.Postgresql) (types.UID, error) {
-	value, ok := instance.ObjectMeta.Labels[pg.LabelName]
+	value, ok := instance.ObjectMeta.Labels[pg.UIDLabelName]
 	if !ok {
 		return "", fmt.Errorf("Could not derive owner reference")
 	}

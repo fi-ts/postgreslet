@@ -35,6 +35,50 @@ import (
 // +kubebuilder:printcolumn:name="Load-Balancer-IP",type=string,JSONPath=`.status.socket.ip`
 // +kubebuilder:printcolumn:name="Load-Balancer-Port",type=integer,JSONPath=`.status.socket.port`
 
+// UIDLabelName Name of the label referencing the owning Postgres resource in the control cluster
+const UIDLabelName string = "postgres.database.fits.cloud/uuid"
+
+// TenantLabelName Name of the tenant label
+const TenantLabelName string = "postgres.database.fits.cloud/tenant"
+
+// ProjectIDLabelName Name of the ProjectID label
+const ProjectIDLabelName string = "postgres.database.fits.cloud/project-id"
+
+// ManagedByLabelName Name of the managed-by label
+const ManagedByLabelName string = "postgres.database.fits.cloud/managed-by"
+
+// ManagedByLabelValue Value of the managed-by label
+const ManagedByLabelValue string = "postgreslet"
+
+// PostgresFinalizerName Name of the finalizer to use
+const PostgresFinalizerName string = "postgres.finalizers.database.fits.cloud"
+
+// Backup configure parametes of the database backup
+const (
+	// S3URL defines the s3 endpoint URL for backup
+	BackupSecretS3Endpoint = "s3Endpoint"
+	// S3BucketName defines the name of the S3 bucket for backup
+	BackupSecretS3BucketName = "s3BucketName"
+	// Retention defines how many days a backup will persist
+	BackupSecretRetention = "retention"
+	// Schedule defines how often a backup should be made, in cron format
+	BackupSecretSchedule   = "schedule"
+	BackupSecretAccessKey  = "accesskey"
+	BackupSecretSecretKey  = "secretkey"
+	BackupSecretProjectKey = "project"
+)
+
+const (
+	Sun Weekday = iota
+	Mon
+	Tue
+	Wed
+	Thu
+	Fri
+	Sat
+	All
+)
+
 // Postgres is the Schema for the postgres API
 type Postgres struct {
 	metav1.TypeMeta   `json:",inline"`
@@ -88,21 +132,6 @@ type AccessList struct {
 	SourceRanges []string `json:"sourceRanges,omitempty"`
 }
 
-// Backup configure parametes of the database backup
-const (
-	// S3URL defines the s3 endpoint URL for backup
-	BackupSecretS3Endpoint = "s3Endpoint"
-	// S3BucketName defines the name of the S3 bucket for backup
-	BackupSecretS3BucketName = "s3BucketName"
-	// Retention defines how many days a backup will persist
-	BackupSecretRetention = "retention"
-	// Schedule defines how often a backup should be made, in cron format
-	BackupSecretSchedule   = "schedule"
-	BackupSecretAccessKey  = "accesskey"
-	BackupSecretSecretKey  = "secretkey"
-	BackupSecretProjectKey = "project"
-)
-
 // Size defines the size aspects of the database
 type Size struct {
 	// CPU is in the format as pod.spec.resource.request.cpu
@@ -120,17 +149,6 @@ type Size struct {
 
 // Weekday defines a weekday or everyday
 type Weekday int
-
-const (
-	Sun Weekday = iota
-	Mon
-	Tue
-	Wed
-	Thu
-	Fri
-	Sat
-	All
-)
 
 // TimeWindow defines an interval in time
 type TimeWindow struct {
@@ -171,6 +189,12 @@ type PostgresList struct {
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []Postgres `json:"items"`
 }
+
+var SvcLoadBalancerLabel = map[string]string{
+	ManagedByLabelName: ManagedByLabelValue,
+}
+
+var alphaNumericRegExp *regexp.Regexp = regexp.MustCompile("[^a-zA-Z0-9]+")
 
 // HasSourceRanges returns true if SourceRanges are set
 func (p *Postgres) HasSourceRanges() bool {
@@ -226,10 +250,6 @@ func (p *Postgres) ToKey() *types.NamespacedName {
 		Namespace: p.Namespace,
 		Name:      p.Name,
 	}
-}
-
-var SvcLoadBalancerLabel = map[string]string{
-	"postgres.database.fits.cloud/managed-by": "postgreslet",
 }
 
 func (p *Postgres) ToSvcLB(lbIP string, lbPort int32) *corev1.Service {
@@ -333,8 +353,6 @@ func (p *Postgres) ToUserPasswordsSecretListOption() []client.ListOption {
 	}
 }
 
-var alphaNumericRegExp *regexp.Regexp = regexp.MustCompile("[^a-zA-Z0-9]+")
-
 func (p *Postgres) generateTeamID() string {
 	// We only want letters and numbers
 	generatedTeamID := alphaNumericRegExp.ReplaceAllString(p.Spec.ProjectID, "")
@@ -366,18 +384,13 @@ func (p *Postgres) ToPeripheralResourceNamespace() string {
 	return p.ToPeripheralResourceName()
 }
 
-// Name of the label referencing the owning Postgres resource in the control cluster
-const LabelName string = "postgres.database.fits.cloud/uuid"
-const TenantLabelName string = "postgres.database.fits.cloud/tenant"
-const ProjectIDLabelName string = "postgres.database.fits.cloud/project-id"
-
 func (p *Postgres) ToZalandoPostgres() *ZalandoPostgres {
 	return &ZalandoPostgres{
 		TypeMeta: ZalandoPostgresTypeMeta,
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      p.ToPeripheralResourceName(),
 			Namespace: p.ToPeripheralResourceNamespace(),
-			Labels:    map[string]string{LabelName: string(p.UID)},
+			Labels:    map[string]string{UIDLabelName: string(p.UID)},
 		},
 		Spec: ZalandoPostgresSpec{
 			MaintenanceWindows: func() []MaintenanceWindow {
@@ -463,10 +476,8 @@ func (p *Postgres) ToPatchedZalandoPostgresql(z *zalando.Postgresql) *zalando.Po
 }
 
 func (p *Postgres) ToZalandoPostgresqlMatchingLabels() client.MatchingLabels {
-	return client.MatchingLabels{LabelName: string(p.UID)}
+	return client.MatchingLabels{UIDLabelName: string(p.UID)}
 }
-
-const PostgresFinalizerName = "postgres.finalizers.database.fits.cloud"
 
 func (p *Postgres) HasFinalizer(finalizerName string) bool {
 	return containsElem(p.ObjectMeta.Finalizers, finalizerName)
