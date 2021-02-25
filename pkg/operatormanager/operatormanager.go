@@ -240,14 +240,6 @@ func (m *OperatorManager) createNewClientObject(ctx context.Context, objs []clie
 		return objs, fmt.Errorf("error while setting the namespace of the `client.Object` to %v: %w", namespace, err)
 	}
 
-	// Add our custom label to all resources
-	l := obj.GetLabels()
-	if l == nil {
-		l = map[string]string{}
-	}
-	l[pg.ManagedByLabelName] = pg.ManagedByLabelValue
-	obj.SetLabels(l)
-
 	// generate a proper object key for each object
 	key, err := m.toObjectKey(obj, namespace)
 	if err != nil {
@@ -434,6 +426,7 @@ func (m *OperatorManager) ensureNamespace(ctx context.Context, namespace string,
 		// Create the namespace.
 		nsObj := &corev1.Namespace{}
 		nsObj.Name = namespace
+		nsObj.ObjectMeta.Labels[pg.ManagedByLabelName] = pg.ManagedByLabelValue
 		if err := m.Create(ctx, nsObj); err != nil {
 			return nil, fmt.Errorf("error while creating namespace %v: %w", namespace, err)
 		}
@@ -548,26 +541,25 @@ func (m *OperatorManager) waitTillOperatorReady(ctx context.Context, timeout tim
 // UpdateAllOperators Updates the manifests of all postgres operators managed by the postgreslet
 func (m *OperatorManager) UpdateAllOperators(ctx context.Context) error {
 	// fetch all operators (running or otherwise)
-	m.log.Info("Fetching all existing postgres operators")
+	m.log.Info("Fetching all managed namespaces")
 	matchingLabels := client.MatchingLabels{
-		operatorPodLabelName:  operatorPodLabelValue,
 		pg.ManagedByLabelName: pg.ManagedByLabelValue,
 	}
-	pods := &corev1.PodList{}
+	nsList := &corev1.NamespaceList{}
 	opts := []client.ListOption{
 		matchingLabels,
 	}
-	if err := m.List(ctx, pods, opts...); err != nil {
+	if err := m.List(ctx, nsList, opts...); err != nil {
 		return client.IgnoreNotFound(err)
 	}
 	// update each namespace
-	for _, pod := range pods.Items {
-		m.log.Info("Updating postgres operator installation", "namespace", pod.Namespace)
-		if _, err := m.InstallOrUpdateOperator(ctx, pod.Namespace); err != nil {
+	for _, ns := range nsList.Items {
+		m.log.Info("Updating postgres operator installation", "namespace", ns.Name)
+		if _, err := m.InstallOrUpdateOperator(ctx, ns.Namespace); err != nil {
 			return err
 		}
 	}
 
-	m.log.Info("Done updating existing postgres operator installations")
+	m.log.Info("Done updating postgres operators in managed namespaces")
 	return nil
 }
