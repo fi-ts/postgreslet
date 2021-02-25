@@ -242,6 +242,9 @@ func (m *OperatorManager) createNewClientObject(ctx context.Context, objs []clie
 
 	// Add our custom label to all resources
 	l := obj.GetLabels()
+	if l == nil {
+		l = map[string]string{}
+	}
 	l[pg.ManagedByLabelName] = pg.ManagedByLabelValue
 	obj.SetLabels(l)
 
