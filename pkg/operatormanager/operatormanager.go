@@ -557,7 +557,7 @@ func (m *OperatorManager) UpdateAllOperators(ctx context.Context) error {
 	// update each namespace
 	for _, ns := range nsList.Items {
 		m.log.Info("Updating postgres operator installation", "namespace", ns.Name)
-		if _, err := m.InstallOrUpdateOperator(ctx, ns.Namespace); err != nil {
+		if _, err := m.InstallOrUpdateOperator(ctx, ns.Name); err != nil {
 			return err
 		}
 	}
