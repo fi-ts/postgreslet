@@ -78,17 +78,17 @@ func (m *LBManager) DeleteSvcLB(ctx context.Context, in *api.Postgres) error {
 func (m *LBManager) nextFreeSocket(ctx context.Context) (string, int32, error) {
 	// TODO prevent concurrency issues when calculating port / ip.
 
-	existingLBIP := ""
+	anyExistingLBIP := ""
 
 	// Fetch all services managed by this postgreslet
 	lbs := &corev1.ServiceList{}
 	if err := m.List(ctx, lbs, client.MatchingLabels(api.SvcLoadBalancerLabel)); err != nil {
-		return existingLBIP, 0, fmt.Errorf("failed to fetch the list of services of type LoadBalancer: %w", err)
+		return anyExistingLBIP, 0, fmt.Errorf("failed to fetch the list of services of type LoadBalancer: %w", err)
 	}
 
 	// If there are none, this will be the first (managed) service we create, so start with PortRangeStart and return
 	if len(lbs.Items) == 0 {
-		return existingLBIP, m.PortRangeStart, nil
+		return anyExistingLBIP, m.PortRangeStart, nil
 	}
 
 	// If there are already any managed services, store all the used ports in a slice.
@@ -102,7 +102,7 @@ func (m *LBManager) nextFreeSocket(ctx context.Context) (string, int32, error) {
 		if svc.Spec.LoadBalancerIP != "" {
 			// Technically, we only store the IP of the last Service in this list.
 			// As there should only be one IP per postgreslet and one postgreslet per cluster, this is good enough.
-			existingLBIP = svc.Spec.LoadBalancerIP
+			anyExistingLBIP = svc.Spec.LoadBalancerIP
 		}
 	}
 
@@ -115,11 +115,11 @@ func (m *LBManager) nextFreeSocket(ctx context.Context) (string, int32, error) {
 			continue
 		}
 		// The postgreslet hasn't assigned this port yet, so use it.
-		return existingLBIP, port, nil
+		return anyExistingLBIP, port, nil
 	}
 
 	// If we made it this far, no free port could be found.
-	return existingLBIP, 0, errors.New("no free port in the configured port range found")
+	return anyExistingLBIP, 0, errors.New("no free port in the configured port range found")
 }
 
 func containsElem(s []int32, v int32) bool {
