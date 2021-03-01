@@ -518,9 +518,9 @@ func (p *Postgres) generateZalandoSidecars() []zalando.Sidecar {
 					Name: "DATA_SOURCE_PASS",
 					ValueFrom: &corev1.EnvVarSource{
 						SecretKeyRef: &corev1.SecretKeySelector{
-							// corev1.LocalObjectReference{
-							// Name: "postgres." + p.ToPeripheralResourceName() + ".credentials",
-							// },
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: "postgres." + p.ToPeripheralResourceName() + ".credentials",
+							},
 							Key: "password",
 						},
 					},
