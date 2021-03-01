@@ -46,6 +46,10 @@ const ManagedByLabelValue string = "postgreslet"
 // PostgresFinalizerName Name of the finalizer to use
 const PostgresFinalizerName string = "postgres.finalizers.database.fits.cloud"
 
+const FluentDCMName string = "postgres-fluentd-configmap"
+
+const PostgresExporterCMName string = "postgres-exporter-configmap"
+
 // Backup configure parametes of the database backup
 const (
 	// S3URL defines the s3 endpoint URL for backup
@@ -406,6 +410,7 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql) (*unst
 	z.Spec.Resources.ResourceLimits.Memory = p.Spec.Size.Memory
 	z.Spec.TeamID = p.generateTeamID()
 	z.Spec.Volume.Size = p.Spec.Size.StorageSize
+	z.Spec.AdditionalVolumes = p.generateAdditionalVolumes()
 	z.Spec.Sidecars = p.generateZalandoSidecars()
 
 	if p.HasSourceRanges() {
@@ -477,13 +482,56 @@ func init() {
 	SchemeBuilder.Register(&Postgres{}, &PostgresList{})
 }
 
+func (p *Postgres) generateAdditionalVolumes() []zalando.AdditionalVolume {
+
+	return []zalando.AdditionalVolume{
+		zalando.AdditionalVolume{
+			Name:      "empty",
+			MountPath: "/opt/empty",
+			TargetContainers: []string{
+				"all",
+			},
+			VolumeSource: corev1.VolumeSource{
+				EmptyDir: &corev1.EmptyDirVolumeSource{},
+			},
+		},
+		zalando.AdditionalVolume{
+			Name:      "postgres-exporter-configmap",
+			MountPath: "/metrics",
+			TargetContainers: []string{
+				"postgres-exporter",
+			},
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: PostgresExporterCMName,
+					},
+				},
+			},
+		},
+		zalando.AdditionalVolume{
+			Name:      "postgres-fluentd-configmap",
+			MountPath: "/etc/fluentd",
+			TargetContainers: []string{
+				"postgres-fluentd",
+			},
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: FluentDCMName,
+					},
+				},
+			},
+		},
+	}
+}
+
 func (p *Postgres) generateZalandoSidecars() []zalando.Sidecar {
 	monitoringSidecarName := "postgres-exporter"
 	monitoringSidecarImage := "wrouesnel/postgres_exporter:latest"
 	var monitoringSidecarContainerPort int32 = 9187
 	loggingSidecarName := "postgres-fluentd"
-	loggingSidecarImage := "wrouesnel/postgres_exporter:latest"
-	var loggingSidecarContainerPort int32 = 9187
+	loggingSidecarImage := "k8s.gcr.io/fluentd-gcp:1.30"
 	return []zalando.Sidecar{
 		{
 			Name:        monitoringSidecarName,
@@ -498,11 +546,11 @@ func (p *Postgres) generateZalandoSidecars() []zalando.Sidecar {
 			Resources: zalando.Resources{
 				ResourceLimits: zalando.ResourceDescription{
 					CPU:    "500m",
-					Memory: "256MiB",
+					Memory: "256M",
 				},
 				ResourceRequests: zalando.ResourceDescription{
 					CPU:    "100m",
-					Memory: "200MiB",
+					Memory: "200M",
 				},
 			},
 			Env: []corev1.EnvVar{
@@ -534,21 +582,14 @@ func (p *Postgres) generateZalandoSidecars() []zalando.Sidecar {
 		{
 			Name:        loggingSidecarName,
 			DockerImage: loggingSidecarImage,
-			Ports: []corev1.ContainerPort{
-				{
-					Name:          "exporter",
-					ContainerPort: loggingSidecarContainerPort,
-					Protocol:      corev1.ProtocolTCP,
-				},
-			},
 			Resources: zalando.Resources{
 				ResourceLimits: zalando.ResourceDescription{
 					CPU:    "500m",
-					Memory: "256MiB",
+					Memory: "256M",
 				},
 				ResourceRequests: zalando.ResourceDescription{
 					CPU:    "100m",
-					Memory: "200MiB",
+					Memory: "200M",
 				},
 			},
 			Env: []corev1.EnvVar{

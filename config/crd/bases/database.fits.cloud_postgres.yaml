@@ -20,15 +20,15 @@ spec:
     - jsonPath: .spec.version
       name: Version
       type: string
+    - jsonPath: .status.socket.ip
+      name: IP
+      type: string
+    - jsonPath: .status.socket.port
+      name: Port
+      type: integer
     - jsonPath: .status.description
       name: Status
       type: string
-    - jsonPath: .status.socket.ip
-      name: Load-Balancer-IP
-      type: string
-    - jsonPath: .status.socket.port
-      name: Load-Balancer-Port
-      type: integer
     name: v1
     schema:
       openAPIV3Schema:
