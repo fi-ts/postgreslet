@@ -406,6 +406,7 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql) (*unst
 	z.Spec.Resources.ResourceLimits.Memory = p.Spec.Size.Memory
 	z.Spec.TeamID = p.generateTeamID()
 	z.Spec.Volume.Size = p.Spec.Size.StorageSize
+	z.Spec.Sidecars = p.generateZalandoSidecars()
 
 	if p.HasSourceRanges() {
 		z.Spec.AllowedSourceRanges = p.Spec.AccessList.SourceRanges
@@ -474,4 +475,88 @@ func removeElem(ss []string, s string) (out []string) {
 
 func init() {
 	SchemeBuilder.Register(&Postgres{}, &PostgresList{})
+}
+
+func (p *Postgres) generateZalandoSidecars() []zalando.Sidecar {
+	monitoringSidecarName := "postgres-exporter"
+	monitoringSidecarImage := "wrouesnel/postgres_exporter:latest"
+	var monitoringSidecarContainerPort int32 = 9187
+	loggingSidecarName := "postgres-fluentd"
+	loggingSidecarImage := "wrouesnel/postgres_exporter:latest"
+	var loggingSidecarContainerPort int32 = 9187
+	return []zalando.Sidecar{
+		{
+			Name:        monitoringSidecarName,
+			DockerImage: monitoringSidecarImage,
+			Ports: []corev1.ContainerPort{
+				{
+					Name:          "exporter",
+					ContainerPort: monitoringSidecarContainerPort,
+					Protocol:      corev1.ProtocolTCP,
+				},
+			},
+			Resources: zalando.Resources{
+				ResourceLimits: zalando.ResourceDescription{
+					CPU:    "500m",
+					Memory: "256MiB",
+				},
+				ResourceRequests: zalando.ResourceDescription{
+					CPU:    "100m",
+					Memory: "200MiB",
+				},
+			},
+			Env: []corev1.EnvVar{
+				{
+					Name:  "DATA_SOURCE_URI",
+					Value: "127.0.0.1:5432/postgres?sslmode=disable",
+				},
+				{
+					Name:  "DATA_SOURCE_USER",
+					Value: "postgres",
+				},
+				{
+					Name: "DATA_SOURCE_PASS",
+					ValueFrom: &corev1.EnvVarSource{
+						SecretKeyRef: &corev1.SecretKeySelector{
+							// corev1.LocalObjectReference{
+							// Name: "postgres." + p.ToPeripheralResourceName() + ".credentials",
+							// },
+							Key: "password",
+						},
+					},
+				},
+				{
+					Name:  "PG_EXPORTER_EXTEND_QUERY_PATH",
+					Value: "/metrics/queries.yaml",
+				},
+			},
+		},
+		{
+			Name:        loggingSidecarName,
+			DockerImage: loggingSidecarImage,
+			Ports: []corev1.ContainerPort{
+				{
+					Name:          "exporter",
+					ContainerPort: loggingSidecarContainerPort,
+					Protocol:      corev1.ProtocolTCP,
+				},
+			},
+			Resources: zalando.Resources{
+				ResourceLimits: zalando.ResourceDescription{
+					CPU:    "500m",
+					Memory: "256MiB",
+				},
+				ResourceRequests: zalando.ResourceDescription{
+					CPU:    "100m",
+					Memory: "200MiB",
+				},
+			},
+			Env: []corev1.EnvVar{
+				{
+					Name:  "FLUENTD_ARGS",
+					Value: "-c /etc/fluentd/fluentd.conf",
+				},
+			},
+		},
+	}
 }
