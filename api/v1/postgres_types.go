@@ -28,56 +28,66 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
+const (
+	// UIDLabelName Name of the label referencing the owning Postgres resource in the control cluster
+	UIDLabelName string = "postgres.database.fits.cloud/uuid"
+	// TenantLabelName Name of the tenant label
+	TenantLabelName string = "postgres.database.fits.cloud/tenant"
+	// ProjectIDLabelName Name of the ProjectID label
+	ProjectIDLabelName string = "postgres.database.fits.cloud/project-id"
+	// ManagedByLabelName Name of the managed-by label
+	ManagedByLabelName string = "postgres.database.fits.cloud/managed-by"
+	// ManagedByLabelValue Value of the managed-by label
+	ManagedByLabelValue string = "postgreslet"
+	// PostgresFinalizerName Name of the finalizer to use
+	PostgresFinalizerName string = "postgres.finalizers.database.fits.cloud"
+	// BackupConfigKey defines the key under which the BackupConfig is stored in the data map.
+	BackupConfigKey = "config"
+
+	// Sun shortcut for Sunday
+	Sun Weekday = iota
+	// Mon Monday
+	Mon
+	// Tue Tuesday
+	Tue
+	// Wed Wednesday
+	Wed
+	// Thu Thusday
+	Thu
+	// Fri Friday
+	Fri
+	// Sat Saturday
+	Sat
+	// All every day
+	All
+)
+
+// BackupConfig defines all properties to configure backup of a database.
+// This config is stored in the data section under the key BackupConfigKey as json payload.
+type BackupConfig struct {
+	// Retention defines how many versions should be held in s3
+	Retention string `json:"retention"`
+	// Schedule in cron syntax when to run the backup periodically
+	Schedule string `json:"schedule"`
+
+	// S3Endpoint the url of the s3 endpoint
+	S3Endpoint string `json:"s3endpoint"`
+	// S3BucketName is the name of the bucket where the backup should be stored.
+	S3BucketName string `json:"s3bucketname"`
+	// S3Region the region of the aws s3
+	S3Region string `json:"s3region"`
+	// S3AccessKey is the accesskey which must have write access
+	S3AccessKey string `json:"s3accesskey"`
+	// S3SecretKey is the secretkey which must match to the accesskey
+	S3SecretKey string `json:"s3secretkey"`
+}
+
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Version",type=string,JSONPath=`.spec.version`
 // +kubebuilder:printcolumn:name="Status",type=string,JSONPath=`.status.description`
 // +kubebuilder:printcolumn:name="Load-Balancer-IP",type=string,JSONPath=`.status.socket.ip`
 // +kubebuilder:printcolumn:name="Load-Balancer-Port",type=integer,JSONPath=`.status.socket.port`
-
-// UIDLabelName Name of the label referencing the owning Postgres resource in the control cluster
-const UIDLabelName string = "postgres.database.fits.cloud/uuid"
-
-// TenantLabelName Name of the tenant label
-const TenantLabelName string = "postgres.database.fits.cloud/tenant"
-
-// ProjectIDLabelName Name of the ProjectID label
-const ProjectIDLabelName string = "postgres.database.fits.cloud/project-id"
-
-// ManagedByLabelName Name of the managed-by label
-const ManagedByLabelName string = "postgres.database.fits.cloud/managed-by"
-
-// ManagedByLabelValue Value of the managed-by label
-const ManagedByLabelValue string = "postgreslet"
-
-// PostgresFinalizerName Name of the finalizer to use
-const PostgresFinalizerName string = "postgres.finalizers.database.fits.cloud"
-
-// Backup configure parametes of the database backup
-const (
-	// S3URL defines the s3 endpoint URL for backup
-	BackupSecretS3Endpoint = "s3Endpoint"
-	// S3BucketName defines the name of the S3 bucket for backup
-	BackupSecretS3BucketName = "s3BucketName"
-	// Retention defines how many days a backup will persist
-	BackupSecretRetention = "retention"
-	// Schedule defines how often a backup should be made, in cron format
-	BackupSecretSchedule   = "schedule"
-	BackupSecretAccessKey  = "accesskey"
-	BackupSecretSecretKey  = "secretkey"
-	BackupSecretProjectKey = "project"
-)
-
-const (
-	Sun Weekday = iota
-	Mon
-	Tue
-	Wed
-	Thu
-	Fri
-	Sat
-	All
-)
 
 // Postgres is the Schema for the postgres API
 type Postgres struct {
@@ -307,7 +317,7 @@ func (p *Postgres) ToPeripheralResourceName() string {
 	return p.generateTeamID() + "-" + p.generateDatabaseName()
 }
 
-// ToUserPasswordSecret returns the secret containing user password pairs
+// ToUserPasswordsSecret returns the secret containing user password pairs
 func (p *Postgres) ToUserPasswordsSecret(src *corev1.SecretList, scheme *runtime.Scheme) (*corev1.Secret, error) {
 	secret := &corev1.Secret{}
 	secret.Namespace = p.Namespace
