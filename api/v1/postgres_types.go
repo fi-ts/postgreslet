@@ -8,7 +8,6 @@ package v1
 
 import (
 	"fmt"
-	"time"
 
 	"regexp"
 
@@ -18,6 +17,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -27,13 +27,6 @@ import (
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
-
-// +kubebuilder:object:root=true
-// +kubebuilder:subresource:status
-// +kubebuilder:printcolumn:name="Version",type=string,JSONPath=`.spec.version`
-// +kubebuilder:printcolumn:name="Status",type=string,JSONPath=`.status.description`
-// +kubebuilder:printcolumn:name="Load-Balancer-IP",type=string,JSONPath=`.status.socket.ip`
-// +kubebuilder:printcolumn:name="Load-Balancer-Port",type=integer,JSONPath=`.status.socket.port`
 
 // UIDLabelName Name of the label referencing the owning Postgres resource in the control cluster
 const UIDLabelName string = "postgres.database.fits.cloud/uuid"
@@ -78,6 +71,18 @@ const (
 	Sat
 	All
 )
+
+var ZalandoPostgresqlTypeMeta = metav1.TypeMeta{
+	APIVersion: "acid.zalan.do/v1",
+	Kind:       "postgresql",
+}
+
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="Version",type=string,JSONPath=`.spec.version`
+// +kubebuilder:printcolumn:name="Status",type=string,JSONPath=`.status.description`
+// +kubebuilder:printcolumn:name="Load-Balancer-IP",type=string,JSONPath=`.status.socket.ip`
+// +kubebuilder:printcolumn:name="Load-Balancer-Port",type=integer,JSONPath=`.status.socket.port`
 
 // Postgres is the Schema for the postgres API
 type Postgres struct {
@@ -384,95 +389,52 @@ func (p *Postgres) ToPeripheralResourceNamespace() string {
 	return p.ToPeripheralResourceName()
 }
 
-func (p *Postgres) ToZalandoPostgres() *ZalandoPostgres {
-	return &ZalandoPostgres{
-		TypeMeta: ZalandoPostgresTypeMeta,
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      p.ToPeripheralResourceName(),
-			Namespace: p.ToPeripheralResourceNamespace(),
-			Labels:    map[string]string{UIDLabelName: string(p.UID)},
-		},
-		Spec: ZalandoPostgresSpec{
-			MaintenanceWindows: func() []MaintenanceWindow {
-				if p.Spec.Maintenance == nil {
-					return nil
-				}
-				isEvery := p.Spec.Maintenance.Weekday == All
-				return []MaintenanceWindow{
-					{Everyday: isEvery,
-						Weekday: func() time.Weekday {
-							if isEvery {
-								return time.Weekday(0)
-							}
-							return time.Weekday(p.Spec.Maintenance.Weekday)
-						}(),
-						StartTime: p.Spec.Maintenance.TimeWindow.Start,
-						EndTime:   p.Spec.Maintenance.TimeWindow.End,
-					},
-				}
-			}(),
-			NumberOfInstances: p.Spec.NumberOfInstances,
-			PostgresqlParam:   PostgresqlParam{PgVersion: p.Spec.Version},
-			Resources: func() *Resources {
-				if p.Spec.Size.CPU == "" {
-					return nil
-				}
-				return &Resources{
-					ResourceRequests: &ResourceDescription{
-						CPU:    p.Spec.Size.CPU,
-						Memory: p.Spec.Size.Memory,
-					},
-					ResourceLimits: &ResourceDescription{
-						CPU:    p.Spec.Size.CPU,
-						Memory: p.Spec.Size.Memory,
-					},
-				}
-			}(),
-			TeamID: p.generateTeamID(),
-			Volume: Volume{Size: p.Spec.Size.StorageSize},
-		},
+func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql) (*unstructured.Unstructured, error) {
+	if z == nil {
+		z = &zalando.Postgresql{}
 	}
-}
+	z.TypeMeta = ZalandoPostgresqlTypeMeta
+	z.Namespace = p.ToPeripheralResourceNamespace()
+	z.Name = p.ToPeripheralResourceName()
+	z.Labels = p.ToZalandoPostgresqlMatchingLabels()
 
-func (p *Postgres) ToPatchedZalandoPostgresql(z *zalando.Postgresql) *zalando.Postgresql {
+	z.Spec.NumberOfInstances = p.Spec.NumberOfInstances
+	z.Spec.PostgresqlParam.PgVersion = p.Spec.Version
+	z.Spec.Resources.ResourceRequests.CPU = p.Spec.Size.CPU
+	z.Spec.Resources.ResourceRequests.Memory = p.Spec.Size.Memory
+	z.Spec.Resources.ResourceLimits.CPU = p.Spec.Size.CPU
+	z.Spec.Resources.ResourceLimits.Memory = p.Spec.Size.Memory
+	z.Spec.TeamID = p.generateTeamID()
+	z.Spec.Volume.Size = p.Spec.Size.StorageSize
+
 	if p.HasSourceRanges() {
 		z.Spec.AllowedSourceRanges = p.Spec.AccessList.SourceRanges
 	}
 
-	z.Spec.NumberOfInstances = p.Spec.NumberOfInstances
+	jsonZ, err := runtime.DefaultUnstructuredConverter.ToUnstructured(z)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert to unstructured zalando postgresql: %w", err)
+	}
+	jsonSpec, _ := jsonZ["spec"].(map[string]interface{})
+	// todo: Fix it in another branch.
+	// jsonSpec["maintenanceWindows"] = p.Spec.Maintenance
+	delete(jsonSpec, "maintenanceWindows")
 
-	// todo: Check if the validation should be performed here.
-	z.Spec.PostgresqlParam.PgVersion = p.Spec.Version
+	// Delete unused fields
+	delete(jsonSpec, "clone")
+	delete(jsonSpec, "patroni")
+	delete(jsonSpec, "podAnnotations")
+	delete(jsonSpec, "serviceAnnotations")
+	delete(jsonSpec, "standby")
+	delete(jsonSpec, "tls")
+	delete(jsonSpec, "users")
 
-	z.Spec.ResourceRequests.CPU = p.Spec.Size.CPU
-	z.Spec.ResourceRequests.Memory = p.Spec.Size.Memory
-	z.Spec.ResourceLimits.CPU = p.Spec.Size.CPU
-	z.Spec.ResourceLimits.Memory = p.Spec.Size.Memory
+	jsonP, _ := jsonSpec["postgresql"].(map[string]interface{})
+	delete(jsonP, "parameters")
 
-	// todo: Check if the validation should be performed here.
-	z.Spec.Volume.Size = p.Spec.Size.StorageSize
-
-	z.Spec.MaintenanceWindows = func() []zalando.MaintenanceWindow {
-		if p.Spec.Maintenance == nil {
-			return nil
-		}
-		isEvery := p.Spec.Maintenance.Weekday == All
-		return []zalando.MaintenanceWindow{
-			{
-				Everyday: isEvery,
-				Weekday: func() time.Weekday {
-					if isEvery {
-						return time.Weekday(0)
-					}
-					return time.Weekday(p.Spec.Maintenance.Weekday)
-				}(),
-				StartTime: p.Spec.Maintenance.TimeWindow.Start,
-				EndTime:   p.Spec.Maintenance.TimeWindow.End,
-			},
-		}
-	}()
-
-	return z
+	return &unstructured.Unstructured{
+		Object: jsonZ,
+	}, nil
 }
 
 func (p *Postgres) ToZalandoPostgresqlMatchingLabels() client.MatchingLabels {

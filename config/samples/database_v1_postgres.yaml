@@ -15,6 +15,8 @@ spec:
   partitionID: sample-partition
   projectID: projectid-a
   size:
+    cpu: 500m
+    memory: 512Mi
     storageSize: 1Gi
   tenant: sample-tenant
   version: "12"
@@ -34,6 +36,8 @@ spec:
   partitionID: sample-partition
   projectID: projectid-b
   size:
+    cpu: 500m
+    memory: 512Mi
     storageSize: 1Gi
   tenant: sample-tenant
   version: "12"
