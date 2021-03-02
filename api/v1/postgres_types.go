@@ -65,6 +65,8 @@ const (
 // BackupConfig defines all properties to configure backup of a database.
 // This config is stored in the data section under the key BackupConfigKey as json payload.
 type BackupConfig struct {
+	// Name is a user defined description
+	Name string `json:"retention"`
 	// Retention defines how many versions should be held in s3
 	Retention string `json:"retention"`
 	// Schedule in cron syntax when to run the backup periodically
