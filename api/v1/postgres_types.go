@@ -444,7 +444,11 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql) (*unst
 }
 
 func (p *Postgres) ToZalandoPostgresqlMatchingLabels() client.MatchingLabels {
-	return client.MatchingLabels{UIDLabelName: string(p.UID)}
+	return client.MatchingLabels{
+		ProjectIDLabelName: p.Spec.PartitionID,
+		TenantLabelName: p.Spec.Tenant,
+		UIDLabelName: string(p.UID),
+	}
 }
 
 func (p *Postgres) HasFinalizer(finalizerName string) bool {
