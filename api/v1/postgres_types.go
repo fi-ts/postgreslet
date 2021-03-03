@@ -47,9 +47,7 @@ const ManagedByLabelValue string = "postgreslet"
 // PostgresFinalizerName Name of the finalizer to use
 const PostgresFinalizerName string = "postgres.finalizers.database.fits.cloud"
 
-const FluentDCMName string = "postgres-fluentd-configmap"
-
-const PostgresExporterCMName string = "postgres-exporter-configmap"
+const SidecarsCMName string = "postgres-sidecars-configmap"
 
 // Backup configure parametes of the database backup
 const (
@@ -495,7 +493,7 @@ func init() {
 func (p *Postgres) generateAdditionalVolumes() []zalando.AdditionalVolume {
 
 	return []zalando.AdditionalVolume{
-		zalando.AdditionalVolume{
+		{
 			Name:      "empty",
 			MountPath: "/opt/empty",
 			TargetContainers: []string{
@@ -505,7 +503,7 @@ func (p *Postgres) generateAdditionalVolumes() []zalando.AdditionalVolume {
 				EmptyDir: &corev1.EmptyDirVolumeSource{},
 			},
 		},
-		zalando.AdditionalVolume{
+		{
 			Name:      "postgres-exporter-configmap",
 			MountPath: "/metrics",
 			TargetContainers: []string{
@@ -514,12 +512,18 @@ func (p *Postgres) generateAdditionalVolumes() []zalando.AdditionalVolume {
 			VolumeSource: corev1.VolumeSource{
 				ConfigMap: &corev1.ConfigMapVolumeSource{
 					LocalObjectReference: corev1.LocalObjectReference{
-						Name: PostgresExporterCMName,
+						Name: SidecarsCMName,
+					},
+					Items: []corev1.KeyToPath{
+						{
+							Key:  "queries.yaml",
+							Path: "queries.yaml",
+						},
 					},
 				},
 			},
 		},
-		zalando.AdditionalVolume{
+		{
 			Name:      "postgres-fluentd-configmap",
 			MountPath: "/etc/fluentd",
 			TargetContainers: []string{
@@ -528,7 +532,13 @@ func (p *Postgres) generateAdditionalVolumes() []zalando.AdditionalVolume {
 			VolumeSource: corev1.VolumeSource{
 				ConfigMap: &corev1.ConfigMapVolumeSource{
 					LocalObjectReference: corev1.LocalObjectReference{
-						Name: FluentDCMName,
+						Name: SidecarsCMName,
+					},
+					Items: []corev1.KeyToPath{
+						{
+							Key:  "fluentd.conf",
+							Path: "fluentd.conf",
+						},
 					},
 				},
 			},
