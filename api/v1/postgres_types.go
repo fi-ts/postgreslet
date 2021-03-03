@@ -406,8 +406,8 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 
 	// skip if the configmap does not exist
 	if c != nil {
-		z.Spec.AdditionalVolumes = p.generateAdditionalVolumes(c)
-		z.Spec.Sidecars = p.generateZalandoSidecars(c)
+		z.Spec.AdditionalVolumes = p.buildAdditionalVolumes(c)
+		z.Spec.Sidecars = p.buildZalandoSidecars(c)
 	}
 
 	if p.HasSourceRanges() {
@@ -495,7 +495,7 @@ func init() {
 	SchemeBuilder.Register(&Postgres{}, &PostgresList{})
 }
 
-func (p *Postgres) generateAdditionalVolumes(c *corev1.ConfigMap) []zalando.AdditionalVolume {
+func (p *Postgres) buildAdditionalVolumes(c *corev1.ConfigMap) []zalando.AdditionalVolume {
 	if c == nil {
 		// abort if the global configmap is not there
 		return nil
@@ -555,7 +555,7 @@ func (p *Postgres) generateAdditionalVolumes(c *corev1.ConfigMap) []zalando.Addi
 	}
 }
 
-func (p *Postgres) generateZalandoSidecars(c *corev1.ConfigMap) []zalando.Sidecar {
+func (p *Postgres) buildZalandoSidecars(c *corev1.ConfigMap) []zalando.Sidecar {
 	if c == nil {
 		// abort if the global configmap is not there
 		return nil
