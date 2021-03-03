@@ -8,6 +8,7 @@ package v1
 
 import (
 	"fmt"
+	"reflect"
 
 	"regexp"
 
@@ -418,7 +419,7 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql) (*unst
 
 	// Delete unused fields
 	deleteIfEmpty(jsonSpec, "clone")
-	deleteIfEmpty(jsonSpec, "patroni")
+	deleteIfEmpty(jsonSpec, "patroni") // if in use, deleteIfEmpty needs to consider the case of struct.
 	deleteIfEmpty(jsonSpec, "podAnnotations")
 	deleteIfEmpty(jsonSpec, "serviceAnnotations")
 	deleteIfEmpty(jsonSpec, "standby")
@@ -473,7 +474,10 @@ func removeElem(ss []string, s string) (out []string) {
 }
 
 func deleteIfEmpty(json map[string]interface{}, key string) {
-	if json[key] == nil {
+	i := json[key]
+
+	// interface has type and value. The chained function calls deal with nil value with type.
+	if i == nil || reflect.ValueOf(json[key]).IsNil() {
 		delete(json, key)
 	}
 }
