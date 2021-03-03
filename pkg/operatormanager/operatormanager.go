@@ -455,6 +455,7 @@ func (m *OperatorManager) ensurePodEnvironmentConfigMap(ctx context.Context, nam
 	}
 	if err := m.Get(ctx, ns, &v1.ConfigMap{}); err == nil {
 		// configmap already exists, nothing to do here
+		// we will update the configmap with the correct S3 config in the postgres controller
 		m.log.Info("Pod Environment ConfigMap already exists")
 		return objs, nil
 	}
@@ -476,17 +477,6 @@ func (m *OperatorManager) ensurePodEnvironmentConfigMap(ctx context.Context, nam
 }
 
 func (m *OperatorManager) ensureSidecarsConfigMap(ctx context.Context, namespace string, objs []client.Object) ([]client.Object, error) {
-	// try to fetch the local sidecars configmap
-	ns := types.NamespacedName{
-		Namespace: namespace,
-		Name:      pg.SidecarsCMName,
-	}
-	if err := m.Get(ctx, ns, &v1.ConfigMap{}); err == nil {
-		// TODO implement update
-		// configmap already exists, nothing to do here
-		m.log.Info("Sidecars ConfigMap already exists")
-		return objs, nil
-	}
 
 	// try to fetch the global sidecars configmap
 	cns := types.NamespacedName{
@@ -509,19 +499,36 @@ func (m *OperatorManager) ensureSidecarsConfigMap(ctx context.Context, namespace
 		return objs, fmt.Errorf("error while setting the namespace of the new Sidecars ConfigMap to %v: %w", namespace, err)
 	}
 
+	// initialize map
 	sccm.Data = make(map[string]string)
-	// TODO decode base64
 
+	// decode and write the fluentd.conf key from the global configmap to the local configmap
 	b, err := base64.StdEncoding.DecodeString(c.Data["fluentd.conf"])
 	if err == nil {
 		sccm.Data["fluentd.conf"] = string(b)
 	}
 
+	// decode and write the queries.yaml key from the global configmap to the local configmap
 	b, err = base64.StdEncoding.DecodeString(c.Data["queries.yaml"])
 	if err == nil {
 		sccm.Data["queries.yaml"] = string(b)
 	}
 
+	// try to fetch any existing local sidecars configmap
+	ns := types.NamespacedName{
+		Namespace: namespace,
+		Name:      pg.SidecarsCMName,
+	}
+	if err := m.Get(ctx, ns, &v1.ConfigMap{}); err == nil {
+		// local configmap aleady exists, updating it
+		if err := m.Update(ctx, sccm); err != nil {
+			return objs, fmt.Errorf("error while updating the new Sidecars ConfigMap: %w", err)
+		}
+		m.log.Info("Sidecars ConfigMap updated")
+		return objs, nil
+	}
+
+	// local configmap does not exist, creating it
 	if err := m.Create(ctx, sccm); err != nil {
 		return objs, fmt.Errorf("error while creating the new Sidecars ConfigMap: %w", err)
 	}

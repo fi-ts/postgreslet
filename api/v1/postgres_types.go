@@ -9,6 +9,7 @@ package v1
 import (
 	"fmt"
 	"reflect"
+	"strconv"
 
 	"regexp"
 
@@ -385,7 +386,7 @@ func (p *Postgres) ToPeripheralResourceNamespace() string {
 	return p.ToPeripheralResourceName()
 }
 
-func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql) (*unstructured.Unstructured, error) {
+func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *corev1.ConfigMap) (*unstructured.Unstructured, error) {
 	if z == nil {
 		z = &zalando.Postgresql{}
 	}
@@ -402,8 +403,12 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql) (*unst
 	z.Spec.Resources.ResourceLimits.Memory = p.Spec.Size.Memory
 	z.Spec.TeamID = p.generateTeamID()
 	z.Spec.Volume.Size = p.Spec.Size.StorageSize
-	z.Spec.AdditionalVolumes = p.generateAdditionalVolumes()
-	z.Spec.Sidecars = p.generateZalandoSidecars()
+
+	// skip if the configmap does not exist
+	if c != nil {
+		z.Spec.AdditionalVolumes = p.generateAdditionalVolumes(c)
+		z.Spec.Sidecars = p.generateZalandoSidecars(c)
+	}
 
 	if p.HasSourceRanges() {
 		z.Spec.AllowedSourceRanges = p.Spec.AccessList.SourceRanges
@@ -490,7 +495,11 @@ func init() {
 	SchemeBuilder.Register(&Postgres{}, &PostgresList{})
 }
 
-func (p *Postgres) generateAdditionalVolumes() []zalando.AdditionalVolume {
+func (p *Postgres) generateAdditionalVolumes(c *corev1.ConfigMap) []zalando.AdditionalVolume {
+	if c == nil {
+		// abort if the global configmap is not there
+		return nil
+	}
 
 	return []zalando.AdditionalVolume{
 		{
@@ -546,31 +555,38 @@ func (p *Postgres) generateAdditionalVolumes() []zalando.AdditionalVolume {
 	}
 }
 
-func (p *Postgres) generateZalandoSidecars() []zalando.Sidecar {
-	monitoringSidecarName := "postgres-exporter"
-	monitoringSidecarImage := "wrouesnel/postgres_exporter:latest"
-	var monitoringSidecarContainerPort int32 = 9187
-	loggingSidecarName := "postgres-fluentd"
-	loggingSidecarImage := "k8s.gcr.io/fluentd-gcp:1.30"
+func (p *Postgres) generateZalandoSidecars(c *corev1.ConfigMap) []zalando.Sidecar {
+	if c == nil {
+		// abort if the global configmap is not there
+		return nil
+	}
+
+	postgresExporterName := "postgres-exporter"
+	postgresExporterPort, error := strconv.ParseInt(c.Data["postgres-exporter-container-port"], 10, 32)
+	if error != nil {
+		// todo log error
+		postgresExporterPort = 9187
+	}
+	FluentDName := "postgres-fluentd"
 	return []zalando.Sidecar{
 		{
-			Name:        monitoringSidecarName,
-			DockerImage: monitoringSidecarImage,
+			Name:        postgresExporterName,
+			DockerImage: c.Data["postgres-exporter-image"],
 			Ports: []corev1.ContainerPort{
 				{
 					Name:          "exporter",
-					ContainerPort: monitoringSidecarContainerPort,
+					ContainerPort: int32(postgresExporterPort),
 					Protocol:      corev1.ProtocolTCP,
 				},
 			},
 			Resources: zalando.Resources{
 				ResourceLimits: zalando.ResourceDescription{
-					CPU:    "500m",
-					Memory: "256M",
+					CPU:    c.Data["postgres-exporter-limits-cpu"],
+					Memory: c.Data["postgres-exporter-limits-memory"],
 				},
 				ResourceRequests: zalando.ResourceDescription{
-					CPU:    "100m",
-					Memory: "200M",
+					CPU:    c.Data["postgres-exporter-requests-cpu"],
+					Memory: c.Data["postgres-exporter-requests-memory"],
 				},
 			},
 			Env: []corev1.EnvVar{
@@ -600,16 +616,16 @@ func (p *Postgres) generateZalandoSidecars() []zalando.Sidecar {
 			},
 		},
 		{
-			Name:        loggingSidecarName,
-			DockerImage: loggingSidecarImage,
+			Name:        FluentDName,
+			DockerImage: c.Data["postgres-fluentd-image"],
 			Resources: zalando.Resources{
 				ResourceLimits: zalando.ResourceDescription{
-					CPU:    "500m",
-					Memory: "256M",
+					CPU:    c.Data["postgres-fluentd-limits-cpu"],
+					Memory: c.Data["postgres-fluentd-limits-memory"],
 				},
 				ResourceRequests: zalando.ResourceDescription{
-					CPU:    "100m",
-					Memory: "200M",
+					CPU:    c.Data["postgres-fluentd-requests-cpu"],
+					Memory: c.Data["postgres-fluentd-requests-memory"],
 				},
 			},
 			Env: []corev1.EnvVar{
