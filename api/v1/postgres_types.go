@@ -65,6 +65,8 @@ const (
 // BackupConfig defines all properties to configure backup of a database.
 // This config is stored in the data section under the key BackupConfigKey as json payload.
 type BackupConfig struct {
+	// ID of this backupConfig
+	ID string `json:"id"`
 	// Name is a user defined description
 	Name string `json:"name"`
 	// ProjectID the project this backup is mapped to
