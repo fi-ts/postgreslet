@@ -66,7 +66,11 @@ const (
 // This config is stored in the data section under the key BackupConfigKey as json payload.
 type BackupConfig struct {
 	// Name is a user defined description
-	Name string `json:"retention"`
+	Name string `json:"name"`
+	// ProjectID the project this backup is mapped to
+	ProjectID string `json:"project"`
+	// Tenant the tenant of the backup
+	Tenant string `json:"tenant"`
 	// Retention defines how many versions should be held in s3
 	Retention string `json:"retention"`
 	// Schedule in cron syntax when to run the backup periodically
