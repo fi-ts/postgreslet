@@ -126,7 +126,7 @@ type PostgresSpec struct {
 
 	// todo: add default
 	// Maintenance defines automatic maintenance of the database
-	Maintenance *Maintenance `json:"maintenance,omitempty"`
+	Maintenance []string `json:"maintenance,omitempty"`
 
 	// AccessList defines access restrictions
 	AccessList *AccessList `json:"accessList,omitempty"`
@@ -141,6 +141,7 @@ type AccessList struct {
 	SourceRanges []string `json:"sourceRanges,omitempty"`
 }
 
+// Todo: Add defaults
 // Size defines the size aspects of the database
 type Size struct {
 	// CPU is in the format as pod.spec.resource.request.cpu
@@ -163,14 +164,6 @@ type Weekday int
 type TimeWindow struct {
 	Start metav1.Time `json:"start,omitempty"`
 	End   metav1.Time `json:"end,omitempty"`
-}
-
-// Maintenance configures database maintenance
-type Maintenance struct {
-	// Weekday defines when the operator is allowed to do maintenance
-	Weekday Weekday `json:"weekday,omitempty"`
-	// TimeWindow defines when the maintenance should happen
-	TimeWindow TimeWindow `json:"timeWindow,omitempty"`
 }
 
 // PostgresStatus defines the observed state of Postgres
@@ -422,21 +415,24 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql) (*unst
 		return nil, fmt.Errorf("failed to convert to unstructured zalando postgresql: %w", err)
 	}
 	jsonSpec, _ := jsonZ["spec"].(map[string]interface{})
-	// todo: Fix it in another branch.
-	// jsonSpec["maintenanceWindows"] = p.Spec.Maintenance
-	delete(jsonSpec, "maintenanceWindows")
+
+	// In the code, zalando's `MaintenanceWindows` is a `struct`, but in the CRD
+	// it's an array of strings, so we can only set its `Unstructured` contents
+	// and deal with possible `nil`.
+	jsonSpec["maintenanceWindows"] = p.Spec.Maintenance
+	deleteIfEmpty(jsonSpec, "maintenanceWindows")
 
 	// Delete unused fields
-	delete(jsonSpec, "clone")
-	delete(jsonSpec, "patroni")
-	delete(jsonSpec, "podAnnotations")
-	delete(jsonSpec, "serviceAnnotations")
-	delete(jsonSpec, "standby")
-	delete(jsonSpec, "tls")
-	delete(jsonSpec, "users")
+	deleteIfEmpty(jsonSpec, "clone")
+	deleteIfEmpty(jsonSpec, "patroni")
+	deleteIfEmpty(jsonSpec, "podAnnotations")
+	deleteIfEmpty(jsonSpec, "serviceAnnotations")
+	deleteIfEmpty(jsonSpec, "standby")
+	deleteIfEmpty(jsonSpec, "tls")
+	deleteIfEmpty(jsonSpec, "users")
 
 	jsonP, _ := jsonSpec["postgresql"].(map[string]interface{})
-	delete(jsonP, "parameters")
+	deleteIfEmpty(jsonP, "parameters")
 
 	return &unstructured.Unstructured{
 		Object: jsonZ,
@@ -446,8 +442,8 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql) (*unst
 func (p *Postgres) ToZalandoPostgresqlMatchingLabels() client.MatchingLabels {
 	return client.MatchingLabels{
 		ProjectIDLabelName: p.Spec.PartitionID,
-		TenantLabelName: p.Spec.Tenant,
-		UIDLabelName: string(p.UID),
+		TenantLabelName:    p.Spec.Tenant,
+		UIDLabelName:       string(p.UID),
 	}
 }
 
@@ -480,6 +476,12 @@ func removeElem(ss []string, s string) (out []string) {
 		out = append(out, elem)
 	}
 	return
+}
+
+func deleteIfEmpty(json map[string]interface{}, key string) {
+	if json[key] == nil {
+		delete(json, key)
+	}
 }
 
 func init() {

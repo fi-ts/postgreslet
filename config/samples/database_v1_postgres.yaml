@@ -11,6 +11,8 @@ metadata:
 spec:
   backup:
     s3BucketURL: ""
+  maintenance:
+    - "Sun:21:00-22:00"
   numberOfInstances: 2
   partitionID: sample-partition
   projectID: projectid-a
@@ -32,6 +34,8 @@ spec:
     - 1.2.3.4/24
   backup:
     s3BucketURL: ""
+  maintenance:
+    - "Sun:20:00-21:00"
   numberOfInstances: 2
   partitionID: sample-partition
   projectID: projectid-b

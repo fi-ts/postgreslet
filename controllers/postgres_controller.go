@@ -346,7 +346,7 @@ func (r *PostgresReconciler) createOrUpdateCWNP(ctx context.Context, in *pg.Post
 	if _, err := controllerutil.CreateOrUpdate(ctx, r.Service, key, func() error {
 		key.Spec.Ingress = policy.Spec.Ingress
 		return nil
-	}); err != nil && !errors.IsAlreadyExists(err) {
+	}); err != nil {
 		return fmt.Errorf("unable to deploy CRD ClusterwideNetworkPolicy: %w", err)
 	}
 
