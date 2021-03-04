@@ -41,6 +41,10 @@ const (
 	ManagedByLabelValue string = "postgreslet"
 	// PostgresFinalizerName Name of the finalizer to use
 	PostgresFinalizerName string = "postgres.finalizers.database.fits.cloud"
+	// CreatedByAnnotationKey is used to store who in person created this database
+	CreatedByAnnotationKey string = "postgres.database.fits.cloud/created-by"
+	// BackupConfigLabelName if set to true, this secret stores the backupConfig
+	BackupConfigLabelName string = "postgres.database.fits.cloud/is-backup"
 	// BackupConfigKey defines the key under which the BackupConfig is stored in the data map.
 	BackupConfigKey = "config"
 
