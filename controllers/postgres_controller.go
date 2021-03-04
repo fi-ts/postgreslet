@@ -73,6 +73,13 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 
 	// Delete
 	if instance.IsBeingDeleted() {
+		instance.Status.Description = "Terminating"
+		if err := r.Status().Update(ctx, instance); err != nil {
+			log.Error(err, "failed to update owner object")
+			return ctrl.Result{}, err
+		}
+		log.Info("instance being deleted")
+
 		matchingLabels := instance.ToZalandoPostgresqlMatchingLabels()
 		namespace := instance.ToPeripheralResourceNamespace()
 
@@ -88,12 +95,11 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		}
 		log.Info("corresponding Service of type LoadBalancer deleted")
 
-		log.Info("deleting owned zalando postgresql")
-
 		if err := r.deleteZPostgresqlByLabels(ctx, matchingLabels, namespace); err != nil {
 			r.recorder.Eventf(instance, "Warning", "Error", "failed to delete Zalando resource: %v", err)
 			return ctrl.Result{}, err
 		}
+		log.Info("owned zalando postgresql deleted")
 
 		deletable, err := r.IsOperatorDeletable(ctx, namespace)
 		if err != nil {
