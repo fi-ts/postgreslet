@@ -42,8 +42,12 @@ const (
 	// ManagedByLabelValue Value of the managed-by label
 	ManagedByLabelValue string = "postgreslet"
 	// PostgresFinalizerName Name of the finalizer to use
-	PostgresFinalizerName string = "postgres.finalizers.database.fits.cloud"
-	SidecarsCMName        string = "postgres-sidecars-configmap"
+	PostgresFinalizerName        string = "postgres.finalizers.database.fits.cloud"
+	SidecarsCMName               string = "postgres-sidecars-configmap"
+	SidecarsCMFluentBitConfKey   string = "fluent-bit.conf"
+	FluentBitSidecarName         string = "postgres-fluentbit"
+	SidecarsCMExporterQueriesKey string = "queries.yaml"
+	ExporterSidecarName          string = "postgres-exporter"
 	// CreatedByAnnotationKey is used to store who in person created this database
 	CreatedByAnnotationKey string = "postgres.database.fits.cloud/created-by"
 	// BackupConfigLabelName if set to true, this secret stores the backupConfig
@@ -511,7 +515,7 @@ func (p *Postgres) buildAdditionalVolumes(c *corev1.ConfigMap) []zalando.Additio
 			Name:      "postgres-exporter-configmap",
 			MountPath: "/metrics",
 			TargetContainers: []string{
-				"postgres-exporter",
+				ExporterSidecarName,
 			},
 			VolumeSource: corev1.VolumeSource{
 				ConfigMap: &corev1.ConfigMapVolumeSource{
@@ -520,7 +524,7 @@ func (p *Postgres) buildAdditionalVolumes(c *corev1.ConfigMap) []zalando.Additio
 					},
 					Items: []corev1.KeyToPath{
 						{
-							Key:  "queries.yaml",
+							Key:  SidecarsCMExporterQueriesKey,
 							Path: "queries.yaml",
 						},
 					},
@@ -528,10 +532,10 @@ func (p *Postgres) buildAdditionalVolumes(c *corev1.ConfigMap) []zalando.Additio
 			},
 		},
 		{
-			Name:      "postgres-fluentd-configmap",
-			MountPath: "/etc/fluentd",
+			Name:      "postgres-fluentbit-configmap",
+			MountPath: "/fluent-bit/etc",
 			TargetContainers: []string{
-				"postgres-fluentd",
+				FluentBitSidecarName,
 			},
 			VolumeSource: corev1.VolumeSource{
 				ConfigMap: &corev1.ConfigMapVolumeSource{
@@ -540,8 +544,8 @@ func (p *Postgres) buildAdditionalVolumes(c *corev1.ConfigMap) []zalando.Additio
 					},
 					Items: []corev1.KeyToPath{
 						{
-							Key:  "fluentd.conf",
-							Path: "fluentd.conf",
+							Key:  SidecarsCMFluentBitConfKey,
+							Path: "fluent-bit.conf",
 						},
 					},
 				},
@@ -556,16 +560,14 @@ func (p *Postgres) buildZalandoSidecars(c *corev1.ConfigMap) []zalando.Sidecar {
 		return nil
 	}
 
-	postgresExporterName := "postgres-exporter"
 	postgresExporterPort, error := strconv.ParseInt(c.Data["postgres-exporter-container-port"], 10, 32)
 	if error != nil {
 		// todo log error
 		postgresExporterPort = 9187
 	}
-	FluentDName := "postgres-fluentd"
 	return []zalando.Sidecar{
 		{
-			Name:        postgresExporterName,
+			Name:        ExporterSidecarName,
 			DockerImage: c.Data["postgres-exporter-image"],
 			Ports: []corev1.ContainerPort{
 				{
@@ -611,22 +613,16 @@ func (p *Postgres) buildZalandoSidecars(c *corev1.ConfigMap) []zalando.Sidecar {
 			},
 		},
 		{
-			Name:        FluentDName,
-			DockerImage: c.Data["postgres-fluentd-image"],
+			Name:        FluentBitSidecarName,
+			DockerImage: c.Data["postgres-fluentbit-image"],
 			Resources: zalando.Resources{
 				ResourceLimits: zalando.ResourceDescription{
-					CPU:    c.Data["postgres-fluentd-limits-cpu"],
-					Memory: c.Data["postgres-fluentd-limits-memory"],
+					CPU:    c.Data["postgres-fluentbit-limits-cpu"],
+					Memory: c.Data["postgres-fluentbit-limits-memory"],
 				},
 				ResourceRequests: zalando.ResourceDescription{
-					CPU:    c.Data["postgres-fluentd-requests-cpu"],
-					Memory: c.Data["postgres-fluentd-requests-memory"],
-				},
-			},
-			Env: []corev1.EnvVar{
-				{
-					Name:  "FLUENTD_ARGS",
-					Value: "-c /etc/fluentd/fluentd.conf",
+					CPU:    c.Data["postgres-fluentbit-requests-cpu"],
+					Memory: c.Data["postgres-fluentbit-requests-memory"],
 				},
 			},
 		},

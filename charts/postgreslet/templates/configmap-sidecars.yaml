@@ -6,13 +6,13 @@ data:
   postgres-exporter-requests-memory: {{ .Values.sidecars.exporter.resources.requests.memory | quote }}
   postgres-exporter-limits-cpu: {{ .Values.sidecars.exporter.resources.limits.cpu | quote }}
   postgres-exporter-limits-memory: {{ .Values.sidecars.exporter.resources.limits.memory | quote }}
-  postgres-fluentd-image: {{ .Values.sidecars.fluentd.image | quote }}
-  postgres-fluentd-requests-cpu: {{ .Values.sidecars.fluentd.resources.requests.cpu | quote }}
-  postgres-fluentd-requests-memory: {{ .Values.sidecars.fluentd.resources.requests.memory | quote }}
-  postgres-fluentd-limits-cpu: {{ .Values.sidecars.fluentd.resources.limits.cpu | quote }}
-  postgres-fluentd-limits-memory: {{ .Values.sidecars.fluentd.resources.limits.memory | quote }}
+  postgres-fluentbit-image: {{ .Values.sidecars.fluentbit.image | quote }}
+  postgres-fluentbit-requests-cpu: {{ .Values.sidecars.fluentbit.resources.requests.cpu | quote }}
+  postgres-fluentbit-requests-memory: {{ .Values.sidecars.fluentbit.resources.requests.memory | quote }}
+  postgres-fluentbit-limits-cpu: {{ .Values.sidecars.fluentbit.resources.limits.cpu | quote }}
+  postgres-fluentbit-limits-memory: {{ .Values.sidecars.fluentbit.resources.limits.memory | quote }}
   queries.yaml: {{ b64enc .Values.sidecars.exporter.queries }}
-  fluentd.conf: {{ b64enc .Values.sidecars.fluentd.conf }}
+  fluent-bit.conf: {{ b64enc .Values.sidecars.fluentbit.conf }}
   
 kind: ConfigMap
 metadata:

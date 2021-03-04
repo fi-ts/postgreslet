@@ -503,15 +503,16 @@ func (m *OperatorManager) ensureSidecarsConfigMap(ctx context.Context, namespace
 	sccm.Data = make(map[string]string)
 
 	// decode and write the fluentd.conf key from the global configmap to the local configmap
-	b, err := base64.StdEncoding.DecodeString(c.Data["fluentd.conf"])
+	b, err := base64.StdEncoding.DecodeString(c.Data["fluent-bit.conf"])
 	if err == nil {
-		sccm.Data["fluentd.conf"] = string(b)
+
+		sccm.Data[pg.SidecarsCMFluentBitConfKey] = string(b)
 	}
 
 	// decode and write the queries.yaml key from the global configmap to the local configmap
 	b, err = base64.StdEncoding.DecodeString(c.Data["queries.yaml"])
 	if err == nil {
-		sccm.Data["queries.yaml"] = string(b)
+		sccm.Data[pg.SidecarsCMExporterQueriesKey] = string(b)
 	}
 
 	// try to fetch any existing local sidecars configmap

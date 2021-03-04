@@ -82,8 +82,8 @@ postgreslet:
 addRandomLabel: false
 
 sidecars:
-  fluentd:
-    image: "k8s.gcr.io/fluentd-gcp:1.30"
+  fluentbit:
+    image: "fluent/fluent-bit:1.7.2"
     resources:
       requests:
         cpu: "100m"
@@ -92,27 +92,25 @@ sidecars:
         cpu: "500m"
         memory: "256M"
     conf: |
-      <source>
-        type tail
-        path /home/postgres/pgdata/pgroot/pg_log/*.csv
-        pos_file /home/postgres/pgdata/pgroot/pg_log/postgresql.csv.pos
-        tag psqlcsv
-        format none
-      </source>
-
-      <source>
-        type tail
-        path /home/postgres/pgdata/pgroot/pg_log/*.log
-        pos_file /home/postgres/pgdata/pgroot/pg_log/postgresql.log.pos
-        tag psqllog
-        format none
-      </source>
-
-      <match **>
-        @type stdout
-      </match>
+        [SERVICE]
+            Daemon          off
+            Log_Level       warn
+        [INPUT]
+            Name tail
+            Path /home/postgres/pgdata/pgroot/pg_log/*.csv
+            #DB /home/postgres/pgdata/pgroot/pg_log/postgresql.csv.pos
+            Tag  psqlcsv
+        [INPUT]
+            Name tail
+            Path /home/postgres/pgdata/pgroot/pg_log/*.log
+            #DB /home/postgres/pgdata/pgroot/pg_log/postgresql.log.pos
+            Tag  psqllog
+        [OUTPUT]
+            Name  stdout
+            Match **
 
   exporter:
+    # image: "prometheuscommunity/postgres-exporter:v0.9.0"
     image: "wrouesnel/postgres_exporter:latest"
     containerPort: 9187
     resources:

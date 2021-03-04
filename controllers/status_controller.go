@@ -108,7 +108,7 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 			return ctrl.Result{}, fmt.Errorf("failed to update lbSocket of Postgres: %w", err)
 		}
 	} else {
-		log.Error(err, "failed to fetch the corresponding Service of type LoadBalancer")
+		log.Info("unable to fetch the corresponding Service of type LoadBalancer")
 	}
 
 	// Fetch the list of operator-generated secrets
