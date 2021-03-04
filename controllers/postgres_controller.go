@@ -72,8 +72,8 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 
 	// Delete
 	if instance.IsBeingDeleted() {
-		instance.Status.Description = "being deleted"
-		if err := r.Service.Status().Update(ctx, instance); err != nil {
+		instance.Status.Description = "Terminating"
+		if err := r.Status().Update(ctx, instance); err != nil {
 			log.Error(err, "failed to update owner object")
 			return ctrl.Result{}, err
 		}
