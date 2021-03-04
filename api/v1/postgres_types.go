@@ -8,7 +8,7 @@ package v1
 
 import (
 	"fmt"
-	"time"
+	"reflect"
 
 	"regexp"
 
@@ -18,6 +18,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -94,6 +95,11 @@ type BackupConfig struct {
 	S3SecretKey string `json:"s3secretkey"`
 }
 
+var ZalandoPostgresqlTypeMeta = metav1.TypeMeta{
+	APIVersion: "acid.zalan.do/v1",
+	Kind:       "postgresql",
+}
+
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Version",type=string,JSONPath=`.spec.version`
@@ -139,7 +145,7 @@ type PostgresSpec struct {
 
 	// todo: add default
 	// Maintenance defines automatic maintenance of the database
-	Maintenance *Maintenance `json:"maintenance,omitempty"`
+	Maintenance []string `json:"maintenance,omitempty"`
 
 	// AccessList defines access restrictions
 	AccessList *AccessList `json:"accessList,omitempty"`
@@ -154,6 +160,7 @@ type AccessList struct {
 	SourceRanges []string `json:"sourceRanges,omitempty"`
 }
 
+// Todo: Add defaults
 // Size defines the size aspects of the database
 type Size struct {
 	// CPU is in the format as pod.spec.resource.request.cpu
@@ -176,14 +183,6 @@ type Weekday int
 type TimeWindow struct {
 	Start metav1.Time `json:"start,omitempty"`
 	End   metav1.Time `json:"end,omitempty"`
-}
-
-// Maintenance configures database maintenance
-type Maintenance struct {
-	// Weekday defines when the operator is allowed to do maintenance
-	Weekday Weekday `json:"weekday,omitempty"`
-	// TimeWindow defines when the maintenance should happen
-	TimeWindow TimeWindow `json:"timeWindow,omitempty"`
 }
 
 // PostgresStatus defines the observed state of Postgres
@@ -406,99 +405,63 @@ func (p *Postgres) ToPeripheralResourceNamespace() string {
 	return p.ToPeripheralResourceName()
 }
 
-func (p *Postgres) ToZalandoPostgres() *ZalandoPostgres {
-	return &ZalandoPostgres{
-		TypeMeta: ZalandoPostgresTypeMeta,
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      p.ToPeripheralResourceName(),
-			Namespace: p.ToPeripheralResourceNamespace(),
-			Labels:    map[string]string{UIDLabelName: string(p.UID)},
-		},
-		Spec: ZalandoPostgresSpec{
-			MaintenanceWindows: func() []MaintenanceWindow {
-				if p.Spec.Maintenance == nil {
-					return nil
-				}
-				isEvery := p.Spec.Maintenance.Weekday == All
-				return []MaintenanceWindow{
-					{Everyday: isEvery,
-						Weekday: func() time.Weekday {
-							if isEvery {
-								return time.Weekday(0)
-							}
-							return time.Weekday(p.Spec.Maintenance.Weekday)
-						}(),
-						StartTime: p.Spec.Maintenance.TimeWindow.Start,
-						EndTime:   p.Spec.Maintenance.TimeWindow.End,
-					},
-				}
-			}(),
-			NumberOfInstances: p.Spec.NumberOfInstances,
-			PostgresqlParam:   PostgresqlParam{PgVersion: p.Spec.Version},
-			Resources: func() *Resources {
-				if p.Spec.Size.CPU == "" {
-					return nil
-				}
-				return &Resources{
-					ResourceRequests: &ResourceDescription{
-						CPU:    p.Spec.Size.CPU,
-						Memory: p.Spec.Size.Memory,
-					},
-					ResourceLimits: &ResourceDescription{
-						CPU:    p.Spec.Size.CPU,
-						Memory: p.Spec.Size.Memory,
-					},
-				}
-			}(),
-			TeamID: p.generateTeamID(),
-			Volume: Volume{Size: p.Spec.Size.StorageSize},
-		},
+func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql) (*unstructured.Unstructured, error) {
+	if z == nil {
+		z = &zalando.Postgresql{}
 	}
-}
+	z.TypeMeta = ZalandoPostgresqlTypeMeta
+	z.Namespace = p.ToPeripheralResourceNamespace()
+	z.Name = p.ToPeripheralResourceName()
+	z.Labels = p.ToZalandoPostgresqlMatchingLabels()
 
-func (p *Postgres) ToPatchedZalandoPostgresql(z *zalando.Postgresql) *zalando.Postgresql {
+	z.Spec.NumberOfInstances = p.Spec.NumberOfInstances
+	z.Spec.PostgresqlParam.PgVersion = p.Spec.Version
+	z.Spec.Resources.ResourceRequests.CPU = p.Spec.Size.CPU
+	z.Spec.Resources.ResourceRequests.Memory = p.Spec.Size.Memory
+	z.Spec.Resources.ResourceLimits.CPU = p.Spec.Size.CPU
+	z.Spec.Resources.ResourceLimits.Memory = p.Spec.Size.Memory
+	z.Spec.TeamID = p.generateTeamID()
+	z.Spec.Volume.Size = p.Spec.Size.StorageSize
+
 	if p.HasSourceRanges() {
 		z.Spec.AllowedSourceRanges = p.Spec.AccessList.SourceRanges
 	}
 
-	z.Spec.NumberOfInstances = p.Spec.NumberOfInstances
+	jsonZ, err := runtime.DefaultUnstructuredConverter.ToUnstructured(z)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert to unstructured zalando postgresql: %w", err)
+	}
+	jsonSpec, _ := jsonZ["spec"].(map[string]interface{})
 
-	// todo: Check if the validation should be performed here.
-	z.Spec.PostgresqlParam.PgVersion = p.Spec.Version
+	// In the code, zalando's `MaintenanceWindows` is a `struct`, but in the CRD
+	// it's an array of strings, so we can only set its `Unstructured` contents
+	// and deal with possible `nil`.
+	jsonSpec["maintenanceWindows"] = p.Spec.Maintenance
+	deleteIfEmpty(jsonSpec, "maintenanceWindows")
 
-	z.Spec.ResourceRequests.CPU = p.Spec.Size.CPU
-	z.Spec.ResourceRequests.Memory = p.Spec.Size.Memory
-	z.Spec.ResourceLimits.CPU = p.Spec.Size.CPU
-	z.Spec.ResourceLimits.Memory = p.Spec.Size.Memory
+	// Delete unused fields
+	deleteIfEmpty(jsonSpec, "clone")
+	deleteIfEmpty(jsonSpec, "patroni") // if in use, deleteIfEmpty needs to consider the case of struct.
+	deleteIfEmpty(jsonSpec, "podAnnotations")
+	deleteIfEmpty(jsonSpec, "serviceAnnotations")
+	deleteIfEmpty(jsonSpec, "standby")
+	deleteIfEmpty(jsonSpec, "tls")
+	deleteIfEmpty(jsonSpec, "users")
 
-	// todo: Check if the validation should be performed here.
-	z.Spec.Volume.Size = p.Spec.Size.StorageSize
+	jsonP, _ := jsonSpec["postgresql"].(map[string]interface{})
+	deleteIfEmpty(jsonP, "parameters")
 
-	z.Spec.MaintenanceWindows = func() []zalando.MaintenanceWindow {
-		if p.Spec.Maintenance == nil {
-			return nil
-		}
-		isEvery := p.Spec.Maintenance.Weekday == All
-		return []zalando.MaintenanceWindow{
-			{
-				Everyday: isEvery,
-				Weekday: func() time.Weekday {
-					if isEvery {
-						return time.Weekday(0)
-					}
-					return time.Weekday(p.Spec.Maintenance.Weekday)
-				}(),
-				StartTime: p.Spec.Maintenance.TimeWindow.Start,
-				EndTime:   p.Spec.Maintenance.TimeWindow.End,
-			},
-		}
-	}()
-
-	return z
+	return &unstructured.Unstructured{
+		Object: jsonZ,
+	}, nil
 }
 
 func (p *Postgres) ToZalandoPostgresqlMatchingLabels() client.MatchingLabels {
-	return client.MatchingLabels{UIDLabelName: string(p.UID)}
+	return client.MatchingLabels{
+		ProjectIDLabelName: p.Spec.PartitionID,
+		TenantLabelName:    p.Spec.Tenant,
+		UIDLabelName:       string(p.UID),
+	}
 }
 
 func (p *Postgres) HasFinalizer(finalizerName string) bool {
@@ -530,6 +493,15 @@ func removeElem(ss []string, s string) (out []string) {
 		out = append(out, elem)
 	}
 	return
+}
+
+func deleteIfEmpty(json map[string]interface{}, key string) {
+	i := json[key]
+
+	// interface has type and value. The chained function calls deal with nil value with type.
+	if i == nil || reflect.ValueOf(json[key]).IsNil() {
+		delete(json, key)
+	}
 }
 
 func init() {
