@@ -242,7 +242,7 @@ func (r *PostgresReconciler) createOrUpdateBackupConfig(ctx context.Context, p *
 	backupSecret := &v1.Secret{}
 	backupNamespace := types.NamespacedName{
 		Name:      p.Spec.BackupSecretRef,
-		Namespace: p.Namespace,
+		Namespace: "metal-extension-cloud",
 	}
 	if err := r.Client.Get(ctx, backupNamespace, backupSecret); err != nil {
 		return fmt.Errorf("error while getting the backup secret from control plane cluster: %w", err)
