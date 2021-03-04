@@ -6,8 +6,8 @@ data:
   PARTITION_ID: sample-partition
   TENANT: sample-tenant
   LOAD_BALANCER_IP: "127.0.0.1"
-  PORT_RANGE_START: 32000
-  PORT_RANGE_SIZE: 8000
+  PORT_RANGE_START: "32000"
+  PORT_RANGE_SIZE: "8000"
 kind: ConfigMap
 metadata:
   creationTimestamp: null

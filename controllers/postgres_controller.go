@@ -8,6 +8,7 @@ package controllers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"time"
@@ -72,6 +73,13 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 
 	// Delete
 	if instance.IsBeingDeleted() {
+		instance.Status.Description = "Terminating"
+		if err := r.Status().Update(ctx, instance); err != nil {
+			log.Error(err, "failed to update owner object")
+			return ctrl.Result{}, err
+		}
+		log.Info("instance being deleted")
+
 		matchingLabels := instance.ToZalandoPostgresqlMatchingLabels()
 		namespace := instance.ToPeripheralResourceNamespace()
 
@@ -87,12 +95,11 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		}
 		log.Info("corresponding Service of type LoadBalancer deleted")
 
-		log.Info("deleting owned zalando postgresql")
-
 		if err := r.deleteZPostgresqlByLabels(ctx, matchingLabels, namespace); err != nil {
 			r.recorder.Eventf(instance, "Warning", "Error", "failed to delete Zalando resource: %v", err)
 			return ctrl.Result{}, err
 		}
+		log.Info("owned zalando postgresql deleted")
 
 		deletable, err := r.IsOperatorDeletable(ctx, namespace)
 		if err != nil {
@@ -261,7 +268,17 @@ func (r *PostgresReconciler) updatePodEnvironmentConfigMap(ctx context.Context, 
 		return fmt.Errorf("error while getting the backup secret from control plane cluster: %w", err)
 	}
 
-	s3url, err := url.Parse(string(backupSecret.Data[pg.BackupSecretS3Endpoint]))
+	backupConfigJSON, ok := backupSecret.Data[pg.BackupConfigKey]
+	if !ok {
+		return fmt.Errorf("no backupConfig stored in the secret")
+	}
+	var backupConfig pg.BackupConfig
+	err := json.Unmarshal(backupConfigJSON, &backupConfig)
+	if err != nil {
+		return fmt.Errorf("unable to unmarshal backupconfig:%w", err)
+	}
+
+	s3url, err := url.Parse(backupConfig.S3Endpoint)
 	if err != nil {
 		return fmt.Errorf("error while parsing the s3 endpoint url in the backup secret: %w", err)
 	}
@@ -273,11 +290,11 @@ func (r *PostgresReconciler) updatePodEnvironmentConfigMap(ctx context.Context, 
 	walES3Endpoint := s3url.String()
 
 	// use the rest as provided in the secret
-	bucketName := string(backupSecret.Data[pg.BackupSecretS3BucketName])
-	awsAccessKeyID := string(backupSecret.Data[pg.BackupSecretAccessKey])
-	awsSecretAccessKey := string(backupSecret.Data[pg.BackupSecretSecretKey])
-	backupSchedule := string(backupSecret.Data[pg.BackupSecretSchedule])
-	backupNumToRetain := string(backupSecret.Data[pg.BackupSecretRetention])
+	bucketName := backupConfig.S3BucketName
+	awsAccessKeyID := backupConfig.S3AccessKey
+	awsSecretAccessKey := backupConfig.S3SecretKey
+	backupSchedule := backupConfig.Schedule
+	backupNumToRetain := backupConfig.Retention
 
 	// create updated content for pod environment configmap
 	data := map[string]string{
