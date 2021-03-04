@@ -187,24 +187,33 @@ func (m *OperatorManager) UninstallOperator(ctx context.Context, namespace strin
 			return fmt.Errorf("error while converting yaml to `runtime.Onject`: %w", err)
 		}
 
-		if err := m.SetNamespace(obj, namespace); err != nil {
-			return fmt.Errorf("error while setting the namesapce: %w", err)
-		}
-
 		switch v := obj.(type) {
 		case *rbacv1.ClusterRole: // no-op
 		case *rbacv1.ClusterRoleBinding:
-			// Remove the ServiceAccount from ClusterRoleBinding's Subjects and then patch it.
+			// Fetch the ClusterRoleBinding
+			objKey := types.NamespacedName{
+				Namespace: v.Namespace,
+				Name:      v.Name,
+			}
+			if err := m.Get(ctx, objKey, v); err != nil {
+				return fmt.Errorf("error while fetching %v: %w", v, err)
+			}
+
+			// Remove the ServiceAccount from the ClusterRoleBinding's `Subjects` and then patch the ClusterRoleBinding
 			for i, s := range v.Subjects {
 				if s.Kind == "ServiceAccount" && s.Namespace == namespace {
-					patch := client.MergeFrom(v.DeepCopy())
+					mergeFrom := client.MergeFrom(v.DeepCopy())
 					v.Subjects = append(v.Subjects[:i], v.Subjects[i+1:]...)
-					if err = m.Patch(ctx, v, patch); err != nil {
+					if err = m.Patch(ctx, v, mergeFrom); err != nil {
 						return fmt.Errorf("error while patching %v: %w", v, err)
 					}
 				}
 			}
 		default:
+			if err := m.SetNamespace(obj, namespace); err != nil {
+				return fmt.Errorf("error while setting the namesapce: %w", err)
+			}
+
 			cltObject, ok := v.(client.Object)
 			if !ok {
 				return fmt.Errorf("unable to cast into client.Object")
@@ -274,6 +283,7 @@ func (m *OperatorManager) createNewClientObject(ctx context.Context, objs []clie
 		err = m.Get(ctx, key, &rbacv1.ClusterRole{})
 	case *rbacv1.ClusterRoleBinding:
 		m.log.Info("handling ClusterRoleBinding")
+
 		// Set the namespace of the ServiceAccount in the ClusterRoleBinding.
 		for i, s := range v.Subjects {
 			if s.Kind == "ServiceAccount" {
@@ -284,19 +294,41 @@ func (m *OperatorManager) createNewClientObject(ctx context.Context, objs []clie
 		// ClusterRoleBinding is not namespaced.
 		key.Namespace = ""
 
-		// If a ClusterRoleBinding already exists, patch it.
+		// Fetch the ClusterRoleBinding
 		got := &rbacv1.ClusterRoleBinding{}
-		err = m.Get(ctx, key, got)
-		if err == nil {
-			patch := client.MergeFrom(got.DeepCopy())
-			v.Subjects = append(got.Subjects, v.Subjects[0])
-			if err := m.Patch(ctx, v, patch); err != nil {
-				return objs, fmt.Errorf("error while patching the `ClusterRoleBinding`: %w", err)
+		if err := m.Get(ctx, key, got); err != nil {
+			if !errors.IsNotFound(err) {
+				return objs, fmt.Errorf("error while fetching %v: %w", v, err)
 			}
-			m.log.Info("ClusterRoleBinding patched")
-			// we already patched the object, no need to go through the update path at the bottom of this function
+
+			// Create the ClusterRoleBinding
+			if err := m.Create(ctx, v); err != nil {
+				return objs, fmt.Errorf("error while creating %v: %w", v, err)
+			}
+			m.log.Info("ClusterRoleBinding created")
+
+			// Append the newly created obj
+			objs = append(objs, obj)
 			return objs, nil
 		}
+
+		// If the ServiceAccount already exists, return.
+		for i := range got.Subjects {
+			if got.Subjects[i].Kind == "ServiceAccount" && got.Subjects[i].Namespace == namespace {
+				return objs, nil
+			}
+		}
+
+		// Patch the already existing ClusterRoleBinding
+		mergeFrom := client.MergeFrom(got.DeepCopy())
+		v.Subjects = append(got.Subjects, v.Subjects[0])
+		if err := m.Patch(ctx, v, mergeFrom); err != nil {
+			return objs, fmt.Errorf("error while patching the `ClusterRoleBinding`: %w", err)
+		}
+		m.log.Info("ClusterRoleBinding patched")
+
+		// we already patched the object, no need to go through the update path at the bottom of this function
+		return objs, nil
 	case *v1.ConfigMap:
 		m.log.Info("handling ConfigMap")
 		m.editConfigMap(v, namespace)
