@@ -110,8 +110,7 @@ sidecars:
             Match **
 
   exporter:
-    # image: "prometheuscommunity/postgres-exporter:v0.9.0"
-    image: "wrouesnel/postgres_exporter:latest"
+    image: "prometheuscommunity/postgres-exporter:v0.9.0"
     containerPort: 9187
     resources:
       requests:
