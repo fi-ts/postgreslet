@@ -323,7 +323,7 @@ items:
         - env:
           - name: CONFIG_MAP_NAME
             value: postgres-operator
-          image: registry.opensource.zalan.do/acid/postgres-operator:v1.6.1
+          image: registry.opensource.zalan.do/acid/postgres-operator:latest
           imagePullPolicy: IfNotPresent
           name: postgres-operator
           resources:
