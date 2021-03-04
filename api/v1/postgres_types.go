@@ -48,23 +48,6 @@ const (
 	BackupConfigLabelName string = "postgres.database.fits.cloud/is-backup"
 	// BackupConfigKey defines the key under which the BackupConfig is stored in the data map.
 	BackupConfigKey = "config"
-
-	// Sun shortcut for Sunday
-	Sun Weekday = iota
-	// Mon Monday
-	Mon
-	// Tue Tuesday
-	Tue
-	// Wed Wednesday
-	Wed
-	// Thu Thusday
-	Thu
-	// Fri Friday
-	Fri
-	// Sat Saturday
-	Sat
-	// All every day
-	All
 )
 
 // BackupConfig defines all properties to configure backup of a database.
@@ -174,15 +157,6 @@ type Size struct {
 	// +kubebuilder:default="1Gi"
 	// +kubebuilder:validation:Pattern=^[1-9][0-9]*Gi
 	StorageSize string `json:"storageSize,omitempty"`
-}
-
-// Weekday defines a weekday or everyday
-type Weekday int
-
-// TimeWindow defines an interval in time
-type TimeWindow struct {
-	Start metav1.Time `json:"start,omitempty"`
-	End   metav1.Time `json:"end,omitempty"`
 }
 
 // PostgresStatus defines the observed state of Postgres
