@@ -101,6 +101,10 @@ Install the Postgreslet to the service cluster
 
 ```sh
 make kind-load-image
+
+# only for local dev
+make install-crd-cwnp
+
 kubectl create namespace postgreslet-system
 helm upgrade --install postgreslet postgreslet-0.1.0.tgz --namespace postgreslet-system --set-file controlplaneKubeconfig=kubeconfig  --set image.tag=latest
 kubectl get po -A --watch

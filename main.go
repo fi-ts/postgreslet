@@ -52,7 +52,7 @@ func main() {
 	var portRangeStart, portRangeSize int
 	flag.StringVar(&metricsAddrSvcMgr, "metrics-addr-svc-mgr", ":8080", "The address the metric endpoint of the service cluster manager binds to.")
 	flag.StringVar(&metricsAddrCtrlMgr, "metrics-addr-ctrl-mgr", "0", "The address the metric endpoint of the control cluster manager binds to.")
-	flag.BoolVar(&enableLeaderElection, "enable-leader-election", false,
+	flag.BoolVar(&enableLeaderElection, "enable-leader-election", true,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
 	flag.StringVar(&partitionID, "partition-id", "", "The partition ID of the worker-cluster.")
