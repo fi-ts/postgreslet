@@ -8,13 +8,13 @@ package controllers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"time"
 
 	"github.com/go-logr/logr"
 	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
-	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/tools/record"
 
@@ -73,6 +73,13 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 
 	// Delete
 	if instance.IsBeingDeleted() {
+		instance.Status.Description = "Terminating"
+		if err := r.Status().Update(ctx, instance); err != nil {
+			log.Error(err, "failed to update owner object")
+			return ctrl.Result{}, err
+		}
+		log.Info("instance being deleted")
+
 		matchingLabels := instance.ToZalandoPostgresqlMatchingLabels()
 		namespace := instance.ToPeripheralResourceNamespace()
 
@@ -88,12 +95,11 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		}
 		log.Info("corresponding Service of type LoadBalancer deleted")
 
-		log.Info("deleting owned zalando postgresql")
-
 		if err := r.deleteZPostgresqlByLabels(ctx, matchingLabels, namespace); err != nil {
 			r.recorder.Eventf(instance, "Warning", "Error", "failed to delete Zalando resource: %v", err)
 			return ctrl.Result{}, err
 		}
+		log.Info("owned zalando postgresql deleted")
 
 		deletable, err := r.IsOperatorDeletable(ctx, namespace)
 		if err != nil {
@@ -180,55 +186,31 @@ func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context
 		if !errors.IsNotFound(err) {
 			return fmt.Errorf("failed to fetch zalando postgresql: %w", err)
 		}
-		return r.createZalandoPostgresql(ctx, instance)
+
+		u, err := instance.ToUnstructuredZalandoPostgresql(nil)
+		if err != nil {
+			return fmt.Errorf("failed to convert to unstructured zalando postgresql: %w", err)
+		}
+
+		if err := r.Service.Create(ctx, u); err != nil {
+			return fmt.Errorf("failed to create zalando postgresql: %w", err)
+		}
+		log.Info("zalando postgresql created", "zalando postgresql", u)
+
+		return nil
 	}
 
-	// Update zalando postgresql.
+	// Update zalando postgresql
 	mergeFrom := client.MergeFrom(rawZ.DeepCopy())
-	patched := instance.ToPatchedZalandoPostgresql(rawZ)
-	if err := r.Service.Patch(ctx, patched, mergeFrom); err != nil {
+
+	u, err := instance.ToUnstructuredZalandoPostgresql(rawZ)
+	if err != nil {
+		return fmt.Errorf("failed to convert to unstructured zalando postgresql: %w", err)
+	}
+	if err := r.Service.Patch(ctx, u, mergeFrom); err != nil {
 		return fmt.Errorf("failed to update zalando postgresql: %w", err)
 	}
-	log.Info("zalando postgresql updated", "namespace", patched.Namespace, "name", patched.Name)
-
-	return nil
-}
-
-func (r *PostgresReconciler) createZalandoPostgresql(ctx context.Context, instance *pg.Postgres) error {
-	z := instance.ToZalandoPostgres()
-	namespacedName := types.NamespacedName{Namespace: z.Namespace, Name: z.Name}
-	log := r.Log.WithValues("ns/name", namespacedName)
-
-	// Add custom labels (used in combination with the inherited_labels feature of the operator)
-	z.Labels[pg.TenantLabelName] = instance.Spec.Tenant
-	z.Labels[pg.ProjectIDLabelName] = instance.Spec.ProjectID
-
-	// Make sure the namespace exists in the worker-cluster.
-	ns := z.Namespace
-	if err := r.Service.Get(ctx, client.ObjectKey{Name: ns}, &corev1.Namespace{}); err != nil {
-		// errors other than `not found`
-		if !errors.IsNotFound(err) {
-			return err
-		}
-
-		// Create the namespace.
-		nsObj := &corev1.Namespace{}
-		nsObj.Name = ns
-		if err = r.Service.Create(ctx, nsObj); err != nil {
-			return err
-		}
-	}
-
-	u, err := z.ToUnstructured()
-	if err != nil {
-		log.Error(err, "error while converting to unstructured")
-		return err
-	}
-
-	if err := r.Service.Create(ctx, u); err != nil {
-		log.Error(err, "error while creating zalando postgresql")
-		return err
-	}
+	log.Info("zalando postgresql updated", "zalando postgresql", u)
 
 	return nil
 }
@@ -272,7 +254,17 @@ func (r *PostgresReconciler) createOrUpdateBackupConfig(ctx context.Context, p *
 		return fmt.Errorf("error while getting the backup secret from control plane cluster: %w", err)
 	}
 
-	s3url, err := url.Parse(string(backupSecret.Data[pg.BackupSecretS3Endpoint]))
+	backupConfigJSON, ok := backupSecret.Data[pg.BackupConfigKey]
+	if !ok {
+		return fmt.Errorf("no backupConfig stored in the secret")
+	}
+	var backupConfig pg.BackupConfig
+	err := json.Unmarshal(backupConfigJSON, &backupConfig)
+	if err != nil {
+		return fmt.Errorf("unable to unmarshal backupconfig:%w", err)
+	}
+
+	s3url, err := url.Parse(backupConfig.S3Endpoint)
 	if err != nil {
 		return fmt.Errorf("error while parsing the s3 endpoint url in the backup secret: %w", err)
 	}
@@ -284,11 +276,11 @@ func (r *PostgresReconciler) createOrUpdateBackupConfig(ctx context.Context, p *
 	walES3Endpoint := s3url.String()
 
 	// use the rest as provided in the secret
-	bucketName := string(backupSecret.Data[pg.BackupSecretS3BucketName])
-	awsAccessKeyID := string(backupSecret.Data[pg.BackupSecretAccessKey])
-	awsSecretAccessKey := string(backupSecret.Data[pg.BackupSecretSecretKey])
-	backupSchedule := string(backupSecret.Data[pg.BackupSecretSchedule])
-	backupNumToRetain := string(backupSecret.Data[pg.BackupSecretRetention])
+	bucketName := backupConfig.S3BucketName
+	awsAccessKeyID := backupConfig.S3AccessKey
+	awsSecretAccessKey := backupConfig.S3SecretKey
+	backupSchedule := backupConfig.Schedule
+	backupNumToRetain := backupConfig.Retention
 
 	// create updated content for pod environment configmap
 	data := map[string]string{
@@ -371,7 +363,7 @@ func (r *PostgresReconciler) createOrUpdateCWNP(ctx context.Context, in *pg.Post
 	if _, err := controllerutil.CreateOrUpdate(ctx, r.Service, key, func() error {
 		key.Spec.Ingress = policy.Spec.Ingress
 		return nil
-	}); err != nil && !errors.IsAlreadyExists(err) {
+	}); err != nil {
 		return fmt.Errorf("unable to deploy CRD ClusterwideNetworkPolicy: %w", err)
 	}
 
