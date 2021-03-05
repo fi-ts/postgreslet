@@ -23,6 +23,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/apimachinery/pkg/util/yaml"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
@@ -560,71 +561,36 @@ func (p *Postgres) buildZalandoSidecars(c *corev1.ConfigMap) []zalando.Sidecar {
 		return nil
 	}
 
+	// Unmarshal yaml-string of exporter
+	exporter := &zalando.Sidecar{}
+	if err := yaml.Unmarshal([]byte(c.Data["experimental-postgres-exporter"]), exporter); err != nil {
+		return nil
+	}
+
 	postgresExporterPort, error := strconv.ParseInt(c.Data["postgres-exporter-container-port"], 10, 32)
 	if error != nil {
 		// todo log error
 		postgresExporterPort = 9187
 	}
-	return []zalando.Sidecar{
-		{
-			Name:        ExporterSidecarName,
-			DockerImage: c.Data["postgres-exporter-image"],
-			Ports: []corev1.ContainerPort{
-				{
-					Name:          "exporter",
-					ContainerPort: int32(postgresExporterPort),
-					Protocol:      corev1.ProtocolTCP,
+	exporter.Ports[0].ContainerPort = int32(postgresExporterPort)
+
+	exporter.Env = append(exporter.Env, corev1.EnvVar{
+		Name: "DATA_SOURCE_PASS",
+		ValueFrom: &corev1.EnvVarSource{
+			SecretKeyRef: &corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: "postgres." + p.ToPeripheralResourceName() + ".credentials",
 				},
-			},
-			Resources: zalando.Resources{
-				ResourceLimits: zalando.ResourceDescription{
-					CPU:    c.Data["postgres-exporter-limits-cpu"],
-					Memory: c.Data["postgres-exporter-limits-memory"],
-				},
-				ResourceRequests: zalando.ResourceDescription{
-					CPU:    c.Data["postgres-exporter-requests-cpu"],
-					Memory: c.Data["postgres-exporter-requests-memory"],
-				},
-			},
-			Env: []corev1.EnvVar{
-				{
-					Name:  "DATA_SOURCE_URI",
-					Value: "127.0.0.1:5432/postgres?sslmode=disable",
-				},
-				{
-					Name:  "DATA_SOURCE_USER",
-					Value: "postgres",
-				},
-				{
-					Name: "DATA_SOURCE_PASS",
-					ValueFrom: &corev1.EnvVarSource{
-						SecretKeyRef: &corev1.SecretKeySelector{
-							LocalObjectReference: corev1.LocalObjectReference{
-								Name: "postgres." + p.ToPeripheralResourceName() + ".credentials",
-							},
-							Key: "password",
-						},
-					},
-				},
-				{
-					Name:  "PG_EXPORTER_EXTEND_QUERY_PATH",
-					Value: "/metrics/queries.yaml",
-				},
+				Key: "password",
 			},
 		},
-		{
-			Name:        FluentBitSidecarName,
-			DockerImage: c.Data["postgres-fluentbit-image"],
-			Resources: zalando.Resources{
-				ResourceLimits: zalando.ResourceDescription{
-					CPU:    c.Data["postgres-fluentbit-limits-cpu"],
-					Memory: c.Data["postgres-fluentbit-limits-memory"],
-				},
-				ResourceRequests: zalando.ResourceDescription{
-					CPU:    c.Data["postgres-fluentbit-requests-cpu"],
-					Memory: c.Data["postgres-fluentbit-requests-memory"],
-				},
-			},
-		},
+	})
+
+	// Unmarshal yaml-string of fluent bit
+	fluentBit := &zalando.Sidecar{}
+	if err := yaml.Unmarshal([]byte(c.Data["experimental-postgres-fluentbit"]), fluentBit); err != nil {
+		return nil
 	}
+
+	return []zalando.Sidecar{*exporter, *fluentBit}
 }

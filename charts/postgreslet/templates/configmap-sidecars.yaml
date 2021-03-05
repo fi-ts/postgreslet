@@ -13,7 +13,40 @@ data:
   postgres-fluentbit-limits-memory: {{ .Values.sidecars.fluentbit.resources.limits.memory | quote }}
   queries.yaml: {{ b64enc .Values.sidecars.exporter.queries }}
   fluent-bit.conf: {{ b64enc .Values.sidecars.fluentbit.conf }}
-  
+  experimental-postgres-exporter: |
+    name: postgres-exporter
+    image: prometheuscommunity/postgres-exporter:v0.9.0
+    ports:
+      - name: exporter
+        containerPort: 9187
+        protocol: TCP
+    resources:
+      requests:
+        cpu: 100m
+        memory: 200M
+      limits:
+        cpu: 500m
+        memory: 256M
+    env:
+      - name: DATA_SOURCE_URI
+        value: 127.0.0.1:5432/postgres?sslmode=disable
+      - name: DATA_SOURCE_USER
+        Value: postgres
+      - Name: PG_EXPORTER_EXTEND_QUERY_PATH
+        Value: /metrics/queries.yaml
+  experimental-postgres-fluentbit: |
+    name: postgres-fluentbit
+    image: fluent/fluent-bit:1.7.2
+    ports:
+      - name: exporter
+        containerPort: 9187
+    resources:
+      requests:
+        cpu: 100m
+        memory: 200M
+      limits:
+        cpu: 500m
+        memory: 256M
 kind: ConfigMap
 metadata:
   name: {{ include "postgreslet.fullname" . }}-postgres-sidecars
