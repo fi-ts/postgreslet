@@ -23,7 +23,3 @@ metadata:
 {{- end }}
   labels:
     {{- include "postgreslet.labels" . | nindent 4 }}
-
-{{- /*
-  queries.yaml: |+{{ .Values.sidecars.exporter.queries
- */}}
