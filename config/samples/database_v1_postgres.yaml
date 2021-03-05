@@ -22,26 +22,26 @@ spec:
     storageSize: 1Gi
   tenant: sample-tenant
   version: "12"
-# ---
-# apiVersion: database.fits.cloud/v1
-# kind: Postgres
-# metadata:
-#   namespace: pgaas-test
-#   name: sample-name-b
-# spec:
-#   accessList:
-#     sourceRanges:
-#     - 1.2.3.4/24
-#   backup:
-#     s3BucketURL: ""
-#   maintenance:
-#     - "Sun:20:00-21:00"
-#   numberOfInstances: 2
-#   partitionID: sample-partition
-#   projectID: projectid-b
-#   size:
-#     cpu: 500m
-#     memory: 512Mi
-#     storageSize: 1Gi
-#   tenant: sample-tenant
-#   version: "12"
+---
+apiVersion: database.fits.cloud/v1
+kind: Postgres
+metadata:
+  namespace: pgaas-test
+  name: sample-name-b
+spec:
+  accessList:
+    sourceRanges:
+    - 1.2.3.4/24
+  backup:
+    s3BucketURL: ""
+  maintenance:
+    - "Sun:20:00-21:00"
+  numberOfInstances: 2
+  partitionID: sample-partition
+  projectID: projectid-b
+  size:
+    cpu: 500m
+    memory: 512Mi
+    storageSize: 1Gi
+  tenant: sample-tenant
+  version: "12"

@@ -47,6 +47,33 @@ data:
       limits:
         cpu: 500m
         memory: 256M
+  experimental-additional-volumes: |
+    - name: empty
+      mountPath: /opt/empty
+      targetContainers:
+        - all
+      VolumeSource:
+        emptyDir: {}
+    - name: postgres-exporter-configmap
+      mountPath: /metrics
+      targetContainers:
+        - postgres-exporter
+      VolumeSource:
+        ConfigMap:
+          name: postgres-sidecars-configmap
+          items:
+            - key: queries.yaml
+              path: queries.yaml
+    - name: postgres-fluentbit-configmap
+      mountPath: /fluent-bit/etc
+      targetContainers:
+        - postgres-fluentbit
+      VolumeSource:
+        ConfigMap:
+          name: postgres-sidecars-configmap
+          items:
+            - key: fluent-bit.conf
+              path: fluent-bit.conf
 kind: ConfigMap
 metadata:
   name: {{ include "postgreslet.fullname" . }}-postgres-sidecars
