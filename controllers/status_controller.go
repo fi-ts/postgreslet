@@ -108,6 +108,7 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 			return ctrl.Result{}, fmt.Errorf("failed to update lbSocket of Postgres: %w", err)
 		}
 	} else {
+		// Todo: Handle errors other than `NotFound`
 		log.Info("unable to fetch the corresponding Service of type LoadBalancer")
 	}
 

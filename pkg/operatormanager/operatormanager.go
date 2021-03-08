@@ -560,6 +560,7 @@ func (m *OperatorManager) ensureSidecarsConfigMap(ctx context.Context, namespace
 		m.log.Info("Sidecars ConfigMap updated")
 		return objs, nil
 	}
+	// todo: handle errors other than `NotFound`
 
 	// local configmap does not exist, creating it
 	if err := m.Create(ctx, sccm); err != nil {
