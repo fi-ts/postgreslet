@@ -112,6 +112,7 @@ sidecars:
   exporter:
     image: "prometheuscommunity/postgres-exporter:v0.9.0"
     containerPort: 9187
+    servicePort: 9187
     resources:
       requests:
         cpu: "100m"

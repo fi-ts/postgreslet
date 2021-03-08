@@ -12,6 +12,7 @@ import (
 	errs "errors"
 	"fmt"
 	"io/ioutil"
+	"strconv"
 	"strings"
 	"time"
 
@@ -111,15 +112,9 @@ func (m *OperatorManager) InstallOrUpdateOperator(ctx context.Context, namespace
 	}
 
 	// Add our sidecars configmap
-	objs, err = m.createOrUpdateSidecarsConfigMap(ctx, namespace, objs)
+	objs, err = m.createOrUpdateSidecarsConfig(ctx, namespace, objs)
 	if err != nil {
-		return objs, fmt.Errorf("error while creating sidecars configmap %v: %w", namespace, err)
-	}
-
-	// Add services for our sidecars
-	objs, err = m.createOrUpdateExporterSidecarService(ctx, namespace, objs)
-	if err != nil {
-		return objs, fmt.Errorf("error while creating sidecars services %v: %w", namespace, err)
+		return objs, fmt.Errorf("error while creating sidecars config %v: %w", namespace, err)
 	}
 
 	// Decode each YAML to `client.Object`, add the namespace to it and install it.
@@ -478,8 +473,7 @@ func (m *OperatorManager) updatePodEnvironmentConfigMap(ctx context.Context, nam
 	return objs, nil
 }
 
-func (m *OperatorManager) createOrUpdateSidecarsConfigMap(ctx context.Context, namespace string, objs []client.Object) ([]client.Object, error) {
-
+func (m *OperatorManager) createOrUpdateSidecarsConfig(ctx context.Context, namespace string, objs []client.Object) ([]client.Object, error) {
 	// try to fetch the global sidecars configmap
 	cns := types.NamespacedName{
 		// TODO don't use string literals here! name is dependent of the release name of the helm chart!
@@ -492,6 +486,23 @@ func (m *OperatorManager) createOrUpdateSidecarsConfigMap(ctx context.Context, n
 		m.log.Error(err, "could not fetch config for sidecars")
 		return objs, err
 	}
+
+	// Add our sidecars configmap
+	objs, err := m.createOrUpdateSidecarsConfigMap(ctx, namespace, c, objs)
+	if err != nil {
+		return objs, fmt.Errorf("error while creating sidecars configmap %v: %w", namespace, err)
+	}
+
+	// Add services for our sidecars
+	objs, err = m.createOrUpdateExporterSidecarService(ctx, namespace, c, objs)
+	if err != nil {
+		return objs, fmt.Errorf("error while creating sidecars services %v: %w", namespace, err)
+	}
+
+	return objs, nil
+}
+
+func (m *OperatorManager) createOrUpdateSidecarsConfigMap(ctx context.Context, namespace string, c *v1.ConfigMap, objs []client.Object) ([]client.Object, error) {
 
 	sccm := &v1.ConfigMap{}
 	if err := m.SetName(sccm, pg.SidecarsCMName); err != nil {
@@ -542,7 +553,12 @@ func (m *OperatorManager) createOrUpdateSidecarsConfigMap(ctx context.Context, n
 }
 
 // createOrUpdateExporterSidecarService ensures the neccessary services to acces the sidecars exist
-func (m *OperatorManager) createOrUpdateExporterSidecarService(ctx context.Context, namespace string, objs []client.Object) ([]client.Object, error) {
+func (m *OperatorManager) createOrUpdateExporterSidecarService(ctx context.Context, namespace string, c *v1.ConfigMap, objs []client.Object) ([]client.Object, error) {
+	exporterServicePort, error := strconv.ParseInt(c.Data["postgres-exporter-service-port"], 10, 32)
+	if error != nil {
+		// todo log error
+		exporterServicePort = 9187
+	}
 
 	pes := &v1.Service{}
 
@@ -562,7 +578,7 @@ func (m *OperatorManager) createOrUpdateExporterSidecarService(ctx context.Conte
 	pes.Spec.Ports = []v1.ServicePort{
 		{
 			Name:       "metrics",
-			Port:       9187,
+			Port:       int32(exporterServicePort),
 			Protocol:   v1.ProtocolTCP,
 			TargetPort: pg.ExporterSidecarPortName,
 		},
