@@ -89,6 +89,59 @@ var ZalandoPostgresqlTypeMeta = metav1.TypeMeta{
 	Kind:       "postgresql",
 }
 
+var additionalVolumes = []zalando.AdditionalVolume{
+	{
+		Name:      "empty",
+		MountPath: "/opt/empty",
+		TargetContainers: []string{
+			"all",
+		},
+		VolumeSource: corev1.VolumeSource{
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
+		},
+	},
+	{
+		Name:      "postgres-exporter-configmap",
+		MountPath: "/metrics",
+		TargetContainers: []string{
+			ExporterSidecarName,
+		},
+		VolumeSource: corev1.VolumeSource{
+			ConfigMap: &corev1.ConfigMapVolumeSource{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: SidecarsCMName,
+				},
+				Items: []corev1.KeyToPath{
+					{
+						Key:  SidecarsCMExporterQueriesKey,
+						Path: "queries.yaml",
+					},
+				},
+			},
+		},
+	},
+	{
+		Name:      "postgres-fluentbit-configmap",
+		MountPath: "/fluent-bit/etc",
+		TargetContainers: []string{
+			FluentBitSidecarName,
+		},
+		VolumeSource: corev1.VolumeSource{
+			ConfigMap: &corev1.ConfigMapVolumeSource{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: SidecarsCMName,
+				},
+				Items: []corev1.KeyToPath{
+					{
+						Key:  SidecarsCMFluentBitConfKey,
+						Path: "fluent-bit.conf",
+					},
+				},
+			},
+		},
+	},
+}
+
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Version",type=string,JSONPath=`.spec.version`
@@ -405,8 +458,8 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 
 	// skip if the configmap does not exist
 	if c != nil {
-		z.Spec.AdditionalVolumes = p.buildAdditionalVolumes(c)
-		z.Spec.Sidecars = p.buildZalandoSidecars(c)
+		z.Spec.AdditionalVolumes = additionalVolumes
+		z.Spec.Sidecars = p.buildSidecars(c)
 	}
 
 	if p.HasSourceRanges() {
@@ -494,67 +547,7 @@ func init() {
 	SchemeBuilder.Register(&Postgres{}, &PostgresList{})
 }
 
-func (p *Postgres) buildAdditionalVolumes(c *corev1.ConfigMap) []zalando.AdditionalVolume {
-	if c == nil {
-		// abort if the global configmap is not there
-		return nil
-	}
-
-	return []zalando.AdditionalVolume{
-		{
-			Name:      "empty",
-			MountPath: "/opt/empty",
-			TargetContainers: []string{
-				"all",
-			},
-			VolumeSource: corev1.VolumeSource{
-				EmptyDir: &corev1.EmptyDirVolumeSource{},
-			},
-		},
-		{
-			Name:      "postgres-exporter-configmap",
-			MountPath: "/metrics",
-			TargetContainers: []string{
-				ExporterSidecarName,
-			},
-			VolumeSource: corev1.VolumeSource{
-				ConfigMap: &corev1.ConfigMapVolumeSource{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: SidecarsCMName,
-					},
-					Items: []corev1.KeyToPath{
-						{
-							Key:  SidecarsCMExporterQueriesKey,
-							Path: "queries.yaml",
-						},
-					},
-				},
-			},
-		},
-		{
-			Name:      "postgres-fluentbit-configmap",
-			MountPath: "/fluent-bit/etc",
-			TargetContainers: []string{
-				FluentBitSidecarName,
-			},
-			VolumeSource: corev1.VolumeSource{
-				ConfigMap: &corev1.ConfigMapVolumeSource{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: SidecarsCMName,
-					},
-					Items: []corev1.KeyToPath{
-						{
-							Key:  SidecarsCMFluentBitConfKey,
-							Path: "fluent-bit.conf",
-						},
-					},
-				},
-			},
-		},
-	}
-}
-
-func (p *Postgres) buildZalandoSidecars(c *corev1.ConfigMap) []zalando.Sidecar {
+func (p *Postgres) buildSidecars(c *corev1.ConfigMap) []zalando.Sidecar {
 	if c == nil {
 		// abort if the global configmap is not there
 		return nil
