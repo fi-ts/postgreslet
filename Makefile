@@ -172,3 +172,6 @@ install-crd-cwnp:
 uninstall-crd-cwnp:
 	kubectl delete ns firewall
 	kubectl delete -f https://raw.githubusercontent.com/metal-stack/firewall-controller/master/config/crd/bases/metal-stack.io_clusterwidenetworkpolicies.yaml
+
+install-crd-servicemonitor:
+	kubectl apply -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/v0.45.0/example/prometheus-operator-crd/monitoring.coreos.com_servicemonitors.yaml

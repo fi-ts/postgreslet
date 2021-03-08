@@ -13,6 +13,7 @@ import (
 	"net"
 	"os"
 
+	coreosv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/metal-stack/v"
 	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -43,6 +44,7 @@ func init() {
 	_ = databasev1.AddToScheme(scheme)
 	_ = firewall.AddToScheme(scheme)
 	_ = zalando.AddToScheme(scheme)
+	_ = coreosv1.AddToScheme(scheme)
 	// +kubebuilder:scaffold:scheme
 }
 

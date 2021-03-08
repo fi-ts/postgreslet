@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	coreosv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	pg "github.com/fi-ts/postgreslet/api/v1"
 	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
@@ -24,6 +25,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/apimachinery/pkg/types"
@@ -44,7 +46,8 @@ const (
 	operatorPodLabelName  string = "name"
 	operatorPodLabelValue string = "postgres-operator"
 
-	postgresExporterServiceName string = "postgres-exporter"
+	postgresExporterServiceName     string = "postgres-exporter"
+	postgresExporterServicePortName string = "metrics"
 )
 
 // operatorPodMatchingLabels is for listing operator pods
@@ -499,6 +502,12 @@ func (m *OperatorManager) createOrUpdateSidecarsConfig(ctx context.Context, name
 		return objs, fmt.Errorf("error while creating sidecars services %v: %w", namespace, err)
 	}
 
+	// Add services for our sidecars
+	objs, err = m.createOrUpdateExporterSidecarServiceMonitor(ctx, namespace, objs)
+	if err != nil {
+		return objs, fmt.Errorf("error while creating sidecars servicemonitor %v: %w", namespace, err)
+	}
+
 	return objs, nil
 }
 
@@ -575,9 +584,10 @@ func (m *OperatorManager) createOrUpdateExporterSidecarService(ctx context.Conte
 	if err := m.SetLabels(pes, labels); err != nil {
 		return objs, fmt.Errorf("error while setting the namespace of the postgres-exporter service to %v: %w", namespace, err)
 	}
+
 	pes.Spec.Ports = []v1.ServicePort{
 		{
-			Name:       "metrics",
+			Name:       postgresExporterServicePortName,
 			Port:       int32(exporterServicePort),
 			Protocol:   v1.ProtocolTCP,
 			TargetPort: pg.ExporterSidecarPortName,
@@ -612,6 +622,66 @@ func (m *OperatorManager) createOrUpdateExporterSidecarService(ctx context.Conte
 		return objs, fmt.Errorf("error while creating the postgres-exporter service: %w", err)
 	}
 	m.log.Info("postgres-exporter service created")
+
+	return objs, nil
+}
+
+// createOrUpdateExporterSidecarService ensures the neccessary services to acces the sidecars exist
+func (m *OperatorManager) createOrUpdateExporterSidecarServiceMonitor(ctx context.Context, namespace string, objs []client.Object) ([]client.Object, error) {
+
+	pesm := &coreosv1.ServiceMonitor{}
+
+	// TODO what's the correct name?
+	if err := m.SetName(pesm, postgresExporterServiceName); err != nil {
+		return objs, fmt.Errorf("error while setting the name of the postgres-exporter servicemonitor to %v: %w", namespace, err)
+	}
+	if err := m.SetNamespace(pesm, namespace); err != nil {
+		return objs, fmt.Errorf("error while setting the namespace of the postgres-exporter servicemonitor to %v: %w", namespace, err)
+	}
+	labels := map[string]string{
+		"app":     "postgres-exporter",
+		"release": "prometheus",
+	}
+	if err := m.SetLabels(pesm, labels); err != nil {
+		return objs, fmt.Errorf("error while setting the namespace of the postgres-exporter servicemonitor to %v: %w", namespace, err)
+	}
+
+	pesm.Spec.Endpoints = []coreosv1.Endpoint{
+		{
+			Port: postgresExporterServicePortName,
+		},
+	}
+	pesm.Spec.NamespaceSelector = coreosv1.NamespaceSelector{
+		MatchNames: []string{namespace},
+	}
+	matchLabels := map[string]string{
+		// TODO use extraced string
+		"app": "postgres-exporter",
+	}
+	pesm.Spec.Selector = metav1.LabelSelector{
+		MatchLabels: matchLabels,
+	}
+
+	// try to fetch any existing postgres-exporter service
+	ns := types.NamespacedName{
+		Namespace: namespace,
+		Name:      postgresExporterServiceName,
+	}
+	old := &coreosv1.ServiceMonitor{}
+	if err := m.Get(ctx, ns, old); err == nil {
+		if err := m.Update(ctx, pesm); err != nil {
+			return objs, fmt.Errorf("error while updating the postgres-exporter servicemonitor: %w", err)
+		}
+		m.log.Info("postgres-exporter servicemonitor updated")
+		return objs, nil
+	}
+	// todo: handle errors other than `NotFound`
+
+	// local configmap does not exist, creating it
+	if err := m.Create(ctx, pesm); err != nil {
+		return objs, fmt.Errorf("error while creating the postgres-exporter servicemonitor: %w", err)
+	}
+	m.log.Info("postgres-exporter servicemonitor created")
 
 	return objs, nil
 }
