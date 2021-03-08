@@ -28,7 +28,7 @@ all: manager
 
 # Run tests
 test: generate fmt vet manifests
-	go test ./... -coverprofile cover.out
+	go test ./... -coverprofile cover.out -v
 
 # todo: Modify Dockerfile to include the version magic
 # Build manager binary
