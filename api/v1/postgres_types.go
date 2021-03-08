@@ -565,10 +565,10 @@ func (p *Postgres) buildSidecars(c *corev1.ConfigMap) []zalando.Sidecar {
 		return nil
 	}
 
-	postgresExporterPort, error := strconv.ParseInt(c.Data["postgres-exporter-container-port"], 10, 32)
+	exporterContainerPort, error := strconv.ParseInt(c.Data["postgres-exporter-container-port"], 10, 32)
 	if error != nil {
 		// todo log error
-		postgresExporterPort = 9187
+		exporterContainerPort = 9187
 	}
 	return []zalando.Sidecar{
 		{
@@ -577,7 +577,7 @@ func (p *Postgres) buildSidecars(c *corev1.ConfigMap) []zalando.Sidecar {
 			Ports: []corev1.ContainerPort{
 				{
 					Name:          ExporterSidecarPortName.StrVal,
-					ContainerPort: int32(postgresExporterPort),
+					ContainerPort: int32(exporterContainerPort),
 					Protocol:      corev1.ProtocolTCP,
 				},
 			},
