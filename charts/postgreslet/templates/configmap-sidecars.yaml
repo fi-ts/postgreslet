@@ -2,6 +2,7 @@ apiVersion: v1
 data:
   postgres-exporter-image: {{ .Values.sidecars.exporter.image | quote }}
   postgres-exporter-container-port: {{ .Values.sidecars.exporter.containerPort | quote }}
+  postgres-exporter-service-port: {{ .Values.sidecars.exporter.servicePort | quote }}
   postgres-exporter-requests-cpu: {{ .Values.sidecars.exporter.resources.requests.cpu | quote }}
   postgres-exporter-requests-memory: {{ .Values.sidecars.exporter.resources.requests.memory | quote }}
   postgres-exporter-limits-cpu: {{ .Values.sidecars.exporter.resources.limits.cpu | quote }}

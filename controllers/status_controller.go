@@ -67,7 +67,7 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 			continue
 		}
 
-		log.Info("Found owner", "owner", o)
+		log.Info("Found owner", "owner", o.UID)
 		owner = o
 		ownerFound = true
 		break
@@ -87,7 +87,7 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		// update the reference to the zalando instance in the remote object
 		owner.Status.ChildName = instance.Name
 
-		log.Info("Updating owner", "owner", owner)
+		log.Info("Updating owner", "owner", owner.UID)
 		if err := r.Control.Status().Update(ctx, &owner); err != nil {
 			log.Error(err, "failed to update owner object")
 			return err

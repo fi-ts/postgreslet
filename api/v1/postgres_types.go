@@ -42,12 +42,17 @@ const (
 	// ManagedByLabelValue Value of the managed-by label
 	ManagedByLabelValue string = "postgreslet"
 	// PostgresFinalizerName Name of the finalizer to use
-	PostgresFinalizerName        string = "postgres.finalizers.database.fits.cloud"
-	SidecarsCMName               string = "postgres-sidecars-configmap"
-	SidecarsCMFluentBitConfKey   string = "fluent-bit.conf"
-	FluentBitSidecarName         string = "postgres-fluentbit"
+	PostgresFinalizerName string = "postgres.finalizers.database.fits.cloud"
+	// SidecarsCMName Namem of the ConfigMap containing the config for the sidecars
+	SidecarsCMName string = "postgres-sidecars-configmap"
+	// SidecarsCMFluentBitConfKey Name of the key containing the fluent-bit.conf config file
+	SidecarsCMFluentBitConfKey string = "fluent-bit.conf"
+	// FluentBitSidecarName Defines the name of the fluent-bit sidecar
+	FluentBitSidecarName string = "postgres-fluentbit"
+	// SidecarsCMExporterQueriesKey Name of the key containing the queries.yaml config file
 	SidecarsCMExporterQueriesKey string = "queries.yaml"
-	ExporterSidecarName          string = "postgres-exporter"
+	// ExporterSidecarName Defines the name of the postgres exporter sidecar
+	ExporterSidecarName string = "postgres-exporter"
 	// CreatedByAnnotationKey is used to store who in person created this database
 	CreatedByAnnotationKey string = "postgres.database.fits.cloud/created-by"
 	// BackupConfigLabelName if set to true, this secret stores the backupConfig
@@ -84,10 +89,70 @@ type BackupConfig struct {
 	S3SecretKey string `json:"s3secretkey"`
 }
 
-var ZalandoPostgresqlTypeMeta = metav1.TypeMeta{
-	APIVersion: "acid.zalan.do/v1",
-	Kind:       "postgresql",
-}
+var (
+	ZalandoPostgresqlTypeMeta = metav1.TypeMeta{
+		APIVersion: "acid.zalan.do/v1",
+		Kind:       "postgresql",
+	}
+
+	additionalVolumes = []zalando.AdditionalVolume{
+		{
+			Name:      "empty",
+			MountPath: "/opt/empty",
+			TargetContainers: []string{
+				"all",
+			},
+			VolumeSource: corev1.VolumeSource{
+				EmptyDir: &corev1.EmptyDirVolumeSource{},
+			},
+		},
+		{
+			Name:      "postgres-exporter-configmap",
+			MountPath: "/metrics",
+			TargetContainers: []string{
+				ExporterSidecarName,
+			},
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: SidecarsCMName,
+					},
+					Items: []corev1.KeyToPath{
+						{
+							Key:  SidecarsCMExporterQueriesKey,
+							Path: "queries.yaml",
+						},
+					},
+				},
+			},
+		},
+		{
+			Name:      "postgres-fluentbit-configmap",
+			MountPath: "/fluent-bit/etc",
+			TargetContainers: []string{
+				FluentBitSidecarName,
+			},
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: SidecarsCMName,
+					},
+					Items: []corev1.KeyToPath{
+						{
+							Key:  SidecarsCMFluentBitConfKey,
+							Path: "fluent-bit.conf",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	ExporterSidecarPortName intstr.IntOrString = intstr.IntOrString{
+		Type:   intstr.String,
+		StrVal: "exporter",
+	}
+)
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
@@ -405,8 +470,8 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 
 	// skip if the configmap does not exist
 	if c != nil {
-		z.Spec.AdditionalVolumes = p.buildAdditionalVolumes(c)
-		z.Spec.Sidecars = p.buildZalandoSidecars(c)
+		z.Spec.AdditionalVolumes = additionalVolumes
+		z.Spec.Sidecars = p.buildSidecars(c)
 	}
 
 	if p.HasSourceRanges() {
@@ -494,76 +559,16 @@ func init() {
 	SchemeBuilder.Register(&Postgres{}, &PostgresList{})
 }
 
-func (p *Postgres) buildAdditionalVolumes(c *corev1.ConfigMap) []zalando.AdditionalVolume {
+func (p *Postgres) buildSidecars(c *corev1.ConfigMap) []zalando.Sidecar {
 	if c == nil {
 		// abort if the global configmap is not there
 		return nil
 	}
 
-	return []zalando.AdditionalVolume{
-		{
-			Name:      "empty",
-			MountPath: "/opt/empty",
-			TargetContainers: []string{
-				"all",
-			},
-			VolumeSource: corev1.VolumeSource{
-				EmptyDir: &corev1.EmptyDirVolumeSource{},
-			},
-		},
-		{
-			Name:      "postgres-exporter-configmap",
-			MountPath: "/metrics",
-			TargetContainers: []string{
-				ExporterSidecarName,
-			},
-			VolumeSource: corev1.VolumeSource{
-				ConfigMap: &corev1.ConfigMapVolumeSource{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: SidecarsCMName,
-					},
-					Items: []corev1.KeyToPath{
-						{
-							Key:  SidecarsCMExporterQueriesKey,
-							Path: "queries.yaml",
-						},
-					},
-				},
-			},
-		},
-		{
-			Name:      "postgres-fluentbit-configmap",
-			MountPath: "/fluent-bit/etc",
-			TargetContainers: []string{
-				FluentBitSidecarName,
-			},
-			VolumeSource: corev1.VolumeSource{
-				ConfigMap: &corev1.ConfigMapVolumeSource{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: SidecarsCMName,
-					},
-					Items: []corev1.KeyToPath{
-						{
-							Key:  SidecarsCMFluentBitConfKey,
-							Path: "fluent-bit.conf",
-						},
-					},
-				},
-			},
-		},
-	}
-}
-
-func (p *Postgres) buildZalandoSidecars(c *corev1.ConfigMap) []zalando.Sidecar {
-	if c == nil {
-		// abort if the global configmap is not there
-		return nil
-	}
-
-	postgresExporterPort, error := strconv.ParseInt(c.Data["postgres-exporter-container-port"], 10, 32)
+	exporterContainerPort, error := strconv.ParseInt(c.Data["postgres-exporter-container-port"], 10, 32)
 	if error != nil {
 		// todo log error
-		postgresExporterPort = 9187
+		exporterContainerPort = 9187
 	}
 	return []zalando.Sidecar{
 		{
@@ -571,8 +576,8 @@ func (p *Postgres) buildZalandoSidecars(c *corev1.ConfigMap) []zalando.Sidecar {
 			DockerImage: c.Data["postgres-exporter-image"],
 			Ports: []corev1.ContainerPort{
 				{
-					Name:          "exporter",
-					ContainerPort: int32(postgresExporterPort),
+					Name:          ExporterSidecarPortName.StrVal,
+					ContainerPort: int32(exporterContainerPort),
 					Protocol:      corev1.ProtocolTCP,
 				},
 			},
