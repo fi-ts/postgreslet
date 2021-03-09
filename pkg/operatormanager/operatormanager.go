@@ -8,9 +8,11 @@ package operatormanager
 
 import (
 	"context"
+	"encoding/base64"
 	errs "errors"
 	"fmt"
 	"io/ioutil"
+	"strconv"
 	"strings"
 	"time"
 
@@ -30,16 +32,20 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// The serviceAccount name to use for the database pods.
-// TODO: create new account per namespace
-// TODO: use different account for operator and database
-const serviceAccountName string = "postgres-operator"
+const (
+	// The serviceAccount name to use for the database pods.
+	// TODO: create new account per namespace
+	// TODO: use different account for operator and database
+	serviceAccountName string = "postgres-operator"
 
-// PodEnvCMName Name of the pod environment configmap to create and use
-const PodEnvCMName string = "postgres-pod-config"
+	// PodEnvCMName Name of the pod environment configmap to create and use
+	PodEnvCMName string = "postgres-pod-config"
 
-const operatorPodLabelName string = "name"
-const operatorPodLabelValue string = "postgres-operator"
+	operatorPodLabelName  string = "name"
+	operatorPodLabelValue string = "postgres-operator"
+
+	postgresExporterServiceName string = "postgres-exporter"
+)
 
 // operatorPodMatchingLabels is for listing operator pods
 var operatorPodMatchingLabels = client.MatchingLabels{operatorPodLabelName: operatorPodLabelValue}
@@ -94,15 +100,21 @@ func (m *OperatorManager) InstallOrUpdateOperator(ctx context.Context, namespace
 	objs := []client.Object{}
 
 	// Make sure the namespace exists.
-	objs, err := m.ensureNamespace(ctx, namespace, objs)
+	objs, err := m.createNamespace(ctx, namespace, objs)
 	if err != nil {
 		return objs, fmt.Errorf("error while ensuring the existence of namespace %v: %w", namespace, err)
 	}
 
 	// Add our (initially empty) custom pod environment configmap
-	objs, err = m.ensurePodEnvironmentConfigMap(ctx, namespace, objs)
+	objs, err = m.createPodEnvironmentConfigMap(ctx, namespace, objs)
 	if err != nil {
 		return objs, fmt.Errorf("error while creating pod environment configmap %v: %w", namespace, err)
+	}
+
+	// Add our sidecars configmap
+	objs, err = m.createOrUpdateSidecarsConfig(ctx, namespace, objs)
+	if err != nil {
+		return objs, fmt.Errorf("error while creating sidecars config %v: %w", namespace, err)
 	}
 
 	// Decode each YAML to `client.Object`, add the namespace to it and install it.
@@ -220,9 +232,14 @@ func (m *OperatorManager) UninstallOperator(ctx context.Context, namespace strin
 		}
 	}
 
-	// delete pod environment configmap
+	// delete the pod environment configmap
 	if err := m.deletePodEnvironmentConfigMap(ctx, namespace); client.IgnoreNotFound(err) != nil {
 		return fmt.Errorf("error while deleting pod environment configmap: %w", err)
+	}
+
+	// delete the postgres-exporter service
+	if err := m.deleteExporterSidecarService(ctx, namespace); client.IgnoreNotFound(err) != nil {
+		return fmt.Errorf("error while deleting the postgres-exporter service: %w", err)
 	}
 
 	// Delete the namespace.
@@ -378,53 +395,6 @@ func (m *OperatorManager) editConfigMap(cm *v1.ConfigMap, namespace string) {
 	s := []string{pg.TenantLabelName, pg.ProjectIDLabelName}
 	// TODO maybe use a precompiled string here
 	cm.Data["inherited_labels"] = strings.Join(s, ",")
-	// TODO additional vars
-	// debug_logging: "true"
-	// docker_image: "{{ versions.spiloImage }}"
-	// enable_ebs_gp3_migration: "false"
-	// enable_master_load_balancer: "false"
-	// enable_pgversion_env_var: "true"
-	// enable_pod_disruption_budget: "true"
-	// enable_replica_load_balancer: "false"
-	// enable_sidecars: "true"
-	// enable_spilo_wal_path_compat: "true"
-	// enable_teams_api: "true"
-	// external_traffic_policy: "Cluster"
-	// logical_backup_docker_image: "{{ versions.logical_backupImage }}"
-	// log_s3_bucket: "{{ s3bucket.log_s3_bucket }}"
-	// wal_s3_bucket: "{{ s3bucket.wal_s3_bucket }}"
-	// logical_backup_s3_access_key_id: "{{ s3bucket.logical_backup_s3_access_key_id }}"
-	// logical_backup_s3_bucket: "{{ s3bucket.logical_backup_s3_bucket }}"
-	// logical_backup_s3_endpoint: "{{ s3bucket.logical_backup_s3_endpoint }}"
-	// logical_backup_s3_secret_access_key: "{{ s3bucket.logical_backup_s3_secret_access_key }}"
-	// logical_backup_s3_sse: "{{ s3bucket.logical_backup_s3_sse }}"
-	// logical_backup_schedule: "{{ s3bucket.logical_backup_schedule }}"
-	// master_dns_name_format: "{cluster}.{team}.{hostedzone}"
-	// pam_role_name: "{{ authentication.pam_role_name }}"
-	// pdb_name_format: "postgres-{cluster}-pdb"
-	// pod_deletion_wait_timeout: 10m
-	// pod_environment_configmap: "{{ pod_environment_cm.pod_environment_configmap }}"
-	// pod_label_wait_timeout: 10m
-	// pod_management_policy: "ordered_ready"
-	// pod_role_label: spilo-role
-	// pod_terminate_grace_period: 5m
-	// postgres_superuser_teams: "postgres_superusers"
-	// protected_role_names: "admin"
-	// ready_wait_interval: 3s
-	// ready_wait_timeout: 30s
-	// repair_period: 5m
-	// replica_dns_name_format: "{cluster}-repl.{team}.{hostedzone}"
-	// replication_username: standby
-	// resource_check_interval: 3s
-	// resource_check_timeout: 10m
-	// resync_period: 30m
-	// ring_log_lines: "100"
-	// secret_name_template: "{username}.{cluster}.credentials"
-	// spilo_privileged: "false"
-	// storage_resize_mode: "pvc"
-	// super_username: postgres
-	// team_admin_role: "admin"
-
 }
 
 // ensureCleanMetadata ensures obj has clean metadata
@@ -447,8 +417,8 @@ func (m *OperatorManager) ensureCleanMetadata(obj runtime.Object) error {
 	return nil
 }
 
-// ensureNamespace ensures namespace exists
-func (m *OperatorManager) ensureNamespace(ctx context.Context, namespace string, objs []client.Object) ([]client.Object, error) {
+// createNamespace ensures namespace exists
+func (m *OperatorManager) createNamespace(ctx context.Context, namespace string, objs []client.Object) ([]client.Object, error) {
 	if err := m.Get(ctx, client.ObjectKey{Name: namespace}, &corev1.Namespace{}); err != nil {
 		// errors other than `not found`
 		if !errors.IsNotFound(err) {
@@ -473,13 +443,14 @@ func (m *OperatorManager) ensureNamespace(ctx context.Context, namespace string,
 }
 
 // createPodEnvironmentConfigMap creates a new ConfigMap with additional environment variables for the pods
-func (m *OperatorManager) ensurePodEnvironmentConfigMap(ctx context.Context, namespace string, objs []client.Object) ([]client.Object, error) {
+func (m *OperatorManager) createPodEnvironmentConfigMap(ctx context.Context, namespace string, objs []client.Object) ([]client.Object, error) {
 	ns := types.NamespacedName{
 		Namespace: namespace,
 		Name:      PodEnvCMName,
 	}
 	if err := m.Get(ctx, ns, &v1.ConfigMap{}); err == nil {
 		// configmap already exists, nothing to do here
+		// we will update the configmap with the correct S3 config in the postgres controller
 		m.log.Info("Pod Environment ConfigMap already exists")
 		return objs, nil
 	}
@@ -500,6 +471,149 @@ func (m *OperatorManager) ensurePodEnvironmentConfigMap(ctx context.Context, nam
 	return objs, nil
 }
 
+func (m *OperatorManager) createOrUpdateSidecarsConfig(ctx context.Context, namespace string, objs []client.Object) ([]client.Object, error) {
+	// try to fetch the global sidecars configmap
+	cns := types.NamespacedName{
+		// TODO don't use string literals here! name is dependent of the release name of the helm chart!
+		Namespace: "postgreslet-system",
+		Name:      "postgreslet-postgres-sidecars",
+	}
+	c := &v1.ConfigMap{}
+	if err := m.Get(ctx, cns, c); err != nil {
+		// configmap with configuration does not exists, nothing we can do here...
+		m.log.Error(err, "could not fetch config for sidecars")
+		return objs, err
+	}
+
+	// Add our sidecars configmap
+	objs, err := m.createOrUpdateSidecarsConfigMap(ctx, namespace, c, objs)
+	if err != nil {
+		return objs, fmt.Errorf("error while creating sidecars configmap %v: %w", namespace, err)
+	}
+
+	// Add services for our sidecars
+	objs, err = m.createOrUpdateExporterSidecarService(ctx, namespace, c, objs)
+	if err != nil {
+		return objs, fmt.Errorf("error while creating sidecars services %v: %w", namespace, err)
+	}
+
+	return objs, nil
+}
+
+func (m *OperatorManager) createOrUpdateSidecarsConfigMap(ctx context.Context, namespace string, c *v1.ConfigMap, objs []client.Object) ([]client.Object, error) {
+
+	sccm := &v1.ConfigMap{}
+	if err := m.SetName(sccm, pg.SidecarsCMName); err != nil {
+		return objs, fmt.Errorf("error while setting the name of the new Sidecars ConfigMap to %v: %w", namespace, err)
+	}
+	if err := m.SetNamespace(sccm, namespace); err != nil {
+		return objs, fmt.Errorf("error while setting the namespace of the new Sidecars ConfigMap to %v: %w", namespace, err)
+	}
+
+	// initialize map
+	sccm.Data = make(map[string]string)
+
+	// decode and write the fluentd.conf key from the global configmap to the local configmap
+	b, err := base64.StdEncoding.DecodeString(c.Data["fluent-bit.conf"])
+	if err == nil {
+
+		sccm.Data[pg.SidecarsCMFluentBitConfKey] = string(b)
+	}
+
+	// decode and write the queries.yaml key from the global configmap to the local configmap
+	b, err = base64.StdEncoding.DecodeString(c.Data["queries.yaml"])
+	if err == nil {
+		sccm.Data[pg.SidecarsCMExporterQueriesKey] = string(b)
+	}
+
+	// try to fetch any existing local sidecars configmap
+	ns := types.NamespacedName{
+		Namespace: namespace,
+		Name:      pg.SidecarsCMName,
+	}
+	if err := m.Get(ctx, ns, &v1.ConfigMap{}); err == nil {
+		// local configmap aleady exists, updating it
+		if err := m.Update(ctx, sccm); err != nil {
+			return objs, fmt.Errorf("error while updating the new Sidecars ConfigMap: %w", err)
+		}
+		m.log.Info("Sidecars ConfigMap updated")
+		return objs, nil
+	}
+	// todo: handle errors other than `NotFound`
+
+	// local configmap does not exist, creating it
+	if err := m.Create(ctx, sccm); err != nil {
+		return objs, fmt.Errorf("error while creating the new Sidecars ConfigMap: %w", err)
+	}
+	m.log.Info("new Sidecars ConfigMap created")
+
+	return objs, nil
+}
+
+// createOrUpdateExporterSidecarService ensures the neccessary services to acces the sidecars exist
+func (m *OperatorManager) createOrUpdateExporterSidecarService(ctx context.Context, namespace string, c *v1.ConfigMap, objs []client.Object) ([]client.Object, error) {
+	exporterServicePort, error := strconv.ParseInt(c.Data["postgres-exporter-service-port"], 10, 32)
+	if error != nil {
+		// todo log error
+		exporterServicePort = 9187
+	}
+
+	pes := &v1.Service{}
+
+	if err := m.SetName(pes, postgresExporterServiceName); err != nil {
+		return objs, fmt.Errorf("error while setting the name of the postgres-exporter service to %v: %w", namespace, err)
+	}
+	if err := m.SetNamespace(pes, namespace); err != nil {
+		return objs, fmt.Errorf("error while setting the namespace of the postgres-exporter service to %v: %w", namespace, err)
+	}
+	labels := map[string]string{
+		// "application": "spilo", // TODO check if we still need that label, IsOperatorDeletable won't work anymore if we set it.
+		"app": "postgres-exporter",
+	}
+	if err := m.SetLabels(pes, labels); err != nil {
+		return objs, fmt.Errorf("error while setting the namespace of the postgres-exporter service to %v: %w", namespace, err)
+	}
+	pes.Spec.Ports = []v1.ServicePort{
+		{
+			Name:       "metrics",
+			Port:       int32(exporterServicePort),
+			Protocol:   v1.ProtocolTCP,
+			TargetPort: pg.ExporterSidecarPortName,
+		},
+	}
+	selector := map[string]string{
+		"application": "spilo",
+	}
+	pes.Spec.Selector = selector
+	pes.Spec.Type = v1.ServiceTypeClusterIP
+
+	// try to fetch any existing postgres-exporter service
+	ns := types.NamespacedName{
+		Namespace: namespace,
+		Name:      postgresExporterServiceName,
+	}
+	old := &v1.Service{}
+	if err := m.Get(ctx, ns, old); err == nil {
+		// service exists, overwriting it (but using the same clusterip)
+		pes.Spec.ClusterIP = old.Spec.ClusterIP
+		pes.ObjectMeta.ResourceVersion = old.GetObjectMeta().GetResourceVersion()
+		if err := m.Update(ctx, pes); err != nil {
+			return objs, fmt.Errorf("error while updating the postgres-exporter service: %w", err)
+		}
+		m.log.Info("postgres-exporter service updated")
+		return objs, nil
+	}
+	// todo: handle errors other than `NotFound`
+
+	// local configmap does not exist, creating it
+	if err := m.Create(ctx, pes); err != nil {
+		return objs, fmt.Errorf("error while creating the postgres-exporter service: %w", err)
+	}
+	m.log.Info("postgres-exporter service created")
+
+	return objs, nil
+}
+
 func (m *OperatorManager) deletePodEnvironmentConfigMap(ctx context.Context, namespace string) error {
 	cm := &v1.ConfigMap{}
 	if err := m.SetName(cm, PodEnvCMName); err != nil {
@@ -512,6 +626,22 @@ func (m *OperatorManager) deletePodEnvironmentConfigMap(ctx context.Context, nam
 		return fmt.Errorf("error while deleting the Pod Environment ConfigMap: %w", err)
 	}
 	m.log.Info("Pod Environment ConfigMap deleted")
+
+	return nil
+}
+
+func (m *OperatorManager) deleteExporterSidecarService(ctx context.Context, namespace string) error {
+	s := &v1.Service{}
+	if err := m.SetName(s, postgresExporterServiceName); err != nil {
+		return fmt.Errorf("error while setting the name of the postgres-exporter service to delete to %v: %w", PodEnvCMName, err)
+	}
+	if err := m.SetNamespace(s, namespace); err != nil {
+		return fmt.Errorf("error while setting the namespace of the postgres-exporter service to delete to %v: %w", namespace, err)
+	}
+	if err := m.Delete(ctx, s); err != nil {
+		return fmt.Errorf("error while deleting the postgres-exporter service: %w", err)
+	}
+	m.log.Info("postgres-exporter service deleted")
 
 	return nil
 }
