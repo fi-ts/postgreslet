@@ -100,13 +100,13 @@ func (m *OperatorManager) InstallOrUpdateOperator(ctx context.Context, namespace
 	objs := []client.Object{}
 
 	// Make sure the namespace exists.
-	objs, err := m.createOrUpdateNamespace(ctx, namespace, objs)
+	objs, err := m.createNamespace(ctx, namespace, objs)
 	if err != nil {
 		return objs, fmt.Errorf("error while ensuring the existence of namespace %v: %w", namespace, err)
 	}
 
 	// Add our (initially empty) custom pod environment configmap
-	objs, err = m.updatePodEnvironmentConfigMap(ctx, namespace, objs)
+	objs, err = m.createPodEnvironmentConfigMap(ctx, namespace, objs)
 	if err != nil {
 		return objs, fmt.Errorf("error while creating pod environment configmap %v: %w", namespace, err)
 	}
@@ -184,13 +184,6 @@ func (m *OperatorManager) IsOperatorInstalled(ctx context.Context, namespace str
 
 // UninstallOperator uninstalls the operator
 func (m *OperatorManager) UninstallOperator(ctx context.Context, namespace string) error {
-	// delete the postgres-exporter service
-	if err := m.deleteExporterSidecarService(ctx, namespace); client.IgnoreNotFound(err) != nil {
-		// TODO do we want to return here or continue?
-		m.log.Error(err, "error while deleting th epostgres-exporter service, ignoring")
-		// return fmt.Errorf("error while deleting th epostgres-exporter service: %w", err)
-	}
-
 	items := m.list.Items
 	for i := range items {
 		item := items[len(items)-1-i]
@@ -242,6 +235,11 @@ func (m *OperatorManager) UninstallOperator(ctx context.Context, namespace strin
 	// delete the pod environment configmap
 	if err := m.deletePodEnvironmentConfigMap(ctx, namespace); client.IgnoreNotFound(err) != nil {
 		return fmt.Errorf("error while deleting pod environment configmap: %w", err)
+	}
+
+	// delete the postgres-exporter service
+	if err := m.deleteExporterSidecarService(ctx, namespace); client.IgnoreNotFound(err) != nil {
+		return fmt.Errorf("error while deleting the postgres-exporter service: %w", err)
 	}
 
 	// Delete the namespace.
@@ -419,8 +417,8 @@ func (m *OperatorManager) ensureCleanMetadata(obj runtime.Object) error {
 	return nil
 }
 
-// createOrUpdateNamespace ensures namespace exists
-func (m *OperatorManager) createOrUpdateNamespace(ctx context.Context, namespace string, objs []client.Object) ([]client.Object, error) {
+// createNamespace ensures namespace exists
+func (m *OperatorManager) createNamespace(ctx context.Context, namespace string, objs []client.Object) ([]client.Object, error) {
 	if err := m.Get(ctx, client.ObjectKey{Name: namespace}, &corev1.Namespace{}); err != nil {
 		// errors other than `not found`
 		if !errors.IsNotFound(err) {
@@ -445,7 +443,7 @@ func (m *OperatorManager) createOrUpdateNamespace(ctx context.Context, namespace
 }
 
 // createPodEnvironmentConfigMap creates a new ConfigMap with additional environment variables for the pods
-func (m *OperatorManager) updatePodEnvironmentConfigMap(ctx context.Context, namespace string, objs []client.Object) ([]client.Object, error) {
+func (m *OperatorManager) createPodEnvironmentConfigMap(ctx context.Context, namespace string, objs []client.Object) ([]client.Object, error) {
 	ns := types.NamespacedName{
 		Namespace: namespace,
 		Name:      PodEnvCMName,
