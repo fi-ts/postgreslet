@@ -64,6 +64,8 @@ var _ = BeforeSuite(func(done Done) {
 	err = zalando.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
+	// +kubebuilder:scaffold:scheme
+
 	ctrlClient, err = client.New(ctrlCfg, client.Options{Scheme: scheme.Scheme})
 	Expect(err).ToNot(HaveOccurred())
 	Expect(ctrlClient).ToNot(BeNil())
@@ -82,6 +84,8 @@ var _ = BeforeSuite(func(done Done) {
 
 	err = zalando.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
+
+	// +kubebuilder:scaffold:scheme
 
 	svcClient, err = client.New(svcCfg, client.Options{Scheme: scheme.Scheme})
 	Expect(err).ToNot(HaveOccurred())
