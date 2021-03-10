@@ -136,8 +136,8 @@ func main() {
 	}
 
 	if err = (&controllers.PostgresReconciler{
-		Client:          ctrlPlaneClusterMgr.GetClient(),
-		Service:         svcClusterMgr.GetClient(),
+		CtrlClient:      ctrlPlaneClusterMgr.GetClient(),
+		SvcClient:       svcClusterMgr.GetClient(),
 		Log:             ctrl.Log.WithName("controllers").WithName("Postgres"),
 		Scheme:          ctrlPlaneClusterMgr.GetScheme(),
 		PartitionID:     partitionID,
@@ -150,10 +150,10 @@ func main() {
 	}
 
 	if err = (&controllers.StatusReconciler{
-		Client:  svcClusterMgr.GetClient(),
-		Control: ctrlPlaneClusterMgr.GetClient(),
-		Log:     ctrl.Log.WithName("controllers").WithName("Status"),
-		Scheme:  svcClusterMgr.GetScheme(),
+		SvcClient:  svcClusterMgr.GetClient(),
+		CtrlClient: ctrlPlaneClusterMgr.GetClient(),
+		Log:        ctrl.Log.WithName("controllers").WithName("Status"),
+		Scheme:     svcClusterMgr.GetScheme(),
 	}).SetupWithManager(svcClusterMgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Status")
 		os.Exit(1)

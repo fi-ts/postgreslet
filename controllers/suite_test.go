@@ -7,6 +7,7 @@
 package controllers
 
 import (
+	"context"
 	"log"
 	"path/filepath"
 	"testing"
@@ -15,6 +16,7 @@ import (
 	. "github.com/onsi/gomega"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
+	cr "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	"sigs.k8s.io/controller-runtime/pkg/envtest/printer"
@@ -27,13 +29,13 @@ import (
 // These tests use Ginkgo (BDD-style Go testing framework). Refer to
 // http://onsi.github.io/ginkgo/ to learn more about Ginkgo.
 
-var ctrlCfg *rest.Config
-var ctrlClient client.Client
-var ctrlTestEnv *envtest.Environment
+var ctrlClusterCfg *rest.Config
+var ctrlClusterClient client.Client
+var ctrlClusterTestEnv *envtest.Environment
 
-var svcCfg *rest.Config
-var svcClient client.Client
-var svcTestEnv *envtest.Environment
+var svcClusterCfg *rest.Config
+var svcClusterClient client.Client
+var svcClusterTestEnv *envtest.Environment
 
 func TestAPIs(t *testing.T) {
 	RegisterFailHandler(Fail)
@@ -47,16 +49,16 @@ var _ = BeforeSuite(func(done Done) {
 	By("bootstrapping test environment")
 
 	// ctrl cluster
-	ctrlTestEnv = &envtest.Environment{
+	ctrlClusterTestEnv = &envtest.Environment{
 		CRDDirectoryPaths: []string{filepath.Join("..", "config", "crd", "bases")},
 	}
 
 	var err error
-	ctrlCfg, err = ctrlTestEnv.Start()
+	ctrlClusterCfg, err = ctrlClusterTestEnv.Start()
 	Expect(err).ToNot(HaveOccurred())
-	Expect(ctrlCfg).ToNot(BeNil())
+	Expect(ctrlClusterCfg).ToNot(BeNil())
 
-	log.Println(ctrlTestEnv)
+	log.Println("ctrlClusterTestEnv: ", ctrlClusterTestEnv)
 
 	err = databasev1.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
@@ -65,19 +67,19 @@ var _ = BeforeSuite(func(done Done) {
 	Expect(err).NotTo(HaveOccurred())
 
 	// +kubebuilder:scaffold:scheme
-
-	ctrlClient, err = client.New(ctrlCfg, client.Options{Scheme: scheme.Scheme})
-	Expect(err).ToNot(HaveOccurred())
-	Expect(ctrlClient).ToNot(BeNil())
 
 	// svc cluster
-	svcTestEnv = &envtest.Environment{}
+	svcClusterTestEnv = &envtest.Environment{
+		CRDInstallOptions: envtest.CRDInstallOptions{
+			Paths: []string{filepath.Join("..", "external")},
+		},
+	}
 
-	svcCfg, err = svcTestEnv.Start()
+	svcClusterCfg, err = svcClusterTestEnv.Start()
 	Expect(err).ToNot(HaveOccurred())
-	Expect(svcCfg).ToNot(BeNil())
+	Expect(svcClusterCfg).ToNot(BeNil())
 
-	log.Println(svcTestEnv)
+	log.Println("svcClusterTestEnv: ", svcClusterTestEnv)
 
 	err = databasev1.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
@@ -87,9 +89,51 @@ var _ = BeforeSuite(func(done Done) {
 
 	// +kubebuilder:scaffold:scheme
 
-	svcClient, err = client.New(svcCfg, client.Options{Scheme: scheme.Scheme})
+	ctrlClusterMgr, err := cr.NewManager(ctrlClusterCfg, cr.Options{
+		Scheme: scheme.Scheme,
+	})
 	Expect(err).ToNot(HaveOccurred())
-	Expect(svcClient).ToNot(BeNil())
+	Expect(ctrlClusterMgr).ToNot(BeNil())
+
+	svcClusterMgr, err := cr.NewManager(svcClusterCfg, cr.Options{
+		MetricsBindAddress: "0",
+		Scheme:             scheme.Scheme,
+	})
+	Expect(err).ToNot(HaveOccurred())
+	Expect(svcClusterMgr).ToNot(BeNil())
+
+	err = (&PostgresReconciler{
+		CtrlClient: ctrlClusterMgr.GetClient(),
+		SvcClient:  svcClusterMgr.GetClient(),
+		Log:        cr.Log.WithName("controllers").WithName("Postgres"),
+	}).SetupWithManager(ctrlClusterMgr)
+	Expect(err).ToNot(HaveOccurred())
+
+	ctx := context.Background()
+	go func() {
+		defer GinkgoRecover()
+		err = ctrlClusterMgr.Start(ctx)
+		Expect(err).ToNot(HaveOccurred())
+	}()
+
+	ctrlClusterClient = ctrlClusterMgr.GetClient()
+	Expect(ctrlClusterClient).ToNot(BeNil())
+
+	err = (&StatusReconciler{
+		CtrlClient: ctrlClusterMgr.GetClient(),
+		SvcClient:  svcClusterMgr.GetClient(),
+		Log:        cr.Log.WithName("controllers").WithName("Status"),
+	}).SetupWithManager(svcClusterMgr)
+	Expect(err).ToNot(HaveOccurred())
+
+	go func() {
+		defer GinkgoRecover()
+		err := svcClusterMgr.Start(ctx)
+		Expect(err).ToNot(HaveOccurred())
+	}()
+
+	svcClusterClient = svcClusterMgr.GetClient()
+	Expect(svcClusterClient).ToNot(BeNil())
 
 	close(done)
 }, 60)
@@ -97,9 +141,9 @@ var _ = BeforeSuite(func(done Done) {
 var _ = AfterSuite(func() {
 	By("tearing down the test environment")
 
-	err := ctrlTestEnv.Stop()
+	err := ctrlClusterTestEnv.Stop()
 	Expect(err).ToNot(HaveOccurred())
 
-	err = svcTestEnv.Stop()
+	err = svcClusterTestEnv.Stop()
 	Expect(err).ToNot(HaveOccurred())
 })
