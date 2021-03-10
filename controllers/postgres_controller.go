@@ -179,6 +179,20 @@ func (r *PostgresReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context, instance *pg.Postgres, log logr.Logger) error {
+	// Get the sidecar config
+	// try to fetch the global sidecars configmap
+	cns := types.NamespacedName{
+		// TODO don't use string literals here! name is dependent of the release name of the helm chart!
+		Namespace: "postgreslet-system",
+		Name:      "postgreslet-postgres-sidecars",
+	}
+	c := &v1.ConfigMap{}
+	if err := r.SvcClient.Get(ctx, cns, c); err != nil {
+		// configmap with configuration does not exists, nothing we can do here...
+		log.Info("could not fetch config for sidecars")
+		c = nil
+	}
+
 	// Get zalando postgresql and create one if none.
 	rawZ, err := r.getZalandoPostgresql(ctx, instance)
 	if err != nil {
@@ -187,7 +201,7 @@ func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context
 			return fmt.Errorf("failed to fetch zalando postgresql: %w", err)
 		}
 
-		u, err := instance.ToUnstructuredZalandoPostgresql(nil)
+		u, err := instance.ToUnstructuredZalandoPostgresql(nil, c)
 		if err != nil {
 			return fmt.Errorf("failed to convert to unstructured zalando postgresql: %w", err)
 		}
@@ -203,7 +217,7 @@ func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context
 	// Update zalando postgresql
 	mergeFrom := client.MergeFrom(rawZ.DeepCopy())
 
-	u, err := instance.ToUnstructuredZalandoPostgresql(rawZ)
+	u, err := instance.ToUnstructuredZalandoPostgresql(rawZ, c)
 	if err != nil {
 		return fmt.Errorf("failed to convert to unstructured zalando postgresql: %w", err)
 	}
@@ -230,14 +244,14 @@ func (r *PostgresReconciler) ensureZalandoDependencies(ctx context.Context, p *p
 		}
 	}
 
-	if err := r.createOrUpdateBackupConfig(ctx, p); err != nil {
-		return fmt.Errorf("error while creating backup config: %w", err)
+	if err := r.updatePodEnvironmentConfigMap(ctx, p); err != nil {
+		return fmt.Errorf("error while updating backup config: %w", err)
 	}
 
 	return nil
 }
 
-func (r *PostgresReconciler) createOrUpdateBackupConfig(ctx context.Context, p *pg.Postgres) error {
+func (r *PostgresReconciler) updatePodEnvironmentConfigMap(ctx context.Context, p *pg.Postgres) error {
 	log := r.Log.WithValues("postgres", p.UID)
 	if p.Spec.BackupSecretRef == "" {
 		log.Info("No configured backupSecretRef found, skipping configuration of postgres backup")

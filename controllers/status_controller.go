@@ -67,7 +67,7 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 			continue
 		}
 
-		log.Info("Found owner", "owner", o)
+		log.Info("Found owner", "owner", o.UID)
 		owner = o
 		ownerFound = true
 		break
@@ -87,7 +87,7 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		// update the reference to the zalando instance in the remote object
 		owner.Status.ChildName = instance.Name
 
-		log.Info("Updating owner", "owner", owner)
+		log.Info("Updating owner", "owner", owner.UID)
 		if err := r.CtrlClient.Status().Update(ctx, &owner); err != nil {
 			log.Error(err, "failed to update owner object")
 			return err
@@ -108,7 +108,8 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 			return ctrl.Result{}, fmt.Errorf("failed to update lbSocket of Postgres: %w", err)
 		}
 	} else {
-		log.Error(err, "failed to fetch the corresponding Service of type LoadBalancer")
+		// Todo: Handle errors other than `NotFound`
+		log.Info("unable to fetch the corresponding Service of type LoadBalancer")
 	}
 
 	// Fetch the list of operator-generated secrets

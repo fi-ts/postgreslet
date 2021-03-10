@@ -109,10 +109,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	ctrlPlaneClusterConf, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
-		&clientcmd.ClientConfigLoadingRules{ExplicitPath: ctrlClusterKubeconfig},
-		&clientcmd.ConfigOverrides{},
-	).ClientConfig()
+	ctrlPlaneClusterConf, err := clientcmd.BuildConfigFromFlags("", ctrlClusterKubeconfig)
 	if err != nil {
 		setupLog.Error(err, "unable to get control cluster kubeconfig")
 		os.Exit(1)
