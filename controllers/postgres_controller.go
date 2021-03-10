@@ -130,10 +130,10 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		instance.AddFinalizer(pg.PostgresFinalizerName)
 		if err := r.CtrlClient.Update(ctx, instance); err != nil {
 			r.recorder.Eventf(instance, "Warning", "Self-Reconcilation", "failed to add finalizer: %v", err)
-			return requeue, fmt.Errorf("error while adding finalizer: %w", err)
+			return ctrl.Result{}, fmt.Errorf("error while adding finalizer: %w", err)
 		}
 		log.Info("finalizer added")
-		return ctrl.Result{}, nil
+		// return ctrl.Result{}, nil
 	}
 
 	// Check if zalando dependencies are installed. If not, install them.

@@ -450,6 +450,13 @@ func (p *Postgres) ToPeripheralResourceNamespace() string {
 	return p.ToPeripheralResourceName()
 }
 
+func (p *Postgres) ToPeripheralResourceLookupKey() types.NamespacedName {
+	return types.NamespacedName{
+		Namespace: p.ToPeripheralResourceNamespace(),
+		Name:      p.ToPeripheralResourceName(),
+	}
+}
+
 func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *corev1.ConfigMap) (*unstructured.Unstructured, error) {
 	if z == nil {
 		z = &zalando.Postgresql{}

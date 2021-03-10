@@ -133,9 +133,10 @@ func (m *OperatorManager) InstallOrUpdateOperator(ctx context.Context, namespace
 		}
 	}
 
-	if err = m.waitTillOperatorReady(ctx, time.Minute, time.Second); err != nil {
-		return objs, fmt.Errorf("error while waiting for the readiness of the operator: %w", err)
-	}
+	// Todo: It seems that we don't need this part.
+	// if err = m.waitTillOperatorReady(ctx, time.Minute*5, time.Second); err != nil {
+	// 	return objs, fmt.Errorf("error while waiting for the readiness of the operator: %w", err)
+	// }
 
 	m.log.Info("operator installed")
 	return objs, nil

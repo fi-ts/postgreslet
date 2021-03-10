@@ -8,7 +8,6 @@ package controllers
 
 import (
 	"context"
-	"log"
 	"path/filepath"
 	"testing"
 
@@ -20,8 +19,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	"sigs.k8s.io/controller-runtime/pkg/envtest/printer"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	databasev1 "github.com/fi-ts/postgreslet/api/v1"
+	pg "github.com/fi-ts/postgreslet/api/v1"
+	"github.com/fi-ts/postgreslet/pkg/lbmanager"
+	"github.com/fi-ts/postgreslet/pkg/operatormanager"
+	firewall "github.com/metal-stack/firewall-controller/api/v1"
 	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
 	// +kubebuilder:scaffold:imports
 )
@@ -48,8 +51,9 @@ func TestAPIs(t *testing.T) {
 var _ = BeforeSuite(func(done Done) {
 	By("bootstrapping test environment")
 
-	// ctrl cluster
+	// Create test env for ctrl cluster
 	ctrlClusterTestEnv = &envtest.Environment{
+		// Path to CRD from this project
 		CRDDirectoryPaths: []string{filepath.Join("..", "config", "crd", "bases")},
 	}
 
@@ -58,36 +62,22 @@ var _ = BeforeSuite(func(done Done) {
 	Expect(err).ToNot(HaveOccurred())
 	Expect(ctrlClusterCfg).ToNot(BeNil())
 
-	log.Println("ctrlClusterTestEnv: ", ctrlClusterTestEnv)
-
-	err = databasev1.AddToScheme(scheme.Scheme)
-	Expect(err).NotTo(HaveOccurred())
-
-	err = zalando.AddToScheme(scheme.Scheme)
-	Expect(err).NotTo(HaveOccurred())
+	Expect(pg.AddToScheme(scheme.Scheme)).Should(Succeed())
+	Expect(firewall.AddToScheme(scheme.Scheme)).Should(Succeed())
+	Expect(zalando.AddToScheme(scheme.Scheme)).Should(Succeed())
 
 	// +kubebuilder:scaffold:scheme
 
-	// svc cluster
+	// Create test env for svc cluster
 	svcClusterTestEnv = &envtest.Environment{
 		CRDInstallOptions: envtest.CRDInstallOptions{
-			Paths: []string{filepath.Join("..", "external")},
+			Paths: []string{filepath.Join("..", "external", "crd-postgresql.yaml")},
 		},
 	}
 
 	svcClusterCfg, err = svcClusterTestEnv.Start()
 	Expect(err).ToNot(HaveOccurred())
 	Expect(svcClusterCfg).ToNot(BeNil())
-
-	log.Println("svcClusterTestEnv: ", svcClusterTestEnv)
-
-	err = databasev1.AddToScheme(scheme.Scheme)
-	Expect(err).NotTo(HaveOccurred())
-
-	err = zalando.AddToScheme(scheme.Scheme)
-	Expect(err).NotTo(HaveOccurred())
-
-	// +kubebuilder:scaffold:scheme
 
 	ctrlClusterMgr, err := cr.NewManager(ctrlClusterCfg, cr.Options{
 		Scheme: scheme.Scheme,
@@ -102,34 +92,44 @@ var _ = BeforeSuite(func(done Done) {
 	Expect(err).ToNot(HaveOccurred())
 	Expect(svcClusterMgr).ToNot(BeNil())
 
-	err = (&PostgresReconciler{
-		CtrlClient: ctrlClusterMgr.GetClient(),
-		SvcClient:  svcClusterMgr.GetClient(),
-		Log:        cr.Log.WithName("controllers").WithName("Postgres"),
-	}).SetupWithManager(ctrlClusterMgr)
+	cr.SetLogger(zap.New(zap.UseDevMode(true)))
+
+	// Todo: OperatorManager should be a reconciler
+	opMgr, err := operatormanager.New(
+		svcClusterCfg,
+		filepath.Join("..", "external", "svc-postgres-operator.yaml"),
+		scheme.Scheme,
+		cr.Log.WithName("OperatorManager"),
+		"test-psp")
 	Expect(err).ToNot(HaveOccurred())
 
-	ctx := context.Background()
+	Expect((&PostgresReconciler{
+		CtrlClient:      ctrlClusterMgr.GetClient(),
+		SvcClient:       svcClusterMgr.GetClient(),
+		PartitionID:     "test-partition-id",
+		Tenant:          "test-tenant",
+		OperatorManager: opMgr,
+		LBManager:       lbmanager.New(svcClusterMgr.GetClient(), "127.0.0.1", int32(32000), int32(8000)),
+		Log:             cr.Log.WithName("controllers").WithName("Postgres"),
+	}).SetupWithManager(ctrlClusterMgr)).Should(Succeed())
+
 	go func() {
 		defer GinkgoRecover()
-		err = ctrlClusterMgr.Start(ctx)
-		Expect(err).ToNot(HaveOccurred())
+		Expect(ctrlClusterMgr.Start(newCxt())).Should(Succeed())
 	}()
 
 	ctrlClusterClient = ctrlClusterMgr.GetClient()
 	Expect(ctrlClusterClient).ToNot(BeNil())
 
-	err = (&StatusReconciler{
+	Expect((&StatusReconciler{
 		CtrlClient: ctrlClusterMgr.GetClient(),
 		SvcClient:  svcClusterMgr.GetClient(),
 		Log:        cr.Log.WithName("controllers").WithName("Status"),
-	}).SetupWithManager(svcClusterMgr)
-	Expect(err).ToNot(HaveOccurred())
+	}).SetupWithManager(svcClusterMgr)).Should(Succeed())
 
 	go func() {
 		defer GinkgoRecover()
-		err := svcClusterMgr.Start(ctx)
-		Expect(err).ToNot(HaveOccurred())
+		Expect(svcClusterMgr.Start(newCxt())).Should(Succeed())
 	}()
 
 	svcClusterClient = svcClusterMgr.GetClient()
@@ -147,3 +147,7 @@ var _ = AfterSuite(func() {
 	err = svcClusterTestEnv.Stop()
 	Expect(err).ToNot(HaveOccurred())
 })
+
+func newCxt() context.Context {
+	return context.Background()
+}

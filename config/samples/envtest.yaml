@@ -1,0 +1,19 @@
+apiVersion: database.fits.cloud/v1
+kind: Postgres
+metadata:
+  namespace: default
+  name: test-name
+spec:
+  backup:
+    s3BucketURL: ""
+  maintenance:
+    - "Sun:21:00-22:00"
+  numberOfInstances: 2
+  partitionID: test-partition-id
+  projectID: test-project-id
+  size:
+    cpu: 500m
+    memory: 512Mi
+    storageSize: 1Gi
+  tenant: test-tenant
+  version: "12"
