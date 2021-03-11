@@ -22,26 +22,26 @@ import (
 
 var _ = Describe("Postgres controller", func() {
 	const (
-		timeout = time.Second * 300
+		timeout = time.Second * 30
 		// duration = time.Second * 10
 		interval = time.Second * 2
 		// interval = time.Second * 250
 	)
 
-	yamlDir := filepath.Join("..", "config", "samples")
-
 	BeforeEach(func() {})
 	AfterEach(func() {})
 
 	Context("...", func() {
-		instance := &pg.Postgres{}
-
-		It("should install sidercar ConfigMap in service-cluster", func() {
+		It("should succeed", func() {
 			nsObj := &core.Namespace{}
 			nsObj.Name = "postgreslet-system"
 			Expect(svcClusterClient.Create(newCxt(), nsObj)).Should(Succeed())
+			// Eventually(func() bool {
+			// 	return svcClusterClient.Get(newCxt(), types.NamespacedName{
+			// 		Name: nsObj.Name,
+			// 	}, nsObj) != nil
+			// }, timeout, interval).Should(BeTrue())
 
-			// Unmarshal sidecar ConfigMap
 			bytes, err := os.ReadFile(filepath.Join("..", "test", "cm-sidecar.yaml"))
 			Expect(err).ToNot(HaveOccurred())
 
@@ -51,19 +51,49 @@ var _ = Describe("Postgres controller", func() {
 			Expect(svcClusterClient.Create(newCxt(), cm)).Should(Succeed())
 		})
 
-		It("should create Postgres in control-cluster", func() {
-			// Unmarshal Postgres
-			bytes, err := os.ReadFile(filepath.Join(yamlDir, "envtest.yaml"))
+		It("", func() {
+			bytes, err := os.ReadFile(filepath.Join("..", "config", "samples", "postgres.yaml"))
 			Expect(err).ToNot(HaveOccurred())
 			Expect(yaml.Unmarshal(bytes, instance)).Should(Succeed())
 
 			Expect(ctrlClusterClient.Create(newCxt(), instance)).Should(Succeed())
 
-			// Fetch it eventually
+			// Fetch the instance eventually
 			Eventually(func() bool {
 				return ctrlClusterClient.Get(newCxt(), *instance.ToKey(), instance) != nil
 			}, timeout, interval).Should(BeTrue())
 		})
+
+		// It("should install sidercar ConfigMap in service-cluster", func() {
+		// 	nsObj := &core.Namespace{}
+		// 	nsObj.Name = "postgreslet-system"
+		// 	Expect(svcClusterClient.Create(newCxt(), nsObj)).Should(Succeed())
+
+		// 	// Unmarshal sidecar ConfigMap
+		// 	bytes, err := os.ReadFile(filepath.Join("..", "test", "cm-sidecar.yaml"))
+		// 	Expect(err).ToNot(HaveOccurred())
+
+		// 	cm := &core.ConfigMap{}
+		// 	Expect(yaml.Unmarshal(bytes, cm)).Should(Succeed())
+
+		// 	Expect(svcClusterClient.Create(newCxt(), cm)).Should(Succeed())
+		// })
+
+		// It("should create credential Secret in service-cluster", func() {
+		// 	users := []string{"postgres", "standby"}
+		// 	for i := range users {
+
+		// 	}
+		// })
+
+		// It("should create Postgres in control-cluster", func() {
+		// 	Expect(ctrlClusterClient.Create(newCxt(), instance)).Should(Succeed())
+
+		// 	// Fetch it eventually
+		// 	Eventually(func() bool {
+		// 		return ctrlClusterClient.Get(newCxt(), *instance.ToKey(), instance) != nil
+		// 	}, timeout, interval).Should(BeTrue())
+		// })
 
 		It("should add finalizer", func() {
 			Eventually(func() bool {
@@ -97,3 +127,35 @@ var _ = Describe("Postgres controller", func() {
 		})
 	})
 })
+
+// func createConfigMapSidecar() {
+// 	defer GinkgoRecover()
+
+// 	nsObj := &core.Namespace{}
+// 	nsObj.Name = "postgreslet-system"
+// 	Expect(svcClusterClient.Create(newCxt(), nsObj)).Should(Succeed())
+// 	Eventually(func() bool {
+// 		return svcClusterClient.Get(newCxt(), types.NamespacedName{
+// 			Name: nsObj.Name,
+// 		}, nsObj) != nil
+// 	}, timeout, interval).Should(BeTrue())
+
+// 	bytes, err := os.ReadFile(filepath.Join("..", "test", "cm-sidecar.yaml"))
+// 	Expect(err).ToNot(HaveOccurred())
+
+// 	cm := &core.ConfigMap{}
+// 	Expect(yaml.Unmarshal(bytes, cm)).Should(Succeed())
+
+// 	Expect(svcClusterClient.Create(newCxt(), cm)).Should(Succeed())
+// }
+
+// func createPostgres() {
+// 	defer GinkgoRecover()
+
+// 	Expect(ctrlClusterClient.Create(newCxt(), instance)).Should(Succeed())
+
+// 	// Fetch the instance eventually
+// 	Eventually(func() bool {
+// 		return ctrlClusterClient.Get(newCxt(), *instance.ToKey(), instance) != nil
+// 	}, timeout, interval).Should(BeTrue())
+// }

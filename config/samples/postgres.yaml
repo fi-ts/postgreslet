@@ -3,6 +3,7 @@ kind: Postgres
 metadata:
   namespace: default
   name: test-name
+  uid: 00000000-0000-0000-0000-000000000000
 spec:
   backup:
     s3BucketURL: ""

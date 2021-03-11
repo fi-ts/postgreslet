@@ -8,11 +8,13 @@ package controllers
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"testing"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	cr "sigs.k8s.io/controller-runtime"
@@ -32,13 +34,17 @@ import (
 // These tests use Ginkgo (BDD-style Go testing framework). Refer to
 // http://onsi.github.io/ginkgo/ to learn more about Ginkgo.
 
-var ctrlClusterCfg *rest.Config
-var ctrlClusterClient client.Client
-var ctrlClusterTestEnv *envtest.Environment
+var (
+	ctrlClusterCfg     *rest.Config
+	ctrlClusterClient  client.Client
+	ctrlClusterTestEnv *envtest.Environment
 
-var svcClusterCfg *rest.Config
-var svcClusterClient client.Client
-var svcClusterTestEnv *envtest.Environment
+	svcClusterCfg     *rest.Config
+	svcClusterClient  client.Client
+	svcClusterTestEnv *envtest.Environment
+
+	instance *pg.Postgres
+)
 
 func TestAPIs(t *testing.T) {
 	RegisterFailHandler(Fail)
@@ -135,6 +141,8 @@ var _ = BeforeSuite(func(done Done) {
 	svcClusterClient = svcClusterMgr.GetClient()
 	Expect(svcClusterClient).ToNot(BeNil())
 
+	// unmarshalPostgres()
+
 	close(done)
 }, 60)
 
@@ -150,4 +158,12 @@ var _ = AfterSuite(func() {
 
 func newCxt() context.Context {
 	return context.Background()
+}
+
+func unmarshalPostgres() {
+	defer GinkgoRecover()
+
+	bytes, err := os.ReadFile(filepath.Join("..", "config", "samples", "postgres.yaml"))
+	Expect(err).ToNot(HaveOccurred())
+	Expect(yaml.Unmarshal(bytes, instance)).Should(Succeed())
 }

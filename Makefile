@@ -42,10 +42,10 @@ manager: generate fmt vet manifests
 	strip bin/manager
 
 # Run against the configured Kubernetes cluster in ~/.kube/config
-run: generate fmt vet manifests install-crd-cwnp
+run: generate fmt vet manifests install-cm-sidecar install-crd-cwnp
 	go run ./main.go \
-	-partition-id sample-partition \
-	-tenant sample-tenant \
+	-partition-id test-partition-id \
+	-tenant test-tenant \
 	-controlplane-kubeconfig "./kubeconfig" \
 	-load-balancer-ip "127.0.0.1" \
 	-port-range-start 32000 \
@@ -172,3 +172,6 @@ install-crd-cwnp:
 uninstall-crd-cwnp:
 	kubectl delete ns firewall
 	kubectl delete -f https://raw.githubusercontent.com/metal-stack/firewall-controller/master/config/crd/bases/metal-stack.io_clusterwidenetworkpolicies.yaml
+
+install-cm-sidecar:
+	kubectl apply -f test/cm-sidecar.yaml

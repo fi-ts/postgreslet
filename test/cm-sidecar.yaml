@@ -1,4 +1,9 @@
 apiVersion: v1
+kind: Namespace
+metadata:
+  name: postgreslet-system
+---
+apiVersion: v1
 data:
   fluent-bit.conf: W1NFUlZJQ0VdCiAgICBEYWVtb24gICAgICAgICAgb2ZmCiAgICBMb2dfTGV2ZWwgICAgICAgd2FybgpbSU5QVVRdCiAgICBOYW1lIHRhaWwKICAgIFBhdGggL2hvbWUvcG9zdGdyZXMvcGdkYXRhL3Bncm9vdC9wZ19sb2cvKi5jc3YKICAgICNEQiAvaG9tZS9wb3N0Z3Jlcy9wZ2RhdGEvcGdyb290L3BnX2xvZy9wb3N0Z3Jlc3FsLmNzdi5wb3MKICAgIFRhZyAgcHNxbGNzdgpbSU5QVVRdCiAgICBOYW1lIHRhaWwKICAgIFBhdGggL2hvbWUvcG9zdGdyZXMvcGdkYXRhL3Bncm9vdC9wZ19sb2cvKi5sb2cKICAgICNEQiAvaG9tZS9wb3N0Z3Jlcy9wZ2RhdGEvcGdyb290L3BnX2xvZy9wb3N0Z3Jlc3FsLmxvZy5wb3MKICAgIFRhZyAgcHNxbGxvZwpbT1VUUFVUXQogICAgTmFtZSAgc3Rkb3V0CiAgICBNYXRjaCAqKgo=
   postgres-exporter-container-port: "9187"
@@ -18,4 +23,3 @@ kind: ConfigMap
 metadata:
   name: postgreslet-postgres-sidecars
   namespace: postgreslet-system
-  selfLink: /api/v1/namespaces/postgreslet-system/configmaps/postgreslet-postgres-sidecars

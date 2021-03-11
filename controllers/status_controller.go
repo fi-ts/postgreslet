@@ -149,6 +149,7 @@ func (r *StatusReconciler) createOrUpdateSecret(ctx context.Context, in *pg.Post
 	if err != nil {
 		return fmt.Errorf("failed to create or update the secret containing user password pairs: %w", err)
 	}
+	// todo: better the log
 	log.Info("secret created or updated", "operation result", result)
 
 	return nil
