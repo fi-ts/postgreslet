@@ -41,10 +41,10 @@ var requeue = ctrl.Result{
 // PostgresReconciler reconciles a Postgres object
 type PostgresReconciler struct {
 	client.Client
-	Service             client.Client
-	Log                 logr.Logger
-	Scheme              *runtime.Scheme
-	PartitionID, Tenant string
+	Service                           client.Client
+	Log                               logr.Logger
+	Scheme                            *runtime.Scheme
+	PartitionID, Tenant, StorageClass string
 	*operatormanager.OperatorManager
 	*lbmanager.LBManager
 	recorder record.EventRecorder
@@ -201,7 +201,7 @@ func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context
 			return fmt.Errorf("failed to fetch zalando postgresql: %w", err)
 		}
 
-		u, err := instance.ToUnstructuredZalandoPostgresql(nil, c)
+		u, err := instance.ToUnstructuredZalandoPostgresql(nil, c, r.StorageClass)
 		if err != nil {
 			return fmt.Errorf("failed to convert to unstructured zalando postgresql: %w", err)
 		}
@@ -217,7 +217,7 @@ func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context
 	// Update zalando postgresql
 	mergeFrom := client.MergeFrom(rawZ.DeepCopy())
 
-	u, err := instance.ToUnstructuredZalandoPostgresql(rawZ, c)
+	u, err := instance.ToUnstructuredZalandoPostgresql(rawZ, c, r.StorageClass)
 	if err != nil {
 		return fmt.Errorf("failed to convert to unstructured zalando postgresql: %w", err)
 	}
