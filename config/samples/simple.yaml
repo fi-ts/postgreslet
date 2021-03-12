@@ -1,0 +1,15 @@
+apiVersion: database.fits.cloud/v1
+kind: Postgres
+metadata:
+  namespace: metal-extension-cloud
+  name: simple
+spec:
+  numberOfInstances: 1
+  partitionID: sample-partition
+  projectID: projectid-a
+  size:
+    cpu: 500m
+    memory: 512Mi
+    storageSize: 1Gi
+  tenant: sample-tenant
+  version: "12"
