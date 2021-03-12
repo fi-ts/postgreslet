@@ -44,8 +44,8 @@ manager: generate fmt vet manifests
 # Run against the configured Kubernetes cluster in ~/.kube/config
 run: generate fmt vet manifests install-cm-sidecar install-crd-cwnp
 	go run ./main.go \
-	-partition-id test-partition-id \
-	-tenant test-tenant \
+	-partition-id sample-partition \
+	-tenant sample-tenant \
 	-controlplane-kubeconfig "./kubeconfig" \
 	-load-balancer-ip "127.0.0.1" \
 	-port-range-start 32000 \
