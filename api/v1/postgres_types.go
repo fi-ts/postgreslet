@@ -452,7 +452,7 @@ func (p *Postgres) ToPeripheralResourceNamespace() string {
 	return p.ToPeripheralResourceName()
 }
 
-func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *corev1.ConfigMap, s string) (*unstructured.Unstructured, error) {
+func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *corev1.ConfigMap, sc string) (*unstructured.Unstructured, error) {
 	if z == nil {
 		z = &zalando.Postgresql{}
 	}
@@ -469,7 +469,7 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 	z.Spec.Resources.ResourceLimits.Memory = p.Spec.Size.Memory
 	z.Spec.TeamID = p.generateTeamID()
 	z.Spec.Volume.Size = p.Spec.Size.StorageSize
-	z.Spec.Volume.StorageClass = s
+	z.Spec.Volume.StorageClass = sc
 
 	// skip if the configmap does not exist
 	if c != nil {
