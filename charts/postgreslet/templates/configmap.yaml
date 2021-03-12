@@ -9,6 +9,7 @@ data:
   PORT_RANGE_START: {{ .Values.postgreslet.portRangeStart | quote }}
   PORT_RANGE_SIZE: {{ .Values.postgreslet.portRangeSize | quote }}
   CUSTOM_PSP_NAME: {{ include "postgreslet.pspName" . | quote  }}
+  STORAGE_CLASS: {{ .Values.postgreslet.storageClass | quote  }}
 kind: ConfigMap
 metadata:
   name: {{ include "postgreslet.fullname" . }}
