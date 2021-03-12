@@ -435,6 +435,7 @@ func (m *OperatorManager) createNamespace(ctx context.Context, namespace string,
 		if err := m.Create(ctx, nsObj); err != nil {
 			return nil, fmt.Errorf("error while creating namespace %v: %w", namespace, err)
 		}
+		m.log.Info("namespace created", "name", namespace)
 
 		// Append the created namespace to the list of the created `client.Object`s.
 		objs = append(objs, nsObj)

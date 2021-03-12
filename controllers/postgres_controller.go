@@ -11,7 +11,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
-	"time"
 
 	"github.com/go-logr/logr"
 	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
@@ -34,8 +33,7 @@ import (
 
 // requeue defines in how many seconds a requeue should happen
 var requeue = ctrl.Result{
-	Requeue:      true,
-	RequeueAfter: 30 * time.Second,
+	Requeue: true,
 }
 
 // PostgresReconciler reconciles a Postgres object
@@ -80,6 +78,9 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		}
 		log.Info("instance being deleted")
 
+		// todo: remove
+		log.Info("debug", "postgres.status", instance.Status)
+
 		matchingLabels := instance.ToZalandoPostgresqlMatchingLabels()
 		namespace := instance.ToPeripheralResourceNamespace()
 
@@ -121,19 +122,19 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 			r.recorder.Eventf(instance, "Warning", "Self-Reconcilation", "failed to remove finalizer: %v", err)
 			return requeue, err
 		}
+		log.Info("finalizers removed")
+
 		return ctrl.Result{}, nil
 	}
 
 	// Add finalizer if none.
 	if !instance.HasFinalizer(pg.PostgresFinalizerName) {
-		log.Info("finalizer being added")
 		instance.AddFinalizer(pg.PostgresFinalizerName)
 		if err := r.CtrlClient.Update(ctx, instance); err != nil {
 			r.recorder.Eventf(instance, "Warning", "Self-Reconcilation", "failed to add finalizer: %v", err)
 			return ctrl.Result{}, fmt.Errorf("error while adding finalizer: %w", err)
 		}
 		log.Info("finalizer added")
-		// return ctrl.Result{}, nil
 	}
 
 	// Check if zalando dependencies are installed. If not, install them.
@@ -380,6 +381,7 @@ func (r *PostgresReconciler) createOrUpdateCWNP(ctx context.Context, in *pg.Post
 	}); err != nil {
 		return fmt.Errorf("unable to deploy CRD ClusterwideNetworkPolicy: %w", err)
 	}
+	r.Log.WithValues("postgres", in.ToKey()).Info("clusterwidenetworkpolicy created or updated")
 
 	return nil
 }

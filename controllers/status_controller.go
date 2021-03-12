@@ -107,6 +107,7 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		if err := r.CtrlClient.Status().Update(ctx, &owner); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to update lbSocket of Postgres: %w", err)
 		}
+		log.Info("postgres status socket updated")
 	} else {
 		// Todo: Handle errors other than `NotFound`
 		log.Info("unable to fetch the corresponding Service of type LoadBalancer")
@@ -114,8 +115,12 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	// Fetch the list of operator-generated secrets
 	secrets := &corev1.SecretList{}
-	if err := r.SvcClient.List(ctx, secrets, owner.ToUserPasswordsSecretListOption()...); client.IgnoreNotFound(err) != nil {
+	if err := r.SvcClient.List(ctx, secrets, owner.ToUserPasswordsSecretListOption()...); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to fetch the list of operator generated secrets: %w", err)
+	}
+
+	if len(secrets.Items) == 0 {
+		return ctrl.Result{Requeue: true}, nil
 	}
 
 	if err := r.createOrUpdateSecret(ctx, &owner, secrets, log); err != nil {

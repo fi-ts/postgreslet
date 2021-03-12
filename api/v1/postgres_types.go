@@ -409,13 +409,15 @@ func (p *Postgres) ToBackupSecretName() string {
 func (p *Postgres) ToUserPasswordsSecretListOption() []client.ListOption {
 	return []client.ListOption{
 		client.InNamespace(p.ToPeripheralResourceNamespace()),
-		client.MatchingLabels(
-			map[string]string{
-				"application":  "spilo",
-				"cluster-name": p.ToPeripheralResourceName(),
-				"team":         p.generateTeamID(),
-			},
-		),
+		p.ToZalandoPostgresqlMatchingLabels(),
+	}
+}
+
+func (p *Postgres) ToUserPasswordSecretMatchingLabels() map[string]string {
+	return map[string]string{
+		"application":  "spilo",
+		"cluster-name": p.ToPeripheralResourceName(),
+		"team":         p.generateTeamID(),
 	}
 }
 

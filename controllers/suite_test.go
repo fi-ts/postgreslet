@@ -14,20 +14,24 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	core "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/yaml"
-	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	cr "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	"sigs.k8s.io/controller-runtime/pkg/envtest/printer"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 
 	pg "github.com/fi-ts/postgreslet/api/v1"
 	"github.com/fi-ts/postgreslet/pkg/lbmanager"
 	"github.com/fi-ts/postgreslet/pkg/operatormanager"
 	firewall "github.com/metal-stack/firewall-controller/api/v1"
 	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -43,8 +47,14 @@ var (
 	svcClusterClient  client.Client
 	svcClusterTestEnv *envtest.Environment
 
-	instance *pg.Postgres
+	externalYAMLDir     = filepath.Join("..", "external")
+	externalYAMLDirTest = filepath.Join(externalYAMLDir, "test")
+
+	instance = &pg.Postgres{}
 )
+
+func init() {
+}
 
 func TestAPIs(t *testing.T) {
 	RegisterFailHandler(Fail)
@@ -55,45 +65,36 @@ func TestAPIs(t *testing.T) {
 }
 
 var _ = BeforeSuite(func(done Done) {
+	defer close(done)
+
 	By("bootstrapping test environment")
 
-	// Create test env for ctrl cluster
+	// Create test env for ctrl cluster and start it
 	ctrlClusterTestEnv = &envtest.Environment{
 		// Path to CRD from this project
 		CRDDirectoryPaths: []string{filepath.Join("..", "config", "crd", "bases")},
 	}
+	ctrlClusterCfg = startTestEnv(ctrlClusterTestEnv)
 
-	var err error
-	ctrlClusterCfg, err = ctrlClusterTestEnv.Start()
-	Expect(err).ToNot(HaveOccurred())
-	Expect(ctrlClusterCfg).ToNot(BeNil())
-
-	Expect(pg.AddToScheme(scheme.Scheme)).Should(Succeed())
-	Expect(firewall.AddToScheme(scheme.Scheme)).Should(Succeed())
-	Expect(zalando.AddToScheme(scheme.Scheme)).Should(Succeed())
-
-	// +kubebuilder:scaffold:scheme
-
-	// Create test env for svc cluster
+	// Create test env for svc cluster and start it
 	svcClusterTestEnv = &envtest.Environment{
 		CRDInstallOptions: envtest.CRDInstallOptions{
-			Paths: []string{filepath.Join("..", "external", "crd-postgresql.yaml")},
+			Paths: []string{
+				filepath.Join(externalYAMLDir, "crd-postgresql.yaml"),
+				filepath.Join(externalYAMLDirTest, "crd-clusterwidenetworkpolicy.yaml"),
+			},
 		},
 	}
+	svcClusterCfg = startTestEnv(svcClusterTestEnv)
 
-	svcClusterCfg, err = svcClusterTestEnv.Start()
-	Expect(err).ToNot(HaveOccurred())
-	Expect(svcClusterCfg).ToNot(BeNil())
-
-	ctrlClusterMgr, err := cr.NewManager(ctrlClusterCfg, cr.Options{
-		Scheme: scheme.Scheme,
-	})
+	scheme := newScheme()
+	ctrlClusterMgr, err := cr.NewManager(ctrlClusterCfg, cr.Options{Scheme: scheme})
 	Expect(err).ToNot(HaveOccurred())
 	Expect(ctrlClusterMgr).ToNot(BeNil())
 
 	svcClusterMgr, err := cr.NewManager(svcClusterCfg, cr.Options{
 		MetricsBindAddress: "0",
-		Scheme:             scheme.Scheme,
+		Scheme:             scheme,
 	})
 	Expect(err).ToNot(HaveOccurred())
 	Expect(svcClusterMgr).ToNot(BeNil())
@@ -103,8 +104,8 @@ var _ = BeforeSuite(func(done Done) {
 	// Todo: OperatorManager should be a reconciler
 	opMgr, err := operatormanager.New(
 		svcClusterCfg,
-		filepath.Join("..", "external", "svc-postgres-operator.yaml"),
-		scheme.Scheme,
+		filepath.Join(externalYAMLDir, "svc-postgres-operator.yaml"),
+		scheme,
 		cr.Log.WithName("OperatorManager"),
 		"test-psp")
 	Expect(err).ToNot(HaveOccurred())
@@ -119,10 +120,7 @@ var _ = BeforeSuite(func(done Done) {
 		Log:             cr.Log.WithName("controllers").WithName("Postgres"),
 	}).SetupWithManager(ctrlClusterMgr)).Should(Succeed())
 
-	go func() {
-		defer GinkgoRecover()
-		Expect(ctrlClusterMgr.Start(newCxt())).Should(Succeed())
-	}()
+	go startMgr(ctrlClusterMgr)
 
 	ctrlClusterClient = ctrlClusterMgr.GetClient()
 	Expect(ctrlClusterClient).ToNot(BeNil())
@@ -133,18 +131,16 @@ var _ = BeforeSuite(func(done Done) {
 		Log:        cr.Log.WithName("controllers").WithName("Status"),
 	}).SetupWithManager(svcClusterMgr)).Should(Succeed())
 
-	go func() {
-		defer GinkgoRecover()
-		Expect(svcClusterMgr.Start(newCxt())).Should(Succeed())
-	}()
+	go startMgr(svcClusterMgr)
 
 	svcClusterClient = svcClusterMgr.GetClient()
 	Expect(svcClusterClient).ToNot(BeNil())
 
-	// unmarshalPostgres()
-
-	close(done)
-}, 60)
+	createNamespaceFirewall()
+	createPostgresTestInstance()
+	createConfigMapSidecarConfig()
+	createCredentialSecrets()
+}, 1000)
 
 var _ = AfterSuite(func() {
 	By("tearing down the test environment")
@@ -156,14 +152,87 @@ var _ = AfterSuite(func() {
 	Expect(err).ToNot(HaveOccurred())
 })
 
-func newCxt() context.Context {
-	return context.Background()
+func createCredentialSecrets() {
+	defer GinkgoRecover()
+
+	users := []string{"postgres", "standby"}
+	for i := range users {
+		bytes, err := os.ReadFile(filepath.Join(externalYAMLDirTest, string("secret-credential-"+users[i]+".yaml")))
+		Expect(err).ToNot(HaveOccurred())
+		s := &core.Secret{}
+		Expect(yaml.Unmarshal(bytes, s)).Should(Succeed())
+
+		s.Namespace = instance.Namespace
+		s.Name = users[i] + "." + instance.Name + ".credentials"
+		s.Labels = instance.ToUserPasswordSecretMatchingLabels()
+		Expect(ctrlClusterClient.Create(newCtx(), s)).Should(Succeed())
+	}
 }
 
-func unmarshalPostgres() {
+func createConfigMapSidecarConfig() {
+	defer GinkgoRecover()
+
+	nsObj := &core.Namespace{}
+	nsObj.Name = "postgreslet-system"
+	Expect(svcClusterClient.Create(newCtx(), nsObj)).Should(Succeed())
+
+	bytes, err := os.ReadFile(filepath.Join(externalYAMLDirTest, "cm-sidecar.yaml"))
+	Expect(err).ToNot(HaveOccurred())
+
+	cm := &core.ConfigMap{}
+	Expect(yaml.Unmarshal(bytes, cm)).Should(Succeed())
+
+	Expect(svcClusterClient.Create(newCtx(), cm)).Should(Succeed())
+}
+
+func createNamespaceFirewall() {
+	defer GinkgoRecover()
+
+	nsObj := &core.Namespace{}
+	nsObj.Name = "firewall"
+	Expect(svcClusterClient.Create(newCtx(), nsObj)).Should(Succeed())
+}
+
+func createPostgresTestInstance() {
 	defer GinkgoRecover()
 
 	bytes, err := os.ReadFile(filepath.Join("..", "config", "samples", "postgres.yaml"))
 	Expect(err).ToNot(HaveOccurred())
 	Expect(yaml.Unmarshal(bytes, instance)).Should(Succeed())
+
+	Expect(ctrlClusterClient.Create(newCtx(), instance)).Should(Succeed())
+}
+
+func newCtx() context.Context {
+	return context.Background()
+}
+
+func newScheme() *runtime.Scheme {
+	defer GinkgoRecover()
+
+	scheme := runtime.NewScheme()
+	Expect(apiextensionsv1.AddToScheme(scheme)).Should(Succeed())
+	Expect(clientgoscheme.AddToScheme(scheme)).Should(Succeed())
+	Expect(firewall.AddToScheme(scheme)).Should(Succeed())
+	Expect(pg.AddToScheme(scheme)).Should(Succeed())
+	Expect(zalando.AddToScheme(scheme)).Should(Succeed())
+
+	// +kubebuilder:scaffold:scheme
+
+	return scheme
+}
+
+func startMgr(mgr manager.Manager) {
+	defer GinkgoRecover()
+	Expect(mgr.Start(newCtx())).Should(Succeed())
+}
+
+func startTestEnv(env *envtest.Environment) *rest.Config {
+	defer GinkgoRecover()
+
+	cfg, err := env.Start()
+	Expect(err).ToNot(HaveOccurred())
+	Expect(cfg).ToNot(BeNil())
+
+	return cfg
 }

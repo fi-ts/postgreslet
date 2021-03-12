@@ -50,7 +50,7 @@ func main() {
 	var metricsAddrCtrlMgr, metricsAddrSvcMgr, partitionID, tenant, ctrlClusterKubeconfig, pspName, lbIP string
 	var enableLeaderElection bool
 	var portRangeStart, portRangeSize int
-	flag.StringVar(&metricsAddrSvcMgr, "metrics-addr-svc-mgr", ":8081", "The address the metric endpoint of the service cluster manager binds to.")
+	flag.StringVar(&metricsAddrSvcMgr, "metrics-addr-svc-mgr", ":8080", "The address the metric endpoint of the service cluster manager binds to.")
 	flag.StringVar(&metricsAddrCtrlMgr, "metrics-addr-ctrl-mgr", "0", "The address the metric endpoint of the control cluster manager binds to.")
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", false,
 		"Enable leader election for controller manager. "+

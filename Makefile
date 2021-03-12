@@ -27,7 +27,7 @@ POSTGRES_CRD_URL ?= https://raw.githubusercontent.com/zalando/postgres-operator/
 all: manager
 
 # Run tests
-test: generate fmt vet manifests
+test: generate fmt vet manifests # crd-cwnp-for-testing # todo: add it back when github functions again
 	go test ./... -coverprofile cover.out -v
 
 # todo: Modify Dockerfile to include the version magic
@@ -174,4 +174,12 @@ uninstall-crd-cwnp:
 	kubectl delete -f https://raw.githubusercontent.com/metal-stack/firewall-controller/master/config/crd/bases/metal-stack.io_clusterwidenetworkpolicies.yaml
 
 install-cm-sidecar:
+	kubectl create ns postgreslet-system --dry-run=client --save-config -o yaml | kubectl apply -f -
 	kubectl apply -f test/cm-sidecar.yaml
+
+crd-cwnp-for-testing:
+	@{ \
+	set -e ;\
+	YAML=external/test/crd-clusterwidenetworkpolicy.yaml ;\
+	kubectl apply -f https://raw.githubusercontent.com/metal-stack/firewall-controller/master/config/crd/bases/metal-stack.io_clusterwidenetworkpolicies.yaml -o yaml | sed '/^  resourceVersion/d' > $$YAML ;\
+	}
