@@ -309,9 +309,9 @@ func (r *PostgresReconciler) updatePodEnvironmentConfigMap(ctx context.Context, 
 		"AWS_ACCESS_KEY_ID":                awsAccessKeyID,
 		"AWS_SECRET_ACCESS_KEY":            awsSecretAccessKey,
 		"AWS_S3_FORCE_PATH_STYLE":          "true",
-		"AWS_REGION":                       "us-east-1",
-		"WALG_DISABLE_S3_SSE":              "true", // disable server side encryption
-		"WALG_S3_SSE":                      "",     // server side encryptio key
+		"AWS_REGION":                       "dummy", // we don't use AWS S3, we don't need a proper region
+		"WALG_DISABLE_S3_SSE":              "true",  // disable server side encryption
+		"WALG_S3_SSE":                      "",      // server side encryptio key
 		"BACKUP_SCHEDULE":                  backupSchedule,
 		"BACKUP_NUM_TO_RETAIN":             backupNumToRetain,
 	}
