@@ -174,7 +174,7 @@ uninstall-crd-cwnp:
 
 install-cm-sidecar:
 	kubectl create ns postgreslet-system --dry-run=client --save-config -o yaml | kubectl apply -f -
-	kubectl apply -f test/cm-sidecar.yaml
+	kubectl apply -f external/test/cm-sidecar.yaml
 
 crd-cwnp-for-testing:
 	@{ \

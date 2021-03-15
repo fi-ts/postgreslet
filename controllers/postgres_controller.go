@@ -38,10 +38,10 @@ var requeue = ctrl.Result{
 
 // PostgresReconciler reconciles a Postgres object
 type PostgresReconciler struct {
-	CtrlClient          client.Client
-	SvcClient           client.Client
-	Log                 logr.Logger
-	Scheme              *runtime.Scheme
+	CtrlClient                        client.Client
+	SvcClient                         client.Client
+	Log                               logr.Logger
+	Scheme                            *runtime.Scheme
 	PartitionID, Tenant, StorageClass string
 	*operatormanager.OperatorManager
 	*lbmanager.LBManager

@@ -14,7 +14,6 @@ import (
 	"io/ioutil"
 	"strconv"
 	"strings"
-	"time"
 
 	pg "github.com/fi-ts/postgreslet/api/v1"
 	"github.com/go-logr/logr"
@@ -27,7 +26,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -666,43 +664,43 @@ func (m *OperatorManager) toObjectKey(obj runtime.Object, namespace string) (cli
 }
 
 // waitTillOperatorReady waits till the operator pod is ready or timeout is reached, polling the status every period
-func (m *OperatorManager) waitTillOperatorReady(ctx context.Context, timeout time.Duration, period time.Duration) error {
-	ctx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
+// func (m *OperatorManager) waitTillOperatorReady(ctx context.Context, timeout time.Duration, period time.Duration) error {
+// 	ctx, cancel := context.WithTimeout(ctx, timeout)
+// 	defer cancel()
 
-	// Wait till there's at least one `postgres-operator` pod with status `running`.
-	if err := wait.Poll(period, timeout, func() (bool, error) {
-		// Fetch the pods with the matching labels.
-		pods := &corev1.PodList{}
-		if err := m.List(ctx, pods, operatorPodMatchingLabels); err != nil {
-			// `Not found` isn't an error.
-			return false, client.IgnoreNotFound(err)
-		}
-		if len(pods.Items) == 0 {
-			return false, nil
-		}
+// 	// Wait till there's at least one `postgres-operator` pod with status `running`.
+// 	if err := wait.Poll(period, timeout, func() (bool, error) {
+// 		// Fetch the pods with the matching labels.
+// 		pods := &corev1.PodList{}
+// 		if err := m.List(ctx, pods, operatorPodMatchingLabels); err != nil {
+// 			// `Not found` isn't an error.
+// 			return false, client.IgnoreNotFound(err)
+// 		}
+// 		if len(pods.Items) == 0 {
+// 			return false, nil
+// 		}
 
-		// Roll the list to examine the status.
-		for _, pod := range pods.Items {
-			newPod := &corev1.Pod{}
-			ns := pod.Namespace
-			name := pod.Name
-			if err := m.Get(ctx, client.ObjectKey{Namespace: ns, Name: name}, newPod); err != nil {
-				return false, fmt.Errorf("error while fetching the operator pod with namespace %v and name %v: %w", ns, name, err)
-			}
-			if newPod.Status.Phase == corev1.PodRunning {
-				return true, nil
-			}
-		}
+// 		// Roll the list to examine the status.
+// 		for _, pod := range pods.Items {
+// 			newPod := &corev1.Pod{}
+// 			ns := pod.Namespace
+// 			name := pod.Name
+// 			if err := m.Get(ctx, client.ObjectKey{Namespace: ns, Name: name}, newPod); err != nil {
+// 				return false, fmt.Errorf("error while fetching the operator pod with namespace %v and name %v: %w", ns, name, err)
+// 			}
+// 			if newPod.Status.Phase == corev1.PodRunning {
+// 				return true, nil
+// 			}
+// 		}
 
-		// Nothing found. Poll after the period.
-		return false, nil
-	}); err != nil {
-		return err
-	}
+// 		// Nothing found. Poll after the period.
+// 		return false, nil
+// 	}); err != nil {
+// 		return err
+// 	}
 
-	return nil
-}
+// 	return nil
+// }
 
 // UpdateAllOperators Updates the manifests of all postgres operators managed by the postgreslet
 func (m *OperatorManager) UpdateAllOperators(ctx context.Context) error {

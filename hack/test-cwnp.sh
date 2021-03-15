@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Apply CRD Postgres to control-plane-cluster corresponding to kubeconfig
-kubectl --kubeconfig kubeconfig apply -f config/samples/_test_cwnp.yaml
+kubectl --kubeconfig kubeconfig apply -f config/samples/postgres.yaml
 
 # Wait till CRD ClusterwideNetworkPolicy is available
 until kubectl get clusterwidenetworkpolicy -n firewall -o jsonpath='{.items[0]}' > /dev/null 2>&1; do
@@ -19,10 +19,11 @@ fi
 
 # Check if the name is correct
 POLICY_NAME=$(kubectl get clusterwidenetworkpolicy -n firewall -o jsonpath='{.items[0].metadata.name}')
-PG_PROJECT_ID=$(kubectl --kubeconfig kubeconfig get postgres -A -o jsonpath='{.items[0].spec.projectID}')
-PG_UID=$(kubectl --kubeconfig kubeconfig get postgres -A -o jsonpath='{.items[0].metadata.uid}')
-if [ "$POLICY_NAME" != "$PG_PROJECT_ID--$PG_UID" ]; then
-    echo 'failed: wrong name'
+PG_PROJECT_ID=$(kubectl --kubeconfig kubeconfig get postgres -A -o jsonpath='{.items[0].spec.projectID}' | tr -d '-' | cut -c -16)
+PG_UID=$(kubectl --kubeconfig kubeconfig get postgres -A -o jsonpath='{.items[0].metadata.uid}' | tr -d '-' | cut -c -20)
+EXPECTED="${PG_PROJECT_ID}-${PG_UID}"
+if [ "$POLICY_NAME" != "${EXPECTED}" ]; then
+    echo "failed: got: ${POLICY_NAME} expected: ${EXPECTED}"
     exit 1
 fi
 
@@ -38,7 +39,7 @@ fi
 echo 'passed'
 
 # Delete CRD ClusterwideNetworkPolicy
-kubectl --kubeconfig kubeconfig delete -f config/samples/_test_cwnp.yaml
+kubectl --kubeconfig kubeconfig delete -f config/samples/postgres.yaml
 
 # Check if CRD ClusterwideNetworkPolicy is deleted
 while kubectl get clusterwidenetworkpolicy -n firewall "$POLICY_NAME" > /dev/null 2>&1; do

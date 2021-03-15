@@ -113,8 +113,8 @@ var _ = BeforeSuite(func(done Done) {
 	Expect((&PostgresReconciler{
 		CtrlClient:      ctrlClusterMgr.GetClient(),
 		SvcClient:       svcClusterMgr.GetClient(),
-		PartitionID:     "test-partition-id",
-		Tenant:          "test-tenant",
+		PartitionID:     "sample-partition",
+		Tenant:          "sample-tenant",
 		OperatorManager: opMgr,
 		LBManager:       lbmanager.New(svcClusterMgr.GetClient(), "127.0.0.1", int32(32000), int32(8000)),
 		Log:             cr.Log.WithName("controllers").WithName("Postgres"),
