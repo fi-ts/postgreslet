@@ -78,9 +78,6 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		}
 		log.Info("instance being deleted")
 
-		// todo: remove
-		log.Info("debug", "postgres.status", instance.Status)
-
 		matchingLabels := instance.ToZalandoPostgresqlMatchingLabels()
 		namespace := instance.ToPeripheralResourceNamespace()
 
