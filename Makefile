@@ -27,7 +27,7 @@ POSTGRES_CRD_URL ?= https://raw.githubusercontent.com/zalando/postgres-operator/
 all: manager
 
 # Run tests
-test: generate fmt vet manifests # crd-cwnp-for-testing # todo: add it back when github functions again
+test: generate fmt vet manifests
 	go test ./... -coverprofile cover.out -v
 
 # todo: Modify Dockerfile to include the version magic
@@ -176,6 +176,7 @@ install-cm-sidecar:
 	kubectl create ns postgreslet-system --dry-run=client --save-config -o yaml | kubectl apply -f -
 	kubectl apply -f external/test/cm-sidecar.yaml
 
+# Todo: Add release version when the changes in main branch are released
 crd-cwnp-for-testing:
 	@{ \
 	set -e ;\
