@@ -332,8 +332,8 @@ func (m *OperatorManager) createNewClientObject(ctx context.Context, objs []clie
 
 		// Patch the already existing ClusterRoleBinding
 		mergeFrom := client.MergeFrom(got.DeepCopy())
-		v.Subjects = append(got.Subjects, v.Subjects[0])
-		if err := m.Patch(ctx, v, mergeFrom); err != nil {
+		got.Subjects = append(got.Subjects, v.Subjects[0])
+		if err := m.Patch(ctx, got, mergeFrom); err != nil {
 			return objs, fmt.Errorf("error while patching the `ClusterRoleBinding`: %w", err)
 		}
 		m.log.Info("ClusterRoleBinding patched")

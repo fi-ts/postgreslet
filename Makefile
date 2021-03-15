@@ -158,7 +158,6 @@ helm-clean:
 	rm -f charts/postgreslet/charts/*
 
 helm:
-	helm package charts/postgreslet-support/
 	helm dependency build charts/postgreslet/
 	helm package charts/postgreslet/
 
