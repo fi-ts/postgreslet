@@ -56,11 +56,16 @@ type PostgresReconciler struct {
 func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := r.Log.WithValues("postgres", req.NamespacedName)
 
-	log.Info("fetchting postgres")
+	log.Info("reconciling")
 	instance := &pg.Postgres{}
 	if err := r.CtrlClient.Get(ctx, req.NamespacedName, instance); err != nil {
+		if errors.IsNotFound(err) {
+			// the instance was updated, but does not exist anymore -> do nothing, it was probably deleted
+			return ctrl.Result{}, nil
+		}
+
 		r.recorder.Eventf(instance, "Warning", "Error", "failed to get resource: %v", err)
-		return ctrl.Result{}, client.IgnoreNotFound(err)
+		return ctrl.Result{}, err
 	}
 	log.Info("postgres fetched", "postgres", instance)
 
