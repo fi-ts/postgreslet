@@ -72,6 +72,8 @@ type BackupConfig struct {
 	ProjectID string `json:"project"`
 	// Tenant the tenant of the backup
 	Tenant string `json:"tenant"`
+	// CreatedBy is the name of the person or technical account which created this backupConfig
+	CreatedBy string `json:"createdBy"`
 	// Retention defines how many versions should be held in s3
 	Retention string `json:"retention"`
 	// Schedule in cron syntax when to run the backup periodically
