@@ -41,10 +41,10 @@ var requeue = ctrl.Result{
 // PostgresReconciler reconciles a Postgres object
 type PostgresReconciler struct {
 	client.Client
-	Service             client.Client
-	Log                 logr.Logger
-	Scheme              *runtime.Scheme
-	PartitionID, Tenant string
+	Service                           client.Client
+	Log                               logr.Logger
+	Scheme                            *runtime.Scheme
+	PartitionID, Tenant, StorageClass string
 	*operatormanager.OperatorManager
 	*lbmanager.LBManager
 	recorder record.EventRecorder
@@ -201,7 +201,7 @@ func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context
 			return fmt.Errorf("failed to fetch zalando postgresql: %w", err)
 		}
 
-		u, err := instance.ToUnstructuredZalandoPostgresql(nil, c)
+		u, err := instance.ToUnstructuredZalandoPostgresql(nil, c, r.StorageClass)
 		if err != nil {
 			return fmt.Errorf("failed to convert to unstructured zalando postgresql: %w", err)
 		}
@@ -217,7 +217,7 @@ func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context
 	// Update zalando postgresql
 	mergeFrom := client.MergeFrom(rawZ.DeepCopy())
 
-	u, err := instance.ToUnstructuredZalandoPostgresql(rawZ, c)
+	u, err := instance.ToUnstructuredZalandoPostgresql(rawZ, c, r.StorageClass)
 	if err != nil {
 		return fmt.Errorf("failed to convert to unstructured zalando postgresql: %w", err)
 	}
@@ -298,6 +298,15 @@ func (r *PostgresReconciler) updatePodEnvironmentConfigMap(ctx context.Context, 
 	backupSchedule := backupConfig.Schedule
 	backupNumToRetain := backupConfig.Retention
 
+	// s3 server side encryption SSE is enabled if the key is given
+	// TODO our s3 needs a small change to make this work
+	walgDisableSSE := "true"
+	walgSSE := ""
+	if backupConfig.S3EncryptionKey != nil {
+		walgDisableSSE = "false"
+		walgDisableSSE = *backupConfig.S3EncryptionKey
+	}
+
 	// create updated content for pod environment configmap
 	data := map[string]string{
 		"USE_WALG_BACKUP":                  "true",
@@ -311,9 +320,9 @@ func (r *PostgresReconciler) updatePodEnvironmentConfigMap(ctx context.Context, 
 		"AWS_ACCESS_KEY_ID":                awsAccessKeyID,
 		"AWS_SECRET_ACCESS_KEY":            awsSecretAccessKey,
 		"AWS_S3_FORCE_PATH_STYLE":          "true",
-		"AWS_REGION":                       region,
-		"WALG_DISABLE_S3_SSE":              "true", // disable server side encryption
-		"WALG_S3_SSE":                      "",     // server side encryption key
+		"AWS_REGION":                       region,         // now we can use AWS S3
+		"WALG_DISABLE_S3_SSE":              walgDisableSSE, // disable server side encryption if key is nil
+		"WALG_S3_SSE":                      walgSSE,        // server side encryption key
 		"BACKUP_SCHEDULE":                  backupSchedule,
 		"BACKUP_NUM_TO_RETAIN":             backupNumToRetain,
 	}

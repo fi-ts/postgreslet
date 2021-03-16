@@ -51,6 +51,7 @@ spec:
             - --port-range-start=$(PORT_RANGE_START)
             - --port-range-size=$(PORT_RANGE_SIZE)
             - --custom-psp-name=$(CUSTOM_PSP_NAME)
+            - --storage-class=$(STORAGE_CLASS)
           envFrom:
             - configMapRef:
                 name: {{ include "postgreslet.fullname" . }}
