@@ -286,6 +286,8 @@ func (r *PostgresReconciler) updatePodEnvironmentConfigMap(ctx context.Context, 
 	s3url.Scheme = "https+path"
 	// use the modified s3 endpoint
 	walES3Endpoint := s3url.String()
+	// region
+	region := backupConfig.S3Region
 
 	// use the rest as provided in the secret
 	bucketName := backupConfig.S3BucketName
@@ -293,6 +295,15 @@ func (r *PostgresReconciler) updatePodEnvironmentConfigMap(ctx context.Context, 
 	awsSecretAccessKey := backupConfig.S3SecretKey
 	backupSchedule := backupConfig.Schedule
 	backupNumToRetain := backupConfig.Retention
+
+	// s3 server side encryption SSE is enabled if the key is given
+	// TODO our s3 needs a small change to make this work
+	walgDisableSSE := "true"
+	walgSSE := ""
+	if backupConfig.S3EncryptionKey != nil {
+		walgDisableSSE = "false"
+		walgSSE = *backupConfig.S3EncryptionKey
+	}
 
 	// create updated content for pod environment configmap
 	data := map[string]string{
@@ -307,9 +318,9 @@ func (r *PostgresReconciler) updatePodEnvironmentConfigMap(ctx context.Context, 
 		"AWS_ACCESS_KEY_ID":                awsAccessKeyID,
 		"AWS_SECRET_ACCESS_KEY":            awsSecretAccessKey,
 		"AWS_S3_FORCE_PATH_STYLE":          "true",
-		"AWS_REGION":                       "us-east-1",
-		"WALG_DISABLE_S3_SSE":              "true", // disable server side encryption
-		"WALG_S3_SSE":                      "",     // server side encryptio key
+		"AWS_REGION":                       region,         // now we can use AWS S3
+		"WALG_DISABLE_S3_SSE":              walgDisableSSE, // disable server side encryption if key is nil
+		"WALG_S3_SSE":                      walgSSE,        // server side encryption key
 		"BACKUP_SCHEDULE":                  backupSchedule,
 		"BACKUP_NUM_TO_RETAIN":             backupNumToRetain,
 	}
