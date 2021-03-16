@@ -123,6 +123,8 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{Requeue: true}, nil
 	}
 
+	// TODO: #176 delete the secrets in the end as well
+
 	if err := r.createOrUpdateSecret(ctx, &owner, secrets, log); err != nil {
 		return ctrl.Result{}, err
 	}
