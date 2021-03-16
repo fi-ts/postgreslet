@@ -1,8 +1,8 @@
 apiVersion: database.fits.cloud/v1
 kind: Postgres
 metadata:
-  namespace: default
-  name: sample-name
+  namespace: metal-extension-cloud
+  name: complete
 spec:
   accessList:
     sourceRanges:

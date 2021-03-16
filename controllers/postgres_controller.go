@@ -117,7 +117,7 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		instance.RemoveFinalizer(pg.PostgresFinalizerName)
 		if err := r.CtrlClient.Update(ctx, instance); err != nil {
 			r.recorder.Eventf(instance, "Warning", "Self-Reconcilation", "failed to remove finalizer: %v", err)
-			return requeue, err
+			return ctrl.Result{}, fmt.Errorf("failed to update finalizers: %w", err)
 		}
 		log.Info("finalizers removed")
 

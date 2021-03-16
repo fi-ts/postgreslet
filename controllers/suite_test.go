@@ -53,9 +53,6 @@ var (
 	instance = &pg.Postgres{}
 )
 
-func init() {
-}
-
 func TestAPIs(t *testing.T) {
 	RegisterFailHandler(Fail)
 
@@ -136,7 +133,7 @@ var _ = BeforeSuite(func(done Done) {
 	svcClusterClient = svcClusterMgr.GetClient()
 	Expect(svcClusterClient).ToNot(BeNil())
 
-	createNamespaceFirewall()
+	createNamespace(svcClusterClient, "firewall")
 	createPostgresTestInstance()
 	createConfigMapSidecarConfig()
 	createCredentialSecrets()
@@ -176,29 +173,34 @@ func createConfigMapSidecarConfig() {
 	nsObj.Name = "postgreslet-system"
 	Expect(svcClusterClient.Create(newCtx(), nsObj)).Should(Succeed())
 
-	bytes, err := os.ReadFile(filepath.Join(externalYAMLDirTest, "cm-sidecar.yaml"))
+	bytes, err := os.ReadFile(filepath.Join(externalYAMLDirTest, "configmap-sidecars.yaml"))
 	Expect(err).ToNot(HaveOccurred())
 
 	cm := &core.ConfigMap{}
 	Expect(yaml.Unmarshal(bytes, cm)).Should(Succeed())
+	// todo: Should not be hard-coded
+	cm.Namespace = "postgreslet-system"
+	cm.Name = "postgreslet-postgres-sidecars"
 
 	Expect(svcClusterClient.Create(newCtx(), cm)).Should(Succeed())
 }
 
-func createNamespaceFirewall() {
+func createNamespace(client client.Client, ns string) {
 	defer GinkgoRecover()
 
 	nsObj := &core.Namespace{}
-	nsObj.Name = "firewall"
-	Expect(svcClusterClient.Create(newCtx(), nsObj)).Should(Succeed())
+	nsObj.Name = ns
+	Expect(client.Create(newCtx(), nsObj)).Should(Succeed())
 }
 
 func createPostgresTestInstance() {
 	defer GinkgoRecover()
 
-	bytes, err := os.ReadFile(filepath.Join("..", "config", "samples", "postgres.yaml"))
+	bytes, err := os.ReadFile(filepath.Join("..", "config", "samples", "complete.yaml"))
 	Expect(err).ToNot(HaveOccurred())
 	Expect(yaml.Unmarshal(bytes, instance)).Should(Succeed())
+
+	createNamespace(ctrlClusterClient, instance.Namespace)
 
 	Expect(ctrlClusterClient.Create(newCtx(), instance)).Should(Succeed())
 }

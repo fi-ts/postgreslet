@@ -30,6 +30,8 @@ var _ = Describe("postgres controller", func() {
 	AfterEach(func() {})
 
 	Context("complete postgres instance created", func() {
+		// Todo: Consider shifting the creation logic to here.
+		// The instance is created in `suite_test.go`.
 		It("should add finalizer to the instance", func() {
 			Eventually(func() bool {
 				if err := ctrlClusterClient.Get(newCtx(), *instance.ToKey(), instance); err != nil {

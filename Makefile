@@ -42,7 +42,7 @@ manager: generate fmt vet manifests
 	strip bin/manager
 
 # Run against the configured Kubernetes cluster in ~/.kube/config
-run: generate fmt vet manifests install-cm-sidecar install-crd-cwnp
+run: generate fmt vet manifests install-configmap-sidecars install-crd-cwnp
 	go run ./main.go \
 	-partition-id sample-partition \
 	-tenant sample-tenant \
@@ -148,10 +148,11 @@ secret:
 	}
 
 create-postgres:
-	kubectl --kubeconfig kubeconfig apply -f config/samples/database_v1_postgres.yaml
+	kubectl create ns metal-extension-cloud --dry-run=client --save-config -o yaml | kubectl apply -f -
+	kubectl --kubeconfig kubeconfig apply -f config/samples/complete.yaml
 
 delete-postgres:
-	kubectl --kubeconfig kubeconfig delete -f config/samples/database_v1_postgres.yaml
+	kubectl --kubeconfig kubeconfig delete -f config/samples/complete.yaml
 
 helm-clean:
 	rm -f charts/postgreslet/Chart.lock
@@ -172,14 +173,13 @@ uninstall-crd-cwnp:
 	kubectl delete ns firewall
 	kubectl delete -f https://raw.githubusercontent.com/metal-stack/firewall-controller/master/config/crd/bases/metal-stack.io_clusterwidenetworkpolicies.yaml
 
-install-cm-sidecar:
+configmap-sidecars:
+	helm template envtest charts/postgreslet --show-only templates/configmap-sidecars.yaml > external/test/configmap-sidecars.yaml
+	
+install-configmap-sidecars:
 	kubectl create ns postgreslet-system --dry-run=client --save-config -o yaml | kubectl apply -f -
-	kubectl apply -f external/test/cm-sidecar.yaml
+	kubectl apply -f external/test/configmap-sidecars.yaml
 
 # Todo: Add release version when the changes in main branch are released
 crd-cwnp-for-testing:
-	@{ \
-	set -e ;\
-	YAML=external/test/crd-clusterwidenetworkpolicy.yaml ;\
-	kubectl apply -f https://raw.githubusercontent.com/metal-stack/firewall-controller/master/config/crd/bases/metal-stack.io_clusterwidenetworkpolicies.yaml -o yaml | sed '/^  resourceVersion/d' > $$YAML ;\
-	}
+	curl https://raw.githubusercontent.com/metal-stack/firewall-controller/master/config/crd/bases/metal-stack.io_clusterwidenetworkpolicies.yaml -o external/test/crd-clusterwidenetworkpolicy.yaml

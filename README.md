@@ -27,14 +27,14 @@ make run
 
 # In another terminal, apply the sample-postgres yaml file to the control-cluster.
 kubectl --kubeconfig kubeconfig get postgres
-kubectl --kubeconfig kubeconfig apply -f config/samples/database_v1_postgres.yaml
+kubectl --kubeconfig kubeconfig apply -f config/samples/complete.yaml
 kubectl --kubeconfig kubeconfig get postgres --watch
 
 # See the database pods running in the service-cluster.
 kubectl get postgresql,pod -A
 
 # Delete the sample-postgres from the control-cluster.
-kubectl --kubeconfig kubeconfig delete -f config/samples/database_v1_postgres.yaml
+kubectl --kubeconfig kubeconfig delete -f config/samples/complete.yaml
 
 # Uninstall the dependencies of this project from the remote control-cluster.
 make uninstall

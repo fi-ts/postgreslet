@@ -1,7 +1,8 @@
 #!/bin/bash
 
 # Apply CRD Postgres to control-plane-cluster corresponding to kubeconfig
-kubectl --kubeconfig kubeconfig apply -f config/samples/postgres.yaml
+kubectl create ns metal-extension-cloud --dry-run=client --save-config -o yaml | kubectl --kubeconfig kubeconfig apply -f -
+kubectl --kubeconfig kubeconfig apply -f config/samples/complete.yaml
 
 # Wait till CRD ClusterwideNetworkPolicy is available
 until kubectl get clusterwidenetworkpolicy -n firewall -o jsonpath='{.items[0]}' > /dev/null 2>&1; do
@@ -39,7 +40,7 @@ fi
 echo 'passed'
 
 # Delete CRD ClusterwideNetworkPolicy
-kubectl --kubeconfig kubeconfig delete -f config/samples/postgres.yaml
+kubectl --kubeconfig kubeconfig delete -f config/samples/complete.yaml
 
 # Check if CRD ClusterwideNetworkPolicy is deleted
 while kubectl get clusterwidenetworkpolicy -n firewall "$POLICY_NAME" > /dev/null 2>&1; do
