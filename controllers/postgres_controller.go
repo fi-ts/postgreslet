@@ -304,7 +304,7 @@ func (r *PostgresReconciler) updatePodEnvironmentConfigMap(ctx context.Context, 
 	walgSSE := ""
 	if backupConfig.S3EncryptionKey != nil {
 		walgDisableSSE = "false"
-		walgDisableSSE = *backupConfig.S3EncryptionKey
+		walgSSE = *backupConfig.S3EncryptionKey
 	}
 
 	// create updated content for pod environment configmap
