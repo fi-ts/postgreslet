@@ -2,6 +2,7 @@ apiVersion: v1
 data:
   postgres-exporter-image: {{ .Values.sidecars.exporter.image | quote }}
   postgres-exporter-container-port: {{ .Values.sidecars.exporter.containerPort | quote }}
+  postgres-exporter-service-port: {{ .Values.sidecars.exporter.servicePort | quote }}
   postgres-exporter-requests-cpu: {{ .Values.sidecars.exporter.resources.requests.cpu | quote }}
   postgres-exporter-requests-memory: {{ .Values.sidecars.exporter.resources.requests.memory | quote }}
   postgres-exporter-limits-cpu: {{ .Values.sidecars.exporter.resources.limits.cpu | quote }}
@@ -31,9 +32,14 @@ data:
       - name: DATA_SOURCE_URI
         value: 127.0.0.1:5432/postgres?sslmode=disable
       - name: DATA_SOURCE_USER
-        Value: postgres
-      - Name: PG_EXPORTER_EXTEND_QUERY_PATH
-        Value: /metrics/queries.yaml
+        value: postgres
+      - name: DATA_SOURCE_PASS
+        valueFrom:
+          secretKeyRef:
+            name:
+          key: password
+      - name: PG_EXPORTER_EXTEND_QUERY_PATH
+        value: /metrics/queries.yaml
   experimental-postgres-fluentbit: |
     name: postgres-fluentbit
     image: fluent/fluent-bit:1.7.2
@@ -47,6 +53,7 @@ data:
       limits:
         cpu: 500m
         memory: 256M
+      key: password
   experimental-additional-volumes: |
     - name: empty
       mountPath: /opt/empty
@@ -77,6 +84,7 @@ data:
 kind: ConfigMap
 metadata:
   name: {{ include "postgreslet.fullname" . }}-postgres-sidecars
+  namespace: {{ .Release.Namespace }}
 {{- with .Values.podAnnotations }}
   annotations:
     {{- toYaml . | nindent 4 }}

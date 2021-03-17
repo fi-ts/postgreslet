@@ -28,7 +28,7 @@ all: manager
 
 # Run tests
 test: generate fmt vet manifests
-	go test ./... -coverprofile cover.out
+	go test ./... -coverprofile cover.out -v
 
 # todo: Modify Dockerfile to include the version magic
 # Build manager binary
@@ -42,7 +42,7 @@ manager: generate fmt vet manifests
 	strip bin/manager
 
 # Run against the configured Kubernetes cluster in ~/.kube/config
-run: generate fmt vet manifests install-crd-cwnp
+run: generate fmt vet manifests install-configmap-sidecars install-crd-cwnp
 	go run ./main.go \
 	-partition-id sample-partition \
 	-tenant sample-tenant \
@@ -148,17 +148,17 @@ secret:
 	}
 
 create-postgres:
-	kubectl --kubeconfig kubeconfig apply -f config/samples/database_v1_postgres.yaml
+	kubectl create ns metal-extension-cloud --dry-run=client --save-config -o yaml | kubectl apply -f -
+	kubectl --kubeconfig kubeconfig apply -f config/samples/complete.yaml
 
 delete-postgres:
-	kubectl --kubeconfig kubeconfig delete -f config/samples/database_v1_postgres.yaml
+	kubectl --kubeconfig kubeconfig delete -f config/samples/complete.yaml
 
 helm-clean:
 	rm -f charts/postgreslet/Chart.lock
 	rm -f charts/postgreslet/charts/*
 
 helm:
-	helm package charts/postgreslet-support/
 	helm dependency build charts/postgreslet/
 	helm package charts/postgreslet/
 
@@ -172,3 +172,14 @@ install-crd-cwnp:
 uninstall-crd-cwnp:
 	kubectl delete ns firewall
 	kubectl delete -f https://raw.githubusercontent.com/metal-stack/firewall-controller/master/config/crd/bases/metal-stack.io_clusterwidenetworkpolicies.yaml
+
+configmap-sidecars:
+	helm template postgreslet --namespace postgreslet-system charts/postgreslet --show-only templates/configmap-sidecars.yaml > external/test/configmap-sidecars.yaml
+
+install-configmap-sidecars:
+	kubectl create ns postgreslet-system --dry-run=client --save-config -o yaml | kubectl apply -f -
+	kubectl apply -f external/test/configmap-sidecars.yaml
+
+# Todo: Add release version when the changes in main branch are released
+crd-cwnp-for-testing:
+	curl https://raw.githubusercontent.com/metal-stack/firewall-controller/master/config/crd/bases/metal-stack.io_clusterwidenetworkpolicies.yaml -o external/test/crd-clusterwidenetworkpolicy.yaml

@@ -76,6 +76,8 @@ postgreslet:
   # customPspName The name to use for our custom psp
   # If not set, a name is generated using the fullname template
   customPspName: ""
+  # storageClass The name of the storageClass to use for Postgres clusters
+  storageClass: "csi-lvm-sc-mirror"
 
 # addRandomLabel adds a random label each time the deployment.yaml is rendered, forcing k8s to update that deployment.
 # In combination with image.PullPolicy=Always, this effetifely forces a reload of the pod, even if the image tag stays the same.
@@ -112,6 +114,7 @@ sidecars:
   exporter:
     image: "prometheuscommunity/postgres-exporter:v0.9.0"
     containerPort: 9187
+    servicePort: 9187
     resources:
       requests:
         cpu: "100m"

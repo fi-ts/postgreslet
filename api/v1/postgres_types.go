@@ -43,12 +43,17 @@ const (
 	// ManagedByLabelValue Value of the managed-by label
 	ManagedByLabelValue string = "postgreslet"
 	// PostgresFinalizerName Name of the finalizer to use
-	PostgresFinalizerName        string = "postgres.finalizers.database.fits.cloud"
-	SidecarsCMName               string = "postgres-sidecars-configmap"
-	SidecarsCMFluentBitConfKey   string = "fluent-bit.conf"
-	FluentBitSidecarName         string = "postgres-fluentbit"
+	PostgresFinalizerName string = "postgres.finalizers.database.fits.cloud"
+	// SidecarsCMName Namem of the ConfigMap containing the config for the sidecars
+	SidecarsCMName string = "postgres-sidecars-configmap"
+	// SidecarsCMFluentBitConfKey Name of the key containing the fluent-bit.conf config file
+	SidecarsCMFluentBitConfKey string = "fluent-bit.conf"
+	// FluentBitSidecarName Defines the name of the fluent-bit sidecar
+	FluentBitSidecarName string = "postgres-fluentbit"
+	// SidecarsCMExporterQueriesKey Name of the key containing the queries.yaml config file
 	SidecarsCMExporterQueriesKey string = "queries.yaml"
-	ExporterSidecarName          string = "postgres-exporter"
+	// ExporterSidecarName Defines the name of the postgres exporter sidecar
+	ExporterSidecarName string = "postgres-exporter"
 	// CreatedByAnnotationKey is used to store who in person created this database
 	CreatedByAnnotationKey string = "postgres.database.fits.cloud/created-by"
 	// BackupConfigLabelName if set to true, this secret stores the backupConfig
@@ -68,6 +73,8 @@ type BackupConfig struct {
 	ProjectID string `json:"project"`
 	// Tenant the tenant of the backup
 	Tenant string `json:"tenant"`
+	// CreatedBy is the name of the person or technical account which created this backupConfig
+	CreatedBy string `json:"createdBy"`
 	// Retention defines how many versions should be held in s3
 	Retention string `json:"retention"`
 	// Schedule in cron syntax when to run the backup periodically
@@ -83,19 +90,83 @@ type BackupConfig struct {
 	S3AccessKey string `json:"s3accesskey"`
 	// S3SecretKey is the secretkey which must match to the accesskey
 	S3SecretKey string `json:"s3secretkey"`
+	// S3EncryptionKey if set, server side s3 encryption is used.
+	S3EncryptionKey *string `json:"s3encryptionkey,omitempty"`
 }
 
-var ZalandoPostgresqlTypeMeta = metav1.TypeMeta{
-	APIVersion: "acid.zalan.do/v1",
-	Kind:       "postgresql",
-}
+var (
+	ZalandoPostgresqlTypeMeta = metav1.TypeMeta{
+		APIVersion: "acid.zalan.do/v1",
+		Kind:       "postgresql",
+	}
+
+	additionalVolumes = []zalando.AdditionalVolume{
+		{
+			Name:      "empty",
+			MountPath: "/opt/empty",
+			TargetContainers: []string{
+				"all",
+			},
+			VolumeSource: corev1.VolumeSource{
+				EmptyDir: &corev1.EmptyDirVolumeSource{},
+			},
+		},
+		{
+			Name:      "postgres-exporter-configmap",
+			MountPath: "/metrics",
+			TargetContainers: []string{
+				ExporterSidecarName,
+			},
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: SidecarsCMName,
+					},
+					Items: []corev1.KeyToPath{
+						{
+							Key:  SidecarsCMExporterQueriesKey,
+							Path: "queries.yaml",
+						},
+					},
+				},
+			},
+		},
+		{
+			Name:      "postgres-fluentbit-configmap",
+			MountPath: "/fluent-bit/etc",
+			TargetContainers: []string{
+				FluentBitSidecarName,
+			},
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: SidecarsCMName,
+					},
+					Items: []corev1.KeyToPath{
+						{
+							Key:  SidecarsCMFluentBitConfKey,
+							Path: "fluent-bit.conf",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	ExporterSidecarPortName intstr.IntOrString = intstr.IntOrString{
+		Type:   intstr.String,
+		StrVal: "exporter",
+	}
+)
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="Tenant",type=string,JSONPath=`.spec.tenant`
 // +kubebuilder:printcolumn:name="Version",type=string,JSONPath=`.spec.version`
+// +kubebuilder:printcolumn:name="Replicas",type=string,JSONPath=`.spec.numberOfInstances`
+// +kubebuilder:printcolumn:name="IP",type=string,JSONPath=`.status.socket.ip`
+// +kubebuilder:printcolumn:name="Port",type=integer,JSONPath=`.status.socket.port`
 // +kubebuilder:printcolumn:name="Status",type=string,JSONPath=`.status.description`
-// +kubebuilder:printcolumn:name="Load-Balancer-IP",type=string,JSONPath=`.status.socket.ip`
-// +kubebuilder:printcolumn:name="Load-Balancer-Port",type=integer,JSONPath=`.status.socket.port`
 
 // Postgres is the Schema for the postgres API
 type Postgres struct {
@@ -345,13 +416,15 @@ func (p *Postgres) ToBackupSecretName() string {
 func (p *Postgres) ToUserPasswordsSecretListOption() []client.ListOption {
 	return []client.ListOption{
 		client.InNamespace(p.ToPeripheralResourceNamespace()),
-		client.MatchingLabels(
-			map[string]string{
-				"application":  "spilo",
-				"cluster-name": p.ToPeripheralResourceName(),
-				"team":         p.generateTeamID(),
-			},
-		),
+		p.ToZalandoPostgresqlMatchingLabels(),
+	}
+}
+
+func (p *Postgres) ToUserPasswordSecretMatchingLabels() map[string]string {
+	return map[string]string{
+		"application":  "spilo",
+		"cluster-name": p.ToPeripheralResourceName(),
+		"team":         p.generateTeamID(),
 	}
 }
 
@@ -386,7 +459,14 @@ func (p *Postgres) ToPeripheralResourceNamespace() string {
 	return p.ToPeripheralResourceName()
 }
 
-func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *corev1.ConfigMap) (*unstructured.Unstructured, error) {
+func (p *Postgres) ToPeripheralResourceLookupKey() types.NamespacedName {
+	return types.NamespacedName{
+		Namespace: p.ToPeripheralResourceNamespace(),
+		Name:      p.ToPeripheralResourceName(),
+	}
+}
+
+func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *corev1.ConfigMap, sc string) (*unstructured.Unstructured, error) {
 	if z == nil {
 		z = &zalando.Postgresql{}
 	}
@@ -403,11 +483,12 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 	z.Spec.Resources.ResourceLimits.Memory = p.Spec.Size.Memory
 	z.Spec.TeamID = p.generateTeamID()
 	z.Spec.Volume.Size = p.Spec.Size.StorageSize
+	z.Spec.Volume.StorageClass = sc
 
 	// skip if the configmap does not exist
 	if c != nil {
-		z.Spec.AdditionalVolumes = p.buildAdditionalVolumes(c)
-		z.Spec.Sidecars = p.buildZalandoSidecars(c)
+		z.Spec.AdditionalVolumes = additionalVolumes
+		z.Spec.Sidecars = p.buildSidecars(c)
 	}
 
 	if p.HasSourceRanges() {
@@ -510,7 +591,7 @@ func (p *Postgres) buildAdditionalVolumes(c *corev1.ConfigMap) []zalando.Additio
 	return *volumes
 }
 
-func (p *Postgres) buildZalandoSidecars(c *corev1.ConfigMap) []zalando.Sidecar {
+func (p *Postgres) buildSidecars(c *corev1.ConfigMap) []zalando.Sidecar {
 	if c == nil {
 		// abort if the global configmap is not there
 		return nil
@@ -522,24 +603,19 @@ func (p *Postgres) buildZalandoSidecars(c *corev1.ConfigMap) []zalando.Sidecar {
 		return nil
 	}
 
-	postgresExporterPort, error := strconv.ParseInt(c.Data["postgres-exporter-container-port"], 10, 32)
+	exporterContainerPort, error := strconv.ParseInt(c.Data["postgres-exporter-container-port"], 10, 32)
 	if error != nil {
 		// todo log error
-		postgresExporterPort = 9187
+		exporterContainerPort = 9187
 	}
-	exporter.Ports[0].ContainerPort = int32(postgresExporterPort)
+	exporter.Ports[0].ContainerPort = int32(exporterContainerPort)
 
-	exporter.Env = append(exporter.Env, corev1.EnvVar{
-		Name: "DATA_SOURCE_PASS",
-		ValueFrom: &corev1.EnvVarSource{
-			SecretKeyRef: &corev1.SecretKeySelector{
-				LocalObjectReference: corev1.LocalObjectReference{
-					Name: "postgres." + p.ToPeripheralResourceName() + ".credentials",
-				},
-				Key: "password",
-			},
-		},
-	})
+	for i := range exporter.Env {
+		if exporter.Env[i].Name == "DATA_SOURCE_PASS" {
+			exporter.Env[i].ValueFrom.SecretKeyRef.Name = "postgres." + p.ToPeripheralResourceName() + ".credentials"
+			break
+		}
+	}
 
 	// Unmarshal yaml-string of fluent bit
 	fluentBit := &zalando.Sidecar{}

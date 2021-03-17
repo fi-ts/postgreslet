@@ -47,7 +47,7 @@ func init() {
 }
 
 func main() {
-	var metricsAddrCtrlMgr, metricsAddrSvcMgr, partitionID, tenant, ctrlClusterKubeconfig, pspName, lbIP string
+	var metricsAddrCtrlMgr, metricsAddrSvcMgr, partitionID, tenant, ctrlClusterKubeconfig, pspName, lbIP, storageClass string
 	var enableLeaderElection bool
 	var portRangeStart, portRangeSize int
 	flag.StringVar(&metricsAddrSvcMgr, "metrics-addr-svc-mgr", ":8080", "The address the metric endpoint of the service cluster manager binds to.")
@@ -62,7 +62,8 @@ func main() {
 	// todo: Check the default port range start and size.
 	flag.IntVar(&portRangeStart, "port-range-start", 32000, "The start of the port range of services LoadBalancer.")
 	flag.IntVar(&portRangeSize, "port-range-size", 8000, "The size of the port range of services LoadBalancer.")
-	flag.StringVar(&pspName, "custom-psp-name", "postgres-operator-psp", "The namem of our custom PodSecurityPolicy. Will be added to the ClusterRoles.")
+	flag.StringVar(&pspName, "custom-psp-name", "postgres-operator-psp", "The name of our custom PodSecurityPolicy. Will be added to the ClusterRoles.")
+	flag.StringVar(&storageClass, "storage-class", "", "The name of the storageClass to use for the postgres cluster pods.")
 	flag.Parse()
 
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
@@ -84,7 +85,10 @@ func main() {
 		"tenant", tenant,
 		"load-balancer-ip", lbIP,
 		"port-range-start", portRangeStart,
-		"port-range-size", portRangeSize)
+		"port-range-size", portRangeSize,
+		"custom-psp-name", pspName,
+		"storage-class", storageClass,
+	)
 
 	svcClusterConf := ctrl.GetConfigOrDie()
 	i, err := crdinstaller.New(svcClusterConf, scheme, ctrl.Log.WithName("CRDInstaller"))
@@ -109,10 +113,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	ctrlPlaneClusterConf, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
-		&clientcmd.ClientConfigLoadingRules{ExplicitPath: ctrlClusterKubeconfig},
-		&clientcmd.ConfigOverrides{},
-	).ClientConfig()
+	ctrlPlaneClusterConf, err := clientcmd.BuildConfigFromFlags("", ctrlClusterKubeconfig)
 	if err != nil {
 		setupLog.Error(err, "unable to get control cluster kubeconfig")
 		os.Exit(1)
@@ -136,12 +137,13 @@ func main() {
 	}
 
 	if err = (&controllers.PostgresReconciler{
-		Client:          ctrlPlaneClusterMgr.GetClient(),
-		Service:         svcClusterMgr.GetClient(),
+		CtrlClient:      ctrlPlaneClusterMgr.GetClient(),
+		SvcClient:       svcClusterMgr.GetClient(),
 		Log:             ctrl.Log.WithName("controllers").WithName("Postgres"),
 		Scheme:          ctrlPlaneClusterMgr.GetScheme(),
 		PartitionID:     partitionID,
 		Tenant:          tenant,
+		StorageClass:    storageClass,
 		OperatorManager: opMgr,
 		LBManager:       lbmanager.New(svcClusterMgr.GetClient(), lbIP, int32(portRangeStart), int32(portRangeSize)),
 	}).SetupWithManager(ctrlPlaneClusterMgr); err != nil {
@@ -150,10 +152,10 @@ func main() {
 	}
 
 	if err = (&controllers.StatusReconciler{
-		Client:  svcClusterMgr.GetClient(),
-		Control: ctrlPlaneClusterMgr.GetClient(),
-		Log:     ctrl.Log.WithName("controllers").WithName("Status"),
-		Scheme:  svcClusterMgr.GetScheme(),
+		SvcClient:  svcClusterMgr.GetClient(),
+		CtrlClient: ctrlPlaneClusterMgr.GetClient(),
+		Log:        ctrl.Log.WithName("controllers").WithName("Status"),
+		Scheme:     svcClusterMgr.GetScheme(),
 	}).SetupWithManager(svcClusterMgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Status")
 		os.Exit(1)
