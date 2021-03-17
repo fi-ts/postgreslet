@@ -174,8 +174,8 @@ uninstall-crd-cwnp:
 	kubectl delete -f https://raw.githubusercontent.com/metal-stack/firewall-controller/master/config/crd/bases/metal-stack.io_clusterwidenetworkpolicies.yaml
 
 configmap-sidecars:
-	helm template envtest charts/postgreslet --show-only templates/configmap-sidecars.yaml > external/test/configmap-sidecars.yaml
-	
+	helm template postgreslet --namespace postgreslet-system charts/postgreslet --show-only templates/configmap-sidecars.yaml > external/test/configmap-sidecars.yaml
+
 install-configmap-sidecars:
 	kubectl create ns postgreslet-system --dry-run=client --save-config -o yaml | kubectl apply -f -
 	kubectl apply -f external/test/configmap-sidecars.yaml

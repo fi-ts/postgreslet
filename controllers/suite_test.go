@@ -178,9 +178,6 @@ func createConfigMapSidecarConfig() {
 
 	cm := &core.ConfigMap{}
 	Expect(yaml.Unmarshal(bytes, cm)).Should(Succeed())
-	// todo: Should not be hard-coded
-	cm.Namespace = "postgreslet-system"
-	cm.Name = "postgreslet-postgres-sidecars"
 
 	Expect(svcClusterClient.Create(newCtx(), cm)).Should(Succeed())
 }
