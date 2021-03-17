@@ -415,13 +415,15 @@ func (p *Postgres) ToBackupSecretName() string {
 func (p *Postgres) ToUserPasswordsSecretListOption() []client.ListOption {
 	return []client.ListOption{
 		client.InNamespace(p.ToPeripheralResourceNamespace()),
-		client.MatchingLabels(
-			map[string]string{
-				"application":  "spilo",
-				"cluster-name": p.ToPeripheralResourceName(),
-				"team":         p.generateTeamID(),
-			},
-		),
+		p.ToZalandoPostgresqlMatchingLabels(),
+	}
+}
+
+func (p *Postgres) ToUserPasswordSecretMatchingLabels() map[string]string {
+	return map[string]string{
+		"application":  "spilo",
+		"cluster-name": p.ToPeripheralResourceName(),
+		"team":         p.generateTeamID(),
 	}
 }
 
@@ -454,6 +456,13 @@ func (p *Postgres) generateDatabaseName() string {
 func (p *Postgres) ToPeripheralResourceNamespace() string {
 	// as we have one namespace per database, we simplify things by also using the database name as namespace name
 	return p.ToPeripheralResourceName()
+}
+
+func (p *Postgres) ToPeripheralResourceLookupKey() types.NamespacedName {
+	return types.NamespacedName{
+		Namespace: p.ToPeripheralResourceNamespace(),
+		Name:      p.ToPeripheralResourceName(),
+	}
 }
 
 func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *corev1.ConfigMap, sc string) (*unstructured.Unstructured, error) {

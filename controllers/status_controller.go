@@ -26,10 +26,10 @@ import (
 
 // StatusReconciler reconciles a Postgresql object
 type StatusReconciler struct {
-	client.Client
-	Control client.Client
-	Log     logr.Logger
-	Scheme  *runtime.Scheme
+	SvcClient  client.Client
+	CtrlClient client.Client
+	Log        logr.Logger
+	Scheme     *runtime.Scheme
 }
 
 // Reconcile updates the status of the remote Postgres object based on the status of the local zalando object.
@@ -40,7 +40,7 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	log.Info("fetching postgresql")
 	instance := &zalando.Postgresql{}
-	if err := r.Client.Get(ctx, req.NamespacedName, instance); err != nil {
+	if err := r.SvcClient.Get(ctx, req.NamespacedName, instance); err != nil {
 		if !errors.IsNotFound(err) {
 			return ctrl.Result{}, err
 		}
@@ -51,7 +51,7 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	log.Info("fetching all owners")
 	owners := &pg.PostgresList{}
-	if err := r.Control.List(ctx, owners); err != nil {
+	if err := r.CtrlClient.List(ctx, owners); err != nil {
 		log.Info("error fetching all owners")
 		return ctrl.Result{}, err
 	}
@@ -79,7 +79,7 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		// get a fresh copy of the owner object
-		if err := r.Control.Get(ctx, types.NamespacedName{Name: owner.Name, Namespace: owner.Namespace}, &owner); err != nil {
+		if err := r.CtrlClient.Get(ctx, types.NamespacedName{Name: owner.Name, Namespace: owner.Namespace}, &owner); err != nil {
 			return err
 		}
 		// update the status of the remote object
@@ -88,7 +88,7 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		owner.Status.ChildName = instance.Name
 
 		log.Info("Updating owner", "owner", owner.UID)
-		if err := r.Control.Status().Update(ctx, &owner); err != nil {
+		if err := r.CtrlClient.Status().Update(ctx, &owner); err != nil {
 			log.Error(err, "failed to update owner object")
 			return err
 		}
@@ -100,13 +100,14 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	}
 
 	lb := &corev1.Service{}
-	if err := r.Client.Get(ctx, *owner.ToSvcLBNamespacedName(), lb); err == nil {
+	if err := r.SvcClient.Get(ctx, *owner.ToSvcLBNamespacedName(), lb); err == nil {
 		owner.Status.Socket.IP = lb.Spec.LoadBalancerIP
 		owner.Status.Socket.Port = lb.Spec.Ports[0].Port
 
-		if err := r.Control.Status().Update(ctx, &owner); err != nil {
+		if err := r.CtrlClient.Status().Update(ctx, &owner); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to update lbSocket of Postgres: %w", err)
 		}
+		log.Info("postgres status socket updated")
 	} else {
 		// Todo: Handle errors other than `NotFound`
 		log.Info("unable to fetch the corresponding Service of type LoadBalancer")
@@ -114,8 +115,12 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	// Fetch the list of operator-generated secrets
 	secrets := &corev1.SecretList{}
-	if err := r.List(ctx, secrets, owner.ToUserPasswordsSecretListOption()...); client.IgnoreNotFound(err) != nil {
+	if err := r.SvcClient.List(ctx, secrets, owner.ToUserPasswordsSecretListOption()...); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to fetch the list of operator generated secrets: %w", err)
+	}
+
+	if len(secrets.Items) == 0 {
+		return ctrl.Result{Requeue: true}, nil
 	}
 
 	// TODO: #176 delete the secrets in the end as well
@@ -144,13 +149,14 @@ func (r *StatusReconciler) createOrUpdateSecret(ctx context.Context, in *pg.Post
 	// placeholder of the secret with the specified namespaced name
 	fetched := &corev1.Secret{ObjectMeta: secret.ObjectMeta}
 	// todo: update to CreateOrPatch()
-	result, err := controllerutil.CreateOrUpdate(ctx, r.Control, fetched, func() error {
+	result, err := controllerutil.CreateOrUpdate(ctx, r.CtrlClient, fetched, func() error {
 		fetched.Data = secret.Data
 		return nil
 	})
 	if err != nil {
 		return fmt.Errorf("failed to create or update the secret containing user password pairs: %w", err)
 	}
+	// todo: better the log
 	log.Info("secret created or updated", "operation result", result)
 
 	return nil

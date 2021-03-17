@@ -14,10 +14,11 @@ data:
   postgres-fluentbit-limits-memory: {{ .Values.sidecars.fluentbit.resources.limits.memory | quote }}
   queries.yaml: {{ b64enc .Values.sidecars.exporter.queries }}
   fluent-bit.conf: {{ b64enc .Values.sidecars.fluentbit.conf }}
-  
+
 kind: ConfigMap
 metadata:
   name: {{ include "postgreslet.fullname" . }}-postgres-sidecars
+  namespace: {{ .Release.Namespace }}
 {{- with .Values.podAnnotations }}
   annotations:
     {{- toYaml . | nindent 4 }}

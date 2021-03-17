@@ -11,7 +11,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
-	"time"
 
 	"github.com/go-logr/logr"
 	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
@@ -34,14 +33,13 @@ import (
 
 // requeue defines in how many seconds a requeue should happen
 var requeue = ctrl.Result{
-	Requeue:      true,
-	RequeueAfter: 30 * time.Second,
+	Requeue: true,
 }
 
 // PostgresReconciler reconciles a Postgres object
 type PostgresReconciler struct {
-	client.Client
-	Service                           client.Client
+	CtrlClient                        client.Client
+	SvcClient                         client.Client
 	Log                               logr.Logger
 	Scheme                            *runtime.Scheme
 	PartitionID, Tenant, StorageClass string
@@ -60,7 +58,7 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 
 	log.Info("reconciling")
 	instance := &pg.Postgres{}
-	if err := r.Get(ctx, req.NamespacedName, instance); err != nil {
+	if err := r.CtrlClient.Get(ctx, req.NamespacedName, instance); err != nil {
 		if errors.IsNotFound(err) {
 			// the instance was updated, but does not exist anymore -> do nothing, it was probably deleted
 			return ctrl.Result{}, nil
@@ -79,7 +77,7 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	// Delete
 	if instance.IsBeingDeleted() {
 		instance.Status.Description = "Terminating"
-		if err := r.Status().Update(ctx, instance); err != nil {
+		if err := r.CtrlClient.Status().Update(ctx, instance); err != nil {
 			log.Error(err, "failed to update owner object")
 			return ctrl.Result{}, err
 		}
@@ -122,23 +120,23 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		}
 
 		instance.RemoveFinalizer(pg.PostgresFinalizerName)
-		if err := r.Update(ctx, instance); err != nil {
+		if err := r.CtrlClient.Update(ctx, instance); err != nil {
 			r.recorder.Eventf(instance, "Warning", "Self-Reconcilation", "failed to remove finalizer: %v", err)
-			return requeue, err
+			return ctrl.Result{}, fmt.Errorf("failed to update finalizers: %w", err)
 		}
+		log.Info("finalizers removed")
+
 		return ctrl.Result{}, nil
 	}
 
 	// Add finalizer if none.
 	if !instance.HasFinalizer(pg.PostgresFinalizerName) {
-		log.Info("finalizer being added")
 		instance.AddFinalizer(pg.PostgresFinalizerName)
-		if err := r.Update(ctx, instance); err != nil {
+		if err := r.CtrlClient.Update(ctx, instance); err != nil {
 			r.recorder.Eventf(instance, "Warning", "Self-Reconcilation", "failed to add finalizer: %v", err)
-			return requeue, fmt.Errorf("error while adding finalizer: %w", err)
+			return ctrl.Result{}, fmt.Errorf("error while adding finalizer: %w", err)
 		}
 		log.Info("finalizer added")
-		return ctrl.Result{}, nil
 	}
 
 	// Check if zalando dependencies are installed. If not, install them.
@@ -192,7 +190,7 @@ func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context
 		Name:      "postgreslet-postgres-sidecars",
 	}
 	c := &v1.ConfigMap{}
-	if err := r.Service.Get(ctx, cns, c); err != nil {
+	if err := r.SvcClient.Get(ctx, cns, c); err != nil {
 		// configmap with configuration does not exists, nothing we can do here...
 		log.Info("could not fetch config for sidecars")
 		c = nil
@@ -211,7 +209,7 @@ func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context
 			return fmt.Errorf("failed to convert to unstructured zalando postgresql: %w", err)
 		}
 
-		if err := r.Service.Create(ctx, u); err != nil {
+		if err := r.SvcClient.Create(ctx, u); err != nil {
 			return fmt.Errorf("failed to create zalando postgresql: %w", err)
 		}
 		log.Info("zalando postgresql created", "zalando postgresql", u)
@@ -226,7 +224,7 @@ func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context
 	if err != nil {
 		return fmt.Errorf("failed to convert to unstructured zalando postgresql: %w", err)
 	}
-	if err := r.Service.Patch(ctx, u, mergeFrom); err != nil {
+	if err := r.SvcClient.Patch(ctx, u, mergeFrom); err != nil {
 		return fmt.Errorf("failed to update zalando postgresql: %w", err)
 	}
 	log.Info("zalando postgresql updated", "zalando postgresql", u)
@@ -269,7 +267,7 @@ func (r *PostgresReconciler) updatePodEnvironmentConfigMap(ctx context.Context, 
 		Name:      p.Spec.BackupSecretRef,
 		Namespace: p.Namespace,
 	}
-	if err := r.Client.Get(ctx, backupNamespace, backupSecret); err != nil {
+	if err := r.CtrlClient.Get(ctx, backupNamespace, backupSecret); err != nil {
 		return fmt.Errorf("error while getting the backup secret from control plane cluster: %w", err)
 	}
 
@@ -337,11 +335,11 @@ func (r *PostgresReconciler) updatePodEnvironmentConfigMap(ctx context.Context, 
 		Name:      operatormanager.PodEnvCMName,
 		Namespace: p.ToPeripheralResourceNamespace(),
 	}
-	if err := r.Service.Get(ctx, ns, cm); err != nil {
+	if err := r.SvcClient.Get(ctx, ns, cm); err != nil {
 		return fmt.Errorf("error while getting the pod environment configmap from service cluster: %w", err)
 	}
 	cm.Data = data
-	if err := r.Service.Update(ctx, cm); err != nil {
+	if err := r.SvcClient.Update(ctx, cm); err != nil {
 		return fmt.Errorf("error while updating the pod environment configmap in service cluster: %w", err)
 	}
 
@@ -370,7 +368,7 @@ func (r *PostgresReconciler) deleteZPostgresqlByLabels(ctx context.Context, matc
 
 	for i, rawZ := range items {
 		log := r.Log.WithValues("zalando postgresql", rawZ)
-		if err := r.Service.Delete(ctx, &items[i]); err != nil {
+		if err := r.SvcClient.Delete(ctx, &items[i]); err != nil {
 			return fmt.Errorf("error while deleting zalando postgresql: %w", err)
 		}
 		log.Info("zalando postgresql deleted")
@@ -390,12 +388,13 @@ func (r *PostgresReconciler) createOrUpdateCWNP(ctx context.Context, in *pg.Post
 
 	// placeholder of the object with the specified namespaced name
 	key := &firewall.ClusterwideNetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: policy.Name, Namespace: policy.Namespace}}
-	if _, err := controllerutil.CreateOrUpdate(ctx, r.Service, key, func() error {
+	if _, err := controllerutil.CreateOrUpdate(ctx, r.SvcClient, key, func() error {
 		key.Spec.Ingress = policy.Spec.Ingress
 		return nil
 	}); err != nil {
 		return fmt.Errorf("unable to deploy CRD ClusterwideNetworkPolicy: %w", err)
 	}
+	r.Log.WithValues("postgres", in.ToKey()).Info("clusterwidenetworkpolicy created or updated")
 
 	return nil
 }
@@ -404,7 +403,7 @@ func (r *PostgresReconciler) deleteCWNP(ctx context.Context, in *pg.Postgres) er
 	policy := &firewall.ClusterwideNetworkPolicy{}
 	policy.Namespace = firewall.ClusterwideNetworkPolicyNamespace
 	policy.Name = in.ToPeripheralResourceName()
-	if err := r.Service.Delete(ctx, policy); err != nil {
+	if err := r.SvcClient.Delete(ctx, policy); err != nil {
 		return fmt.Errorf("unable to delete CRD ClusterwideNetworkPolicy %v: %w", policy.Name, err)
 	}
 	return nil
@@ -437,7 +436,7 @@ func (r *PostgresReconciler) getZPostgresqlByLabels(ctx context.Context, matchin
 		client.InNamespace(namespace),
 		matchingLabels,
 	}
-	if err := r.Service.List(ctx, zpl, opts...); err != nil {
+	if err := r.SvcClient.List(ctx, zpl, opts...); err != nil {
 		return nil, err
 	}
 
