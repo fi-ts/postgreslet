@@ -9,7 +9,6 @@ package v1
 import (
 	"fmt"
 	"reflect"
-	"strconv"
 
 	"regexp"
 
@@ -44,16 +43,10 @@ const (
 	ManagedByLabelValue string = "postgreslet"
 	// PostgresFinalizerName Name of the finalizer to use
 	PostgresFinalizerName string = "postgres.finalizers.database.fits.cloud"
-	// SidecarsCMName Namem of the ConfigMap containing the config for the sidecars
-	SidecarsCMName string = "postgres-sidecars-configmap"
 	// SidecarsCMFluentBitConfKey Name of the key containing the fluent-bit.conf config file
 	SidecarsCMFluentBitConfKey string = "fluent-bit.conf"
-	// FluentBitSidecarName Defines the name of the fluent-bit sidecar
-	FluentBitSidecarName string = "postgres-fluentbit"
 	// SidecarsCMExporterQueriesKey Name of the key containing the queries.yaml config file
 	SidecarsCMExporterQueriesKey string = "queries.yaml"
-	// ExporterSidecarName Defines the name of the postgres exporter sidecar
-	ExporterSidecarName string = "postgres-exporter"
 	// CreatedByAnnotationKey is used to store who in person created this database
 	CreatedByAnnotationKey string = "postgres.database.fits.cloud/created-by"
 	// BackupConfigLabelName if set to true, this secret stores the backupConfig
@@ -100,58 +93,6 @@ var (
 		Kind:       "postgresql",
 	}
 
-	additionalVolumes = []zalando.AdditionalVolume{
-		{
-			Name:      "empty",
-			MountPath: "/opt/empty",
-			TargetContainers: []string{
-				"all",
-			},
-			VolumeSource: corev1.VolumeSource{
-				EmptyDir: &corev1.EmptyDirVolumeSource{},
-			},
-		},
-		{
-			Name:      "postgres-exporter-configmap",
-			MountPath: "/metrics",
-			TargetContainers: []string{
-				ExporterSidecarName,
-			},
-			VolumeSource: corev1.VolumeSource{
-				ConfigMap: &corev1.ConfigMapVolumeSource{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: SidecarsCMName,
-					},
-					Items: []corev1.KeyToPath{
-						{
-							Key:  SidecarsCMExporterQueriesKey,
-							Path: "queries.yaml",
-						},
-					},
-				},
-			},
-		},
-		{
-			Name:      "postgres-fluentbit-configmap",
-			MountPath: "/fluent-bit/etc",
-			TargetContainers: []string{
-				FluentBitSidecarName,
-			},
-			VolumeSource: corev1.VolumeSource{
-				ConfigMap: &corev1.ConfigMapVolumeSource{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: SidecarsCMName,
-					},
-					Items: []corev1.KeyToPath{
-						{
-							Key:  SidecarsCMFluentBitConfKey,
-							Path: "fluent-bit.conf",
-						},
-					},
-				},
-			},
-		},
-	}
 
 	ExporterSidecarPortName intstr.IntOrString = intstr.IntOrString{
 		Type:   intstr.String,
@@ -487,7 +428,7 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 
 	// skip if the configmap does not exist
 	if c != nil {
-		z.Spec.AdditionalVolumes = additionalVolumes
+		z.Spec.AdditionalVolumes = p.buildAdditionalVolumes(c)
 		z.Spec.Sidecars = p.buildSidecars(c)
 	}
 
@@ -603,13 +544,7 @@ func (p *Postgres) buildSidecars(c *corev1.ConfigMap) []zalando.Sidecar {
 		return nil
 	}
 
-	exporterContainerPort, error := strconv.ParseInt(c.Data["postgres-exporter-container-port"], 10, 32)
-	if error != nil {
-		// todo log error
-		exporterContainerPort = 9187
-	}
-	exporter.Ports[0].ContainerPort = int32(exporterContainerPort)
-
+	// Deal with dynamically assigned name
 	for i := range exporter.Env {
 		if exporter.Env[i].Name == "DATA_SOURCE_PASS" {
 			exporter.Env[i].ValueFrom.SecretKeyRef.Name = "postgres." + p.ToPeripheralResourceName() + ".credentials"

@@ -496,9 +496,10 @@ func (m *OperatorManager) createOrUpdateSidecarsConfig(ctx context.Context, name
 }
 
 func (m *OperatorManager) createOrUpdateSidecarsConfigMap(ctx context.Context, namespace string, c *v1.ConfigMap, objs []client.Object) ([]client.Object, error) {
+	sidecarsCMName := c.Data["per-namespace-sidecars-configmap-name"]
 
 	sccm := &v1.ConfigMap{}
-	if err := m.SetName(sccm, pg.SidecarsCMName); err != nil {
+	if err := m.SetName(sccm, sidecarsCMName); err != nil {
 		return objs, fmt.Errorf("error while setting the name of the new Sidecars ConfigMap to %v: %w", namespace, err)
 	}
 	if err := m.SetNamespace(sccm, namespace); err != nil {
@@ -524,7 +525,7 @@ func (m *OperatorManager) createOrUpdateSidecarsConfigMap(ctx context.Context, n
 	// try to fetch any existing local sidecars configmap
 	ns := types.NamespacedName{
 		Namespace: namespace,
-		Name:      pg.SidecarsCMName,
+		Name:      sidecarsCMName,
 	}
 	if err := m.Get(ctx, ns, &v1.ConfigMap{}); err == nil {
 		// local configmap aleady exists, updating it
