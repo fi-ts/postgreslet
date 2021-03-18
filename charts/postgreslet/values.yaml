@@ -84,9 +84,7 @@ postgreslet:
 addRandomLabel: false
 
 sidecars:
-  perNamespaceConfigmapName: "postgres-sidecars-configmap"
   fluentbit:
-    name: "postgres-fluentbit"
     image: "fluent/fluent-bit:1.7.2"
     resources:
       requests:
@@ -114,9 +112,7 @@ sidecars:
             Match **
 
   exporter:
-    name: "postgres-exporter"
     image: "prometheuscommunity/postgres-exporter:v0.9.0"
-    containerPortName: "exporter"
     containerPort: 9187
     servicePort: 9187
     resources:

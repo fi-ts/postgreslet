@@ -17,6 +17,8 @@ import (
 
 	pg "github.com/fi-ts/postgreslet/api/v1"
 	"github.com/go-logr/logr"
+	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
+	"gopkg.in/yaml.v2"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
@@ -502,7 +504,10 @@ func (m *OperatorManager) createOrUpdateSidecarsConfig(ctx context.Context, name
 }
 
 func (m *OperatorManager) createOrUpdateSidecarsConfigMap(ctx context.Context, namespace string, c *v1.ConfigMap, objs []client.Object) ([]client.Object, error) {
-	sidecarsCMName := c.Data["per-namespace-sidecars-configmap-name"]
+	sidecarsCMName := perNamespaceSidecarsConfigMapName(c)
+	if sidecarsCMName == ""{
+		return objs, errs.New("failed to extract per-namespace sidecars configmap")
+	}
 
 	sccm := &v1.ConfigMap{}
 	if err := m.SetName(sccm, sidecarsCMName); err != nil {
@@ -581,8 +586,8 @@ func (m *OperatorManager) createOrUpdateExporterSidecarService(ctx context.Conte
 			Port:     int32(exporterServicePort),
 			Protocol: v1.ProtocolTCP,
 			TargetPort: intstr.IntOrString{
-				Type:   intstr.String,
-				StrVal: "exporter",
+				Type:   intstr.Int,
+				StrVal: c.Data["postgres-exporter-service-target-port"],
 			},
 		},
 	}
@@ -692,4 +697,19 @@ func (m *OperatorManager) UpdateAllOperators(ctx context.Context) error {
 
 	m.log.Info("Done updating postgres operators in managed namespaces")
 	return nil
+}
+
+func perNamespaceSidecarsConfigMapName(cm *v1.ConfigMap) string {
+	volumes := []zalando.AdditionalVolume{}
+	if err := yaml.Unmarshal([]byte(cm.Data["additional-volumes"]), &volumes); err != nil {
+		return ""
+	}
+
+	for i := range volumes {
+		if volumes[i].VolumeSource.ConfigMap != nil {
+			return volumes[i].VolumeSource.ConfigMap.Name
+		}
+	}
+
+	return ""
 }

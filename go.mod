@@ -9,6 +9,7 @@ require (
 	github.com/onsi/ginkgo v1.15.2
 	github.com/onsi/gomega v1.11.0
 	github.com/zalando/postgres-operator v1.6.1
+	gopkg.in/yaml.v2 v2.4.0
 	inet.af/netaddr v0.0.0-20210203214853-aa702495c49b
 	k8s.io/api v0.20.4
 	k8s.io/apiextensions-apiserver v0.20.4
