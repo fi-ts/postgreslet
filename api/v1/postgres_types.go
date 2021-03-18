@@ -43,16 +43,19 @@ const (
 	ManagedByLabelValue string = "postgreslet"
 	// PostgresFinalizerName Name of the finalizer to use
 	PostgresFinalizerName string = "postgres.finalizers.database.fits.cloud"
-	// SidecarsCMFluentBitConfKey Name of the key containing the fluent-bit.conf config file
-	SidecarsCMFluentBitConfKey string = "fluent-bit.conf"
-	// SidecarsCMExporterQueriesKey Name of the key containing the queries.yaml config file
-	SidecarsCMExporterQueriesKey string = "queries.yaml"
 	// CreatedByAnnotationKey is used to store who in person created this database
 	CreatedByAnnotationKey string = "postgres.database.fits.cloud/created-by"
 	// BackupConfigLabelName if set to true, this secret stores the backupConfig
 	BackupConfigLabelName string = "postgres.database.fits.cloud/is-backup"
 	// BackupConfigKey defines the key under which the BackupConfig is stored in the data map.
 	BackupConfigKey = "config"
+)
+
+var (
+	ZalandoPostgresqlTypeMeta = metav1.TypeMeta{
+		APIVersion: "acid.zalan.do/v1",
+		Kind:       "postgresql",
+	}
 )
 
 // BackupConfig defines all properties to configure backup of a database.
@@ -86,19 +89,6 @@ type BackupConfig struct {
 	// S3EncryptionKey if set, server side s3 encryption is used.
 	S3EncryptionKey *string `json:"s3encryptionkey,omitempty"`
 }
-
-var (
-	ZalandoPostgresqlTypeMeta = metav1.TypeMeta{
-		APIVersion: "acid.zalan.do/v1",
-		Kind:       "postgresql",
-	}
-
-
-	ExporterSidecarPortName intstr.IntOrString = intstr.IntOrString{
-		Type:   intstr.String,
-		StrVal: "exporter",
-	}
-)
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
@@ -525,7 +515,7 @@ func (p *Postgres) buildAdditionalVolumes(c *corev1.ConfigMap) []zalando.Additio
 
 	// Unmarshal yaml-string of additional volumes
 	volumes := &[]zalando.AdditionalVolume{}
-	if err := yaml.Unmarshal([]byte(c.Data["experimental-additional-volumes"]), volumes); err != nil {
+	if err := yaml.Unmarshal([]byte(c.Data["additional-volumes"]), volumes); err != nil {
 		return nil
 	}
 
@@ -540,7 +530,7 @@ func (p *Postgres) buildSidecars(c *corev1.ConfigMap) []zalando.Sidecar {
 
 	// Unmarshal yaml-string of exporter
 	exporter := &zalando.Sidecar{}
-	if err := yaml.Unmarshal([]byte(c.Data["experimental-postgres-exporter"]), exporter); err != nil {
+	if err := yaml.Unmarshal([]byte(c.Data["sidecar-exporter"]), exporter); err != nil {
 		return nil
 	}
 
@@ -554,7 +544,7 @@ func (p *Postgres) buildSidecars(c *corev1.ConfigMap) []zalando.Sidecar {
 
 	// Unmarshal yaml-string of fluent bit
 	fluentBit := &zalando.Sidecar{}
-	if err := yaml.Unmarshal([]byte(c.Data["experimental-postgres-fluentbit"]), fluentBit); err != nil {
+	if err := yaml.Unmarshal([]byte(c.Data["sidecar-fluentbit"]), fluentBit); err != nil {
 		return nil
 	}
 

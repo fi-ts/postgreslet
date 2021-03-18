@@ -4,7 +4,7 @@ data:
   per-namespace-sidecars-configmap-name: {{ .Values.sidecars.perNamespaceConfigmapName | quote }}
   queries.yaml: {{ b64enc .Values.sidecars.exporter.queries }}
   fluent-bit.conf: {{ b64enc .Values.sidecars.fluentbit.conf }}
-  experimental-postgres-exporter: |
+  sidecar-exporter: |
     name: {{ .Values.sidecars.exporter.name }}
     image: {{ .Values.sidecars.exporter.image }}
     ports:
@@ -29,7 +29,7 @@ data:
             key: password
       - name: PG_EXPORTER_EXTEND_QUERY_PATH
         value: /metrics/queries.yaml
-  experimental-postgres-fluentbit: |
+  sidecar-fluentbit: |
     name: {{ .Values.sidecars.fluentbit.name }}
     image: {{ .Values.sidecars.fluentbit.image }}
     resources:
@@ -40,7 +40,7 @@ data:
         cpu: {{ .Values.sidecars.fluentbit.resources.limits.cpu }}
         memory: {{ .Values.sidecars.fluentbit.resources.limits.memory }}
       key: password
-  experimental-additional-volumes: |
+  additional-volumes: |
     - name: empty
       mountPath: /opt/empty
       targetContainers:

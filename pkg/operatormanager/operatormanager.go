@@ -26,6 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -43,6 +44,11 @@ const (
 	operatorPodLabelValue string = "postgres-operator"
 
 	postgresExporterServiceName string = "postgres-exporter"
+
+	// SidecarsCMFluentBitConfKey Name of the key containing the fluent-bit.conf config file
+	SidecarsCMFluentBitConfKey string = "fluent-bit.conf"
+	// SidecarsCMExporterQueriesKey Name of the key containing the queries.yaml config file
+	SidecarsCMExporterQueriesKey string = "queries.yaml"
 )
 
 // operatorPodMatchingLabels is for listing operator pods
@@ -513,13 +519,13 @@ func (m *OperatorManager) createOrUpdateSidecarsConfigMap(ctx context.Context, n
 	b, err := base64.StdEncoding.DecodeString(c.Data["fluent-bit.conf"])
 	if err == nil {
 
-		sccm.Data[pg.SidecarsCMFluentBitConfKey] = string(b)
+		sccm.Data[SidecarsCMFluentBitConfKey] = string(b)
 	}
 
 	// decode and write the queries.yaml key from the global configmap to the local configmap
 	b, err = base64.StdEncoding.DecodeString(c.Data["queries.yaml"])
 	if err == nil {
-		sccm.Data[pg.SidecarsCMExporterQueriesKey] = string(b)
+		sccm.Data[SidecarsCMExporterQueriesKey] = string(b)
 	}
 
 	// try to fetch any existing local sidecars configmap
@@ -571,10 +577,13 @@ func (m *OperatorManager) createOrUpdateExporterSidecarService(ctx context.Conte
 	}
 	pes.Spec.Ports = []v1.ServicePort{
 		{
-			Name:       "metrics",
-			Port:       int32(exporterServicePort),
-			Protocol:   v1.ProtocolTCP,
-			TargetPort: pg.ExporterSidecarPortName,
+			Name:     "metrics",
+			Port:     int32(exporterServicePort),
+			Protocol: v1.ProtocolTCP,
+			TargetPort: intstr.IntOrString{
+				Type:   intstr.String,
+				StrVal: "exporter",
+			},
 		},
 	}
 	selector := map[string]string{
