@@ -514,12 +514,12 @@ func (p *Postgres) buildAdditionalVolumes(c *corev1.ConfigMap) []zalando.Additio
 	}
 
 	// Unmarshal yaml-string of additional volumes
-	volumes := &[]zalando.AdditionalVolume{}
-	if err := yaml.Unmarshal([]byte(c.Data["additional-volumes"]), volumes); err != nil {
+	volumes := []zalando.AdditionalVolume{}
+	if err := yaml.Unmarshal([]byte(c.Data["additional-volumes"]), &volumes); err != nil {
 		return nil
 	}
 
-	return *volumes
+	return volumes
 }
 
 func (p *Postgres) buildSidecars(c *corev1.ConfigMap) []zalando.Sidecar {
