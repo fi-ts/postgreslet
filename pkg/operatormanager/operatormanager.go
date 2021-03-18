@@ -12,13 +12,13 @@ import (
 	errs "errors"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"strconv"
 	"strings"
 
 	pg "github.com/fi-ts/postgreslet/api/v1"
 	"github.com/go-logr/logr"
 	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
-	"gopkg.in/yaml.v2"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
@@ -29,6 +29,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -505,7 +506,7 @@ func (m *OperatorManager) createOrUpdateSidecarsConfig(ctx context.Context, name
 
 func (m *OperatorManager) createOrUpdateSidecarsConfigMap(ctx context.Context, namespace string, c *v1.ConfigMap, objs []client.Object) ([]client.Object, error) {
 	sidecarsCMName := perNamespaceSidecarsConfigMapName(c)
-	if sidecarsCMName == ""{
+	if sidecarsCMName == "" {
 		return objs, errs.New("failed to extract per-namespace sidecars configmap")
 	}
 
@@ -565,6 +566,12 @@ func (m *OperatorManager) createOrUpdateExporterSidecarService(ctx context.Conte
 		exporterServicePort = 9187
 	}
 
+	exporterServiceTargetPort, error := strconv.ParseInt(c.Data["postgres-exporter-service-target-port"], 10, 32)
+	if error != nil {
+		// todo log error
+		exporterServiceTargetPort = exporterServicePort
+	}
+
 	pes := &v1.Service{}
 
 	if err := m.SetName(pes, postgresExporterServiceName); err != nil {
@@ -580,15 +587,13 @@ func (m *OperatorManager) createOrUpdateExporterSidecarService(ctx context.Conte
 	if err := m.SetLabels(pes, labels); err != nil {
 		return objs, fmt.Errorf("error while setting the namespace of the postgres-exporter service to %v: %w", namespace, err)
 	}
+
 	pes.Spec.Ports = []v1.ServicePort{
 		{
-			Name:     "metrics",
-			Port:     int32(exporterServicePort),
-			Protocol: v1.ProtocolTCP,
-			TargetPort: intstr.IntOrString{
-				Type:   intstr.Int,
-				StrVal: c.Data["postgres-exporter-service-target-port"],
-			},
+			Name:       "metrics",
+			Port:       int32(exporterServicePort),
+			Protocol:   v1.ProtocolTCP,
+			TargetPort: intstr.FromInt(int(exporterServiceTargetPort)),
 		},
 	}
 	selector := map[string]string{
@@ -700,6 +705,7 @@ func (m *OperatorManager) UpdateAllOperators(ctx context.Context) error {
 }
 
 func perNamespaceSidecarsConfigMapName(cm *v1.ConfigMap) string {
+	log.Print(cm.Data["additional-volumes"])
 	volumes := []zalando.AdditionalVolume{}
 	if err := yaml.Unmarshal([]byte(cm.Data["additional-volumes"]), &volumes); err != nil {
 		return ""
