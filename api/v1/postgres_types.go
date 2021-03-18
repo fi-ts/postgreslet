@@ -525,7 +525,7 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 
 func (p *Postgres) ToZalandoPostgresqlMatchingLabels() client.MatchingLabels {
 	return client.MatchingLabels{
-		ProjectIDLabelName: p.Spec.PartitionID,
+		ProjectIDLabelName: p.Spec.ProjectID,
 		TenantLabelName:    p.Spec.Tenant,
 		UIDLabelName:       string(p.UID),
 	}
