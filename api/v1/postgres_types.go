@@ -529,24 +529,20 @@ func (p *Postgres) buildSidecars(c *corev1.ConfigMap) []zalando.Sidecar {
 	}
 
 	// Unmarshal yaml-string of exporter
-	exporter := &zalando.Sidecar{}
-	if err := yaml.Unmarshal([]byte(c.Data["sidecar-exporter"]), exporter); err != nil {
+	sidecars := []zalando.Sidecar{}
+	if err := yaml.Unmarshal([]byte(c.Data["sidecars"]), &sidecars); err != nil {
 		return nil
 	}
 
 	// Deal with dynamically assigned name
-	for i := range exporter.Env {
-		if exporter.Env[i].Name == "DATA_SOURCE_PASS" {
-			exporter.Env[i].ValueFrom.SecretKeyRef.Name = "postgres." + p.ToPeripheralResourceName() + ".credentials"
-			break
+	for i := range sidecars {
+		for j := range sidecars[i].Env {
+			if sidecars[i].Env[j].Name == "DATA_SOURCE_PASS" {
+				sidecars[i].Env[j].ValueFrom.SecretKeyRef.Name = "postgres." + p.ToPeripheralResourceName() + ".credentials"
+				break
+			}
 		}
 	}
 
-	// Unmarshal yaml-string of fluent bit
-	fluentBit := &zalando.Sidecar{}
-	if err := yaml.Unmarshal([]byte(c.Data["sidecar-fluentbit"]), fluentBit); err != nil {
-		return nil
-	}
-
-	return []zalando.Sidecar{*exporter, *fluentBit}
+	return sidecars
 }
