@@ -40,20 +40,19 @@ data:
         limits:
           cpu: 500m
           memory: 256M
-        key: password
   additional-volumes: |
     - name: empty
       mountPath: /opt/empty
       targetContainers:
         - all
-      VolumeSource:
+      volumeSource:
         emptyDir: {}
     - name: postgres-exporter-configmap
       mountPath: /metrics
       targetContainers:
         - postgres-exporter
-      VolumeSource:
-        ConfigMap:
+      volumeSource:
+        configMap:
           name: postgres-sidecars-configmap
           items:
             - key: queries.yaml
@@ -62,8 +61,8 @@ data:
       mountPath: /fluent-bit/etc
       targetContainers:
         - postgres-fluentbit
-      VolumeSource:
-        ConfigMap:
+      volumeSource:
+        configMap:
           name: postgres-sidecars-configmap
           items:
             - key: fluent-bit.conf

@@ -38,21 +38,20 @@ data:
         limits:
           cpu: {{ .Values.sidecars.fluentbit.resources.limits.cpu }}
           memory: {{ .Values.sidecars.fluentbit.resources.limits.memory }}
-        key: password
   additional-volumes: |
     - name: empty
       mountPath: /opt/empty
       targetContainers:
         - all
-      VolumeSource:
+      volumeSource:
         emptyDir: {}
     - name: postgres-exporter-configmap
       mountPath: /metrics
       targetContainers:
         - postgres-exporter
-      VolumeSource:
-        ConfigMap:
-          name: postgres-sidecars-configmap
+      volumeSource:
+        configMap:
+          name: {{ .Values.sidecars.perNamespaceConfigmapName }}
           items:
             - key: queries.yaml
               path: queries.yaml
@@ -60,9 +59,9 @@ data:
       mountPath: /fluent-bit/etc
       targetContainers:
         - postgres-fluentbit
-      VolumeSource:
-        ConfigMap:
-          name: postgres-sidecars-configmap
+      volumeSource:
+        configMap:
+          name: {{ .Values.sidecars.perNamespaceConfigmapName }}
           items:
             - key: fluent-bit.conf
               path: fluent-bit.conf
