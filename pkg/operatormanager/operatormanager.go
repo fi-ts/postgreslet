@@ -12,13 +12,11 @@ import (
 	errs "errors"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"strconv"
 	"strings"
 
 	pg "github.com/fi-ts/postgreslet/api/v1"
 	"github.com/go-logr/logr"
-	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
@@ -29,7 +27,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -52,6 +49,8 @@ const (
 	SidecarsCMFluentBitConfKey string = "fluent-bit.conf"
 	// SidecarsCMExporterQueriesKey Name of the key containing the queries.yaml config file
 	SidecarsCMExporterQueriesKey string = "queries.yaml"
+
+	sidecarsCMName = "postgres-sidecars-configmap"
 )
 
 // operatorPodMatchingLabels is for listing operator pods
@@ -505,11 +504,6 @@ func (m *OperatorManager) createOrUpdateSidecarsConfig(ctx context.Context, name
 }
 
 func (m *OperatorManager) createOrUpdateSidecarsConfigMap(ctx context.Context, namespace string, c *v1.ConfigMap, objs []client.Object) ([]client.Object, error) {
-	sidecarsCMName := perNamespaceSidecarsConfigMapName(c)
-	if sidecarsCMName == "" {
-		return objs, errs.New("failed to extract per-namespace sidecars configmap")
-	}
-
 	sccm := &v1.ConfigMap{}
 	if err := m.SetName(sccm, sidecarsCMName); err != nil {
 		return objs, fmt.Errorf("error while setting the name of the new Sidecars ConfigMap to %v: %w", namespace, err)
@@ -702,20 +696,4 @@ func (m *OperatorManager) UpdateAllOperators(ctx context.Context) error {
 
 	m.log.Info("Done updating postgres operators in managed namespaces")
 	return nil
-}
-
-func perNamespaceSidecarsConfigMapName(cm *v1.ConfigMap) string {
-	log.Print(cm.Data["additional-volumes"])
-	volumes := []zalando.AdditionalVolume{}
-	if err := yaml.Unmarshal([]byte(cm.Data["additional-volumes"]), &volumes); err != nil {
-		return ""
-	}
-
-	for i := range volumes {
-		if volumes[i].VolumeSource.ConfigMap != nil {
-			return volumes[i].VolumeSource.ConfigMap.Name
-		}
-	}
-
-	return ""
 }
