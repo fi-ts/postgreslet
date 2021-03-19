@@ -9,7 +9,6 @@ package v1
 import (
 	"fmt"
 	"reflect"
-	"strconv"
 
 	"regexp"
 
@@ -23,6 +22,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/apimachinery/pkg/util/yaml"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
@@ -43,22 +43,19 @@ const (
 	ManagedByLabelValue string = "postgreslet"
 	// PostgresFinalizerName Name of the finalizer to use
 	PostgresFinalizerName string = "postgres.finalizers.database.fits.cloud"
-	// SidecarsCMName Namem of the ConfigMap containing the config for the sidecars
-	SidecarsCMName string = "postgres-sidecars-configmap"
-	// SidecarsCMFluentBitConfKey Name of the key containing the fluent-bit.conf config file
-	SidecarsCMFluentBitConfKey string = "fluent-bit.conf"
-	// FluentBitSidecarName Defines the name of the fluent-bit sidecar
-	FluentBitSidecarName string = "postgres-fluentbit"
-	// SidecarsCMExporterQueriesKey Name of the key containing the queries.yaml config file
-	SidecarsCMExporterQueriesKey string = "queries.yaml"
-	// ExporterSidecarName Defines the name of the postgres exporter sidecar
-	ExporterSidecarName string = "postgres-exporter"
 	// CreatedByAnnotationKey is used to store who in person created this database
 	CreatedByAnnotationKey string = "postgres.database.fits.cloud/created-by"
 	// BackupConfigLabelName if set to true, this secret stores the backupConfig
 	BackupConfigLabelName string = "postgres.database.fits.cloud/is-backup"
 	// BackupConfigKey defines the key under which the BackupConfig is stored in the data map.
 	BackupConfigKey = "config"
+)
+
+var (
+	ZalandoPostgresqlTypeMeta = metav1.TypeMeta{
+		APIVersion: "acid.zalan.do/v1",
+		Kind:       "postgresql",
+	}
 )
 
 // BackupConfig defines all properties to configure backup of a database.
@@ -92,71 +89,6 @@ type BackupConfig struct {
 	// S3EncryptionKey if set, server side s3 encryption is used.
 	S3EncryptionKey *string `json:"s3encryptionkey,omitempty"`
 }
-
-var (
-	ZalandoPostgresqlTypeMeta = metav1.TypeMeta{
-		APIVersion: "acid.zalan.do/v1",
-		Kind:       "postgresql",
-	}
-
-	additionalVolumes = []zalando.AdditionalVolume{
-		{
-			Name:      "empty",
-			MountPath: "/opt/empty",
-			TargetContainers: []string{
-				"all",
-			},
-			VolumeSource: corev1.VolumeSource{
-				EmptyDir: &corev1.EmptyDirVolumeSource{},
-			},
-		},
-		{
-			Name:      "postgres-exporter-configmap",
-			MountPath: "/metrics",
-			TargetContainers: []string{
-				ExporterSidecarName,
-			},
-			VolumeSource: corev1.VolumeSource{
-				ConfigMap: &corev1.ConfigMapVolumeSource{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: SidecarsCMName,
-					},
-					Items: []corev1.KeyToPath{
-						{
-							Key:  SidecarsCMExporterQueriesKey,
-							Path: "queries.yaml",
-						},
-					},
-				},
-			},
-		},
-		{
-			Name:      "postgres-fluentbit-configmap",
-			MountPath: "/fluent-bit/etc",
-			TargetContainers: []string{
-				FluentBitSidecarName,
-			},
-			VolumeSource: corev1.VolumeSource{
-				ConfigMap: &corev1.ConfigMapVolumeSource{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: SidecarsCMName,
-					},
-					Items: []corev1.KeyToPath{
-						{
-							Key:  SidecarsCMFluentBitConfKey,
-							Path: "fluent-bit.conf",
-						},
-					},
-				},
-			},
-		},
-	}
-
-	ExporterSidecarPortName intstr.IntOrString = intstr.IntOrString{
-		Type:   intstr.String,
-		StrVal: "exporter",
-	}
-)
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
@@ -486,7 +418,7 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 
 	// skip if the configmap does not exist
 	if c != nil {
-		z.Spec.AdditionalVolumes = additionalVolumes
+		z.Spec.AdditionalVolumes = p.buildAdditionalVolumes(c)
 		z.Spec.Sidecars = p.buildSidecars(c)
 	}
 
@@ -575,77 +507,42 @@ func init() {
 	SchemeBuilder.Register(&Postgres{}, &PostgresList{})
 }
 
+func (p *Postgres) buildAdditionalVolumes(c *corev1.ConfigMap) []zalando.AdditionalVolume {
+	if c == nil {
+		// abort if the global configmap is not there
+		return nil
+	}
+
+	// Unmarshal yaml-string of additional volumes
+	volumes := []zalando.AdditionalVolume{}
+	if err := yaml.Unmarshal([]byte(c.Data["additional-volumes"]), &volumes); err != nil {
+		return nil
+	}
+
+	return volumes
+}
+
 func (p *Postgres) buildSidecars(c *corev1.ConfigMap) []zalando.Sidecar {
 	if c == nil {
 		// abort if the global configmap is not there
 		return nil
 	}
 
-	exporterContainerPort, error := strconv.ParseInt(c.Data["postgres-exporter-container-port"], 10, 32)
-	if error != nil {
-		// todo log error
-		exporterContainerPort = 9187
+	// Unmarshal yaml-string of exporter
+	sidecars := []zalando.Sidecar{}
+	if err := yaml.Unmarshal([]byte(c.Data["sidecars"]), &sidecars); err != nil {
+		return nil
 	}
-	return []zalando.Sidecar{
-		{
-			Name:        ExporterSidecarName,
-			DockerImage: c.Data["postgres-exporter-image"],
-			Ports: []corev1.ContainerPort{
-				{
-					Name:          ExporterSidecarPortName.StrVal,
-					ContainerPort: int32(exporterContainerPort),
-					Protocol:      corev1.ProtocolTCP,
-				},
-			},
-			Resources: zalando.Resources{
-				ResourceLimits: zalando.ResourceDescription{
-					CPU:    c.Data["postgres-exporter-limits-cpu"],
-					Memory: c.Data["postgres-exporter-limits-memory"],
-				},
-				ResourceRequests: zalando.ResourceDescription{
-					CPU:    c.Data["postgres-exporter-requests-cpu"],
-					Memory: c.Data["postgres-exporter-requests-memory"],
-				},
-			},
-			Env: []corev1.EnvVar{
-				{
-					Name:  "DATA_SOURCE_URI",
-					Value: "127.0.0.1:5432/postgres?sslmode=disable",
-				},
-				{
-					Name:  "DATA_SOURCE_USER",
-					Value: "postgres",
-				},
-				{
-					Name: "DATA_SOURCE_PASS",
-					ValueFrom: &corev1.EnvVarSource{
-						SecretKeyRef: &corev1.SecretKeySelector{
-							LocalObjectReference: corev1.LocalObjectReference{
-								Name: "postgres." + p.ToPeripheralResourceName() + ".credentials",
-							},
-							Key: "password",
-						},
-					},
-				},
-				{
-					Name:  "PG_EXPORTER_EXTEND_QUERY_PATH",
-					Value: "/metrics/queries.yaml",
-				},
-			},
-		},
-		{
-			Name:        FluentBitSidecarName,
-			DockerImage: c.Data["postgres-fluentbit-image"],
-			Resources: zalando.Resources{
-				ResourceLimits: zalando.ResourceDescription{
-					CPU:    c.Data["postgres-fluentbit-limits-cpu"],
-					Memory: c.Data["postgres-fluentbit-limits-memory"],
-				},
-				ResourceRequests: zalando.ResourceDescription{
-					CPU:    c.Data["postgres-fluentbit-requests-cpu"],
-					Memory: c.Data["postgres-fluentbit-requests-memory"],
-				},
-			},
-		},
+
+	// Deal with dynamically assigned name
+	for i := range sidecars {
+		for j := range sidecars[i].Env {
+			if sidecars[i].Env[j].ValueFrom != nil && sidecars[i].Env[j].ValueFrom.SecretKeyRef != nil {
+				sidecars[i].Env[j].ValueFrom.SecretKeyRef.Name = "postgres." + p.ToPeripheralResourceName() + ".credentials"
+				break
+			}
+		}
 	}
+
+	return sidecars
 }

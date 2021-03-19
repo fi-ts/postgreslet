@@ -26,6 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -43,6 +44,13 @@ const (
 	operatorPodLabelValue string = "postgres-operator"
 
 	postgresExporterServiceName string = "postgres-exporter"
+
+	// SidecarsCMFluentBitConfKey Name of the key containing the fluent-bit.conf config file
+	SidecarsCMFluentBitConfKey string = "fluent-bit.conf"
+	// SidecarsCMExporterQueriesKey Name of the key containing the queries.yaml config file
+	SidecarsCMExporterQueriesKey string = "queries.yaml"
+
+	sidecarsCMName = "postgres-sidecars-configmap"
 )
 
 // operatorPodMatchingLabels is for listing operator pods
@@ -496,9 +504,8 @@ func (m *OperatorManager) createOrUpdateSidecarsConfig(ctx context.Context, name
 }
 
 func (m *OperatorManager) createOrUpdateSidecarsConfigMap(ctx context.Context, namespace string, c *v1.ConfigMap, objs []client.Object) ([]client.Object, error) {
-
 	sccm := &v1.ConfigMap{}
-	if err := m.SetName(sccm, pg.SidecarsCMName); err != nil {
+	if err := m.SetName(sccm, sidecarsCMName); err != nil {
 		return objs, fmt.Errorf("error while setting the name of the new Sidecars ConfigMap to %v: %w", namespace, err)
 	}
 	if err := m.SetNamespace(sccm, namespace); err != nil {
@@ -512,19 +519,19 @@ func (m *OperatorManager) createOrUpdateSidecarsConfigMap(ctx context.Context, n
 	b, err := base64.StdEncoding.DecodeString(c.Data["fluent-bit.conf"])
 	if err == nil {
 
-		sccm.Data[pg.SidecarsCMFluentBitConfKey] = string(b)
+		sccm.Data[SidecarsCMFluentBitConfKey] = string(b)
 	}
 
 	// decode and write the queries.yaml key from the global configmap to the local configmap
 	b, err = base64.StdEncoding.DecodeString(c.Data["queries.yaml"])
 	if err == nil {
-		sccm.Data[pg.SidecarsCMExporterQueriesKey] = string(b)
+		sccm.Data[SidecarsCMExporterQueriesKey] = string(b)
 	}
 
 	// try to fetch any existing local sidecars configmap
 	ns := types.NamespacedName{
 		Namespace: namespace,
-		Name:      pg.SidecarsCMName,
+		Name:      sidecarsCMName,
 	}
 	if err := m.Get(ctx, ns, &v1.ConfigMap{}); err == nil {
 		// local configmap aleady exists, updating it
@@ -553,6 +560,12 @@ func (m *OperatorManager) createOrUpdateExporterSidecarService(ctx context.Conte
 		exporterServicePort = 9187
 	}
 
+	exporterServiceTargetPort, error := strconv.ParseInt(c.Data["postgres-exporter-service-target-port"], 10, 32)
+	if error != nil {
+		// todo log error
+		exporterServiceTargetPort = exporterServicePort
+	}
+
 	pes := &v1.Service{}
 
 	if err := m.SetName(pes, postgresExporterServiceName); err != nil {
@@ -568,12 +581,13 @@ func (m *OperatorManager) createOrUpdateExporterSidecarService(ctx context.Conte
 	if err := m.SetLabels(pes, labels); err != nil {
 		return objs, fmt.Errorf("error while setting the namespace of the postgres-exporter service to %v: %w", namespace, err)
 	}
+
 	pes.Spec.Ports = []v1.ServicePort{
 		{
 			Name:       "metrics",
 			Port:       int32(exporterServicePort),
 			Protocol:   v1.ProtocolTCP,
-			TargetPort: pg.ExporterSidecarPortName,
+			TargetPort: intstr.FromInt(int(exporterServiceTargetPort)),
 		},
 	}
 	selector := map[string]string{
