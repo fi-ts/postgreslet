@@ -12,6 +12,15 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v2
 
+    - name: Lint
+      uses: golangci/golangci-lint-action@v2
+      with:
+        version: v1.32.2
+        args: --timeout=5m
+
+    - name: Test
+      run: make test
+
     - name: Figure out if running fork PR
       id: fork
       run: '["${{ secrets.DOCKER_REGISTRY_TOKEN }}" == ""] && echo "::set-output name=is_fork_pr::true" || echo "::set-output name=is_fork_pr::false"'
@@ -23,12 +32,6 @@ jobs:
         username: ${{ secrets.DOCKER_REGISTRY_USER }}
         password: ${{ secrets.DOCKER_REGISTRY_TOKEN }}
       if: steps.fork.outputs.is_fork_pr == 'false'
-
-    - name: Lint
-      uses: golangci/golangci-lint-action@v2
-      with:
-        version: v1.32.2
-        args: --timeout=5m
 
     - name: Build Docker image
       run: |
