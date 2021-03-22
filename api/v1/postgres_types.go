@@ -31,8 +31,8 @@ import (
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
 const (
-	// NameLabelName Name of the label referencing the owning Postgres resource in the control cluster
-	NameLabelName string = "postgres.database.fits.cloud/name"
+	// UIDLabelName Name of the label referencing the owning Postgres resource in the control cluster
+	UIDLabelName string = "postgres.database.fits.cloud/uuid"
 	// TenantLabelName Name of the tenant label
 	TenantLabelName string = "postgres.database.fits.cloud/tenant"
 	// ProjectIDLabelName Name of the ProjectID label
@@ -459,7 +459,7 @@ func (p *Postgres) ToZalandoPostgresqlMatchingLabels() client.MatchingLabels {
 	return client.MatchingLabels{
 		ProjectIDLabelName: p.Spec.ProjectID,
 		TenantLabelName:    p.Spec.Tenant,
-		NameLabelName:      p.Name,
+		UIDLabelName:       string(p.UID),
 	}
 }
 

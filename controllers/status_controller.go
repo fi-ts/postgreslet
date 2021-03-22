@@ -56,25 +56,25 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{}, err
 	}
 
-	derivedOwnerName, err := deriveOwnerData(instance)
+	derivedOwnerUID, err := deriveOwnerData(instance)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 	var owner pg.Postgres
 	ownerFound := false
 	for _, o := range owners.Items {
-		if o.Name != derivedOwnerName {
+		if o.UID != derivedOwnerUID {
 			continue
 		}
 
-		log.Info("Found owner", "owner", o.Name)
+		log.Info("Found owner", "owner", o.UID)
 		owner = o
 		ownerFound = true
 		break
 	}
 
 	if !ownerFound {
-		return ctrl.Result{}, fmt.Errorf("could not find the owner")
+		return ctrl.Result{}, fmt.Errorf("Could not find the owner")
 	}
 
 	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
@@ -87,7 +87,7 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		// update the reference to the zalando instance in the remote object
 		owner.Status.ChildName = instance.Name
 
-		log.Info("Updating owner", "owner", owner.Name)
+		log.Info("Updating owner", "owner", owner.UID)
 		if err := r.CtrlClient.Status().Update(ctx, &owner); err != nil {
 			log.Error(err, "failed to update owner object")
 			return err
@@ -163,11 +163,11 @@ func (r *StatusReconciler) createOrUpdateSecret(ctx context.Context, in *pg.Post
 }
 
 // Extract the UID of the owner object by reading the value of a certain label
-func deriveOwnerData(instance *zalando.Postgresql) (string, error) {
-	value, ok := instance.ObjectMeta.Labels[pg.NameLabelName]
+func deriveOwnerData(instance *zalando.Postgresql) (types.UID, error) {
+	value, ok := instance.ObjectMeta.Labels[pg.UIDLabelName]
 	if !ok {
 		return "", fmt.Errorf("Could not derive owner reference")
 	}
-	ownerName := value
-	return ownerName, nil
+	ownerUID := types.UID(value)
+	return ownerUID, nil
 }
