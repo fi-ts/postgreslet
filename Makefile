@@ -27,7 +27,7 @@ POSTGRES_CRD_URL ?= https://raw.githubusercontent.com/zalando/postgres-operator/
 all: manager
 
 # Run tests
-test: generate fmt vet manifests
+test: generate fmt vet manifests kubebuilder
 	go test ./... -coverprofile cover.out -v
 
 # todo: Modify Dockerfile to include the version magic
@@ -183,3 +183,12 @@ install-configmap-sidecars:
 # Todo: Add release version when the changes in main branch are released
 crd-cwnp-for-testing:
 	curl https://raw.githubusercontent.com/metal-stack/firewall-controller/master/config/crd/bases/metal-stack.io_clusterwidenetworkpolicies.yaml -o external/test/crd-clusterwidenetworkpolicy.yaml
+
+kubebuilder:
+	{ \
+	os=$$(go env GOOS) ;\
+	arch=$$(go env GOARCH) ;\
+	curl -L https://go.kubebuilder.io/dl/2.3.1/$${os}/$${arch} | tar -xz -C /tmp/ ;\
+	sudo mv /tmp/kubebuilder_2.3.1_$${os}_$${arch} /usr/local/kubebuilder ;\
+	export PATH=$PATH:/usr/local/kubebuilder/bin ;\
+	}
