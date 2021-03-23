@@ -18,11 +18,8 @@ jobs:
         version: v1.32.2
         args: --timeout=5m
 
-    - name: Install Kubebuilder
-      run: make kubebuilder
-
     - name: Run tests
-      run: make test
+      run: make test-ci
 
     - name: Figure out if running fork PR
       id: fork

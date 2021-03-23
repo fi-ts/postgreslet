@@ -27,8 +27,17 @@ POSTGRES_CRD_URL ?= https://raw.githubusercontent.com/zalando/postgres-operator/
 all: manager
 
 # Run tests
-test: generate fmt vet manifests
+test: test-prep
 	go test ./... -coverprofile cover.out -v
+
+test-ci: test-ci-prep
+	docker run --rm ${IMG}:test-ci
+
+test-ci-prep: test-prep
+	docker build -f Dockerfile-test -t ${IMG}:test-ci .
+	docker push ${IMG}:test-ci
+
+test-prep: generate fmt vet manifests
 
 # todo: Modify Dockerfile to include the version magic
 # Build manager binary
