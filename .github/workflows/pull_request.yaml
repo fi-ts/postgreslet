@@ -18,7 +18,19 @@ jobs:
         version: v1.32.2
         args: --timeout=5m
 
+    - name: Change Owner
+      shell: bash
+      run: sudo chown -R $USER:$USER /usr/local
+
+    - name: Check Kubebuilder Cache
+      id: check-kubebuilder-cache
+      uses: actions/cache@v2
+      with:
+        path: /usr/local/kubebuilder/bin
+        key: kubebuilder
+
     - name: Install Kubebuilder
+      if: steps.check-kubebuilder-cache.outputs.cache-hit != 'true'
       run: make kubebuilder
 
     - name: Run tests
