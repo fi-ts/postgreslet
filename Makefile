@@ -28,7 +28,7 @@ all: manager
 
 # Run tests
 test: generate fmt vet manifests
-	go test ./... -coverprofile cover.out -v
+	KUBEBUILDER_ASSETS=${GOBIN} go test ./... -coverprofile cover.out -v
 
 # todo: Modify Dockerfile to include the version magic
 # Build manager binary
@@ -189,6 +189,5 @@ kubebuilder:
 	os=$$(go env GOOS) ;\
 	arch=$$(go env GOARCH) ;\
 	curl -L https://go.kubebuilder.io/dl/2.3.1/$${os}/$${arch} | tar -xz -C /tmp/ ;\
-	sudo mv /tmp/kubebuilder_2.3.1_$${os}_$${arch} /usr/local/kubebuilder ;\
-	export PATH=$PATH:/usr/local/kubebuilder/bin ;\
+	mv /tmp/kubebuilder_2.3.1_$${os}_$${arch}/bin/* ${GOBIN} ;\
 	}

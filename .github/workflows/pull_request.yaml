@@ -18,19 +18,22 @@ jobs:
         version: v1.32.2
         args: --timeout=5m
 
-    - name: Change Owner
-      shell: bash
-      run: sudo chown -R $(id -u):$(id -g) /usr/local
-
-    - name: Check Kubebuilder Cache
-      id: check-kubebuilder-cache
+    - name: Check etcd Cache
+      id: check-etcd-cache
       uses: actions/cache@v2
       with:
-        path: /usr/local/kubebuilder/bin
-        key: kubebuilder
+        path: ~/go/bin/etcd
+        key: etcd
+
+    - name: Check kube-apiserver Cache
+      id: check-kube-apiserver-cache
+      uses: actions/cache@v2
+      with:
+        path: ~/go/bin/kube-apiserver
+        key: kube-apiserver
 
     - name: Install Kubebuilder
-      if: steps.check-kubebuilder-cache.outputs.cache-hit != 'true'
+      if: ${{ steps.check-etcd-cache.outputs.cache-hit != 'true' || steps.check-kube-apiserver-cache.outputs.cache-hit != 'true' }}
       run: make kubebuilder
 
     - name: Run tests
