@@ -20,7 +20,7 @@ jobs:
 
     - name: Change Owner
       shell: bash
-      run: sudo chown -R $USER:$USER /usr/local
+      run: sudo chown -R $(id -u):$(id -g) /usr/local
 
     - name: Check Kubebuilder Cache
       id: check-kubebuilder-cache
