@@ -186,7 +186,6 @@ crd-cwnp-for-testing:
 
 KUBEBUILDER_VERSION:=2.3.2
 kubebuilder:
-	echo  $(wildcard ~/.kubebuilder/${KUBEBUILDER_VERSION})
 ifeq (,$(wildcard ~/.kubebuilder/${KUBEBUILDER_VERSION}))
 	{ \
 	os=$$(go env GOOS) ;\
