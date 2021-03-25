@@ -184,11 +184,18 @@ install-configmap-sidecars:
 crd-cwnp-for-testing:
 	curl https://raw.githubusercontent.com/metal-stack/firewall-controller/master/config/crd/bases/metal-stack.io_clusterwidenetworkpolicies.yaml -o external/test/crd-clusterwidenetworkpolicy.yaml
 
+KUBEBUILDER_VERSION:=2.3.2
 kubebuilder:
+	echo  $(wildcard ~/.kubebuilder/${KUBEBUILDER_VERSION})
+ifeq (,$(wildcard ~/.kubebuilder/${KUBEBUILDER_VERSION}))
 	{ \
 	os=$$(go env GOOS) ;\
 	arch=$$(go env GOARCH) ;\
-	curl -L https://go.kubebuilder.io/dl/2.3.1/$${os}/$${arch} | tar -xz -C /tmp/ ;\
-	mv /tmp/kubebuilder_2.3.1_$${os}_$${arch}/bin/* ${GOBIN} ;\
+	curl -L https://go.kubebuilder.io/dl/${KUBEBUILDER_VERSION}/$${os}/$${arch} | tar -xz -C /tmp/ ;\
+	mv /tmp/kubebuilder_${KUBEBUILDER_VERSION}_$${os}_$${arch}/bin/* ${GOBIN} ;\
+	mkdir -p ~/.kubebuilder/${KUBEBUILDER_VERSION} ;\
 	}
-	
+endif
+
+kubebuilder-version-ci:
+	@echo ${KUBEBUILDER_VERSION}

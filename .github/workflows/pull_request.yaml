@@ -12,53 +12,64 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v2
 
-    - name: Lint
-      uses: golangci/golangci-lint-action@v2
-      with:
-        version: v1.32.2
-        args: --timeout=5m
+    # - name: Lint
+    #   uses: golangci/golangci-lint-action@v2
+    #   with:
+    #     version: v1.32.2
+    #     args: --timeout=5m
 
-    - name: Check etcd Cache
-      id: check-etcd-cache
+    - name: Ensure etcd
+      id: Ensure-etcd
       uses: actions/cache@v2
       with:
         path: ~/go/bin/etcd
         key: etcd
 
-    - name: Check kube-apiserver Cache
-      id: check-kube-apiserver-cache
+    - name: Ensure kube-apiserver
+      id: ensure-kube-apiserver
       uses: actions/cache@v2
       with:
         path: ~/go/bin/kube-apiserver
         key: kube-apiserver
 
+    - name: Get Kubebuilder Version
+      id: get-kubebuilder-version
+      run: echo "::set-output name=version::$(make kubebuilder-version-ci)"
+      shell: bash
+
+    - name: Ensure Kubebuilder Metadata
+      id: ensure-kubebuilder-metadata
+      uses: actions/cache@v2
+      with:
+        path: ~/.kubebuilder/${{ steps.get-kubebuilder-version.outputs.version }}
+        key: kubebuilder
+
     - name: Install Kubebuilder
-      if: ${{ steps.check-etcd-cache.outputs.cache-hit != 'true' || steps.check-kube-apiserver-cache.outputs.cache-hit != 'true' }}
       run: make kubebuilder
 
     - name: Run tests
       run: make test
 
-    - name: Figure out if running fork PR
-      id: fork
-      run: '["${{ secrets.DOCKER_REGISTRY_TOKEN }}" == ""] && echo "::set-output name=is_fork_pr::true" || echo "::set-output name=is_fork_pr::false"'
+    # - name: Figure out if running fork PR
+    #   id: fork
+    #   run: '["${{ secrets.DOCKER_REGISTRY_TOKEN }}" == ""] && echo "::set-output name=is_fork_pr::true" || echo "::set-output name=is_fork_pr::false"'
 
-    - name: Docker Login
-      uses: docker/login-action@v1
-      with:
-        registry: ${{ secrets.DOCKER_REGISTRY }}
-        username: ${{ secrets.DOCKER_REGISTRY_USER }}
-        password: ${{ secrets.DOCKER_REGISTRY_TOKEN }}
-      if: steps.fork.outputs.is_fork_pr == 'false'
+    # - name: Docker Login
+    #   uses: docker/login-action@v1
+    #   with:
+    #     registry: ${{ secrets.DOCKER_REGISTRY }}
+    #     username: ${{ secrets.DOCKER_REGISTRY_USER }}
+    #     password: ${{ secrets.DOCKER_REGISTRY_TOKEN }}
+    #   if: steps.fork.outputs.is_fork_pr == 'false'
 
-    - name: Build Docker image
-      run: |
-        export DOCKER_TAG=pr-${GITHUB_HEAD_REF}
-        make docker-build
+    # - name: Build Docker image
+    #   run: |
+    #     export DOCKER_TAG=pr-${GITHUB_HEAD_REF}
+    #     make docker-build
 
-    - name: Push Docker image
-      run: |
-        # pull request images are prefixed with 'pr' to prevent them from overriding released images
-        export DOCKER_TAG=pr-${GITHUB_HEAD_REF}
-        make docker-push
-      if: steps.fork.outputs.is_fork_pr == 'false'
+    # - name: Push Docker image
+    #   run: |
+    #     # pull request images are prefixed with 'pr' to prevent them from overriding released images
+    #     export DOCKER_TAG=pr-${GITHUB_HEAD_REF}
+    #     make docker-push
+    #   if: steps.fork.outputs.is_fork_pr == 'false'
