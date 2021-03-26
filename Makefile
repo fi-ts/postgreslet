@@ -192,7 +192,7 @@ ifeq (,$(wildcard ~/.kubebuilder/${KUBEBUILDER_VERSION}))
 	arch=$$(go env GOARCH) ;\
 	curl -L https://go.kubebuilder.io/dl/${KUBEBUILDER_VERSION}/$${os}/$${arch} | tar -xz -C /tmp/ ;\
 	mv /tmp/kubebuilder_${KUBEBUILDER_VERSION}_$${os}_$${arch}/bin/* ${GOBIN} ;\
-	mkdir -p ~/.kubebuilder/${KUBEBUILDER_VERSION} ;\
+	mkdir ~/.kubebuilder && touch ~/.kubebuilder/${KUBEBUILDER_VERSION} ;\
 	}
 endif
 
