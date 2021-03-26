@@ -184,7 +184,7 @@ install-configmap-sidecars:
 crd-cwnp-for-testing:
 	curl https://raw.githubusercontent.com/metal-stack/firewall-controller/master/config/crd/bases/metal-stack.io_clusterwidenetworkpolicies.yaml -o external/test/crd-clusterwidenetworkpolicy.yaml
 
-KUBEBUILDER_VERSION:=2.3.1
+KUBEBUILDER_VERSION:=2.3.2
 kubebuilder:
 ifeq (,$(wildcard ~/.kubebuilder/${KUBEBUILDER_VERSION}))
 	{ \
