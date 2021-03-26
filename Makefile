@@ -28,7 +28,7 @@ all: manager
 
 # Run tests
 test: generate fmt vet manifests
-	go test ./... -coverprofile cover.out -v
+	KUBEBUILDER_ASSETS=${GOBIN} go test ./... -coverprofile cover.out -v
 
 # todo: Modify Dockerfile to include the version magic
 # Build manager binary
@@ -183,3 +183,19 @@ install-configmap-sidecars:
 # Todo: Add release version when the changes in main branch are released
 crd-cwnp-for-testing:
 	curl https://raw.githubusercontent.com/metal-stack/firewall-controller/master/config/crd/bases/metal-stack.io_clusterwidenetworkpolicies.yaml -o external/test/crd-clusterwidenetworkpolicy.yaml
+
+KUBEBUILDER_VERSION:=2.3.2
+kubebuilder:
+ifeq (,$(wildcard ~/.kubebuilder/${KUBEBUILDER_VERSION}))
+	{ \
+	os=$$(go env GOOS) ;\
+	arch=$$(go env GOARCH) ;\
+	curl -L https://go.kubebuilder.io/dl/${KUBEBUILDER_VERSION}/$${os}/$${arch} | tar -xz -C /tmp/ ;\
+	mv /tmp/kubebuilder_${KUBEBUILDER_VERSION}_$${os}_$${arch}/bin/* ${GOBIN} ;\
+	mkdir -p ~/.kubebuilder ;\
+	touch ~/.kubebuilder/${KUBEBUILDER_VERSION} ;\
+	}
+endif
+
+kubebuilder-version-ci:
+	@echo ${KUBEBUILDER_VERSION}
