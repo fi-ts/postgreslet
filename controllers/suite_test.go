@@ -100,6 +100,7 @@ var _ = BeforeSuite(func(done Done) {
 
 	// Todo: OperatorManager should be a reconciler
 	opMgr, err := operatormanager.New(
+		ctrlClusterMgr.GetClient(),
 		svcClusterCfg,
 		filepath.Join(externalYAMLDir, "svc-postgres-operator.yaml"),
 		scheme,

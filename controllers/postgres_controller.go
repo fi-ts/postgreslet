@@ -8,9 +8,7 @@ package controllers
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"net/url"
 
 	"github.com/go-logr/logr"
 	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
@@ -74,6 +72,8 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, nil
 	}
 
+	namespace := instance.ToPeripheralResourceNamespace()
+
 	// Delete
 	if instance.IsBeingDeleted() {
 		instance.Status.Description = "Terminating"
@@ -84,7 +84,6 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		log.Info("instance being deleted")
 
 		matchingLabels := instance.ToZalandoPostgresqlMatchingLabels()
-		namespace := instance.ToPeripheralResourceNamespace()
 
 		if err := r.deleteCWNP(ctx, instance); client.IgnoreNotFound(err) != nil { // todo: remove ignorenotfound
 			r.recorder.Event(instance, "Warning", "Error", "failed to delete ClusterwideNetworkPolicy")
@@ -234,112 +233,8 @@ func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context
 
 // ensureZalandoDependencies makes sure Zalando resources are installed in the service-cluster.
 func (r *PostgresReconciler) ensureZalandoDependencies(ctx context.Context, p *pg.Postgres) error {
-	namespace := p.ToPeripheralResourceNamespace()
-	isInstalled, err := r.IsOperatorInstalled(ctx, namespace)
-	if err != nil {
-		return fmt.Errorf("error while querying if zalando dependencies are installed: %w", err)
-	}
-
-	if !isInstalled {
-		if err := r.InstallOrUpdateOperator(ctx, namespace); err != nil {
-			return fmt.Errorf("error while installing zalando dependencies: %w", err)
-		}
-	}
-
-	if err := r.updatePodEnvironmentConfigMap(ctx, p); err != nil {
-		return fmt.Errorf("error while updating backup config: %w", err)
-	}
-
-	return nil
-}
-
-func (r *PostgresReconciler) updatePodEnvironmentConfigMap(ctx context.Context, p *pg.Postgres) error {
-	log := r.Log.WithValues("postgres", p.UID)
-	if p.Spec.BackupSecretRef == "" {
-		log.Info("No configured backupSecretRef found, skipping configuration of postgres backup")
-		return nil
-	}
-
-	// fetch secret
-	backupSecret := &v1.Secret{}
-	backupNamespace := types.NamespacedName{
-		Name:      p.Spec.BackupSecretRef,
-		Namespace: p.Namespace,
-	}
-	if err := r.CtrlClient.Get(ctx, backupNamespace, backupSecret); err != nil {
-		return fmt.Errorf("error while getting the backup secret from control plane cluster: %w", err)
-	}
-
-	backupConfigJSON, ok := backupSecret.Data[pg.BackupConfigKey]
-	if !ok {
-		return fmt.Errorf("no backupConfig stored in the secret")
-	}
-	var backupConfig pg.BackupConfig
-	err := json.Unmarshal(backupConfigJSON, &backupConfig)
-	if err != nil {
-		return fmt.Errorf("unable to unmarshal backupconfig:%w", err)
-	}
-
-	s3url, err := url.Parse(backupConfig.S3Endpoint)
-	if err != nil {
-		return fmt.Errorf("error while parsing the s3 endpoint url in the backup secret: %w", err)
-	}
-	// use the s3 endpoint as provided
-	awsEndpoint := s3url.String()
-	// modify the scheme to 'https+path'
-	s3url.Scheme = "https+path"
-	// use the modified s3 endpoint
-	walES3Endpoint := s3url.String()
-	// region
-	region := backupConfig.S3Region
-
-	// use the rest as provided in the secret
-	bucketName := backupConfig.S3BucketName
-	awsAccessKeyID := backupConfig.S3AccessKey
-	awsSecretAccessKey := backupConfig.S3SecretKey
-	backupSchedule := backupConfig.Schedule
-	backupNumToRetain := backupConfig.Retention
-
-	// s3 server side encryption SSE is enabled if the key is given
-	// TODO our s3 needs a small change to make this work
-	walgDisableSSE := "true"
-	walgSSE := ""
-	if backupConfig.S3EncryptionKey != nil {
-		walgDisableSSE = "false"
-		walgSSE = *backupConfig.S3EncryptionKey
-	}
-
-	// create updated content for pod environment configmap
-	data := map[string]string{
-		"USE_WALG_BACKUP":                  "true",
-		"USE_WALG_RESTORE":                 "true",
-		"WALE_S3_PREFIX":                   "s3://" + bucketName + "/$(SCOPE)",
-		"WALG_S3_PREFIX":                   "s3://" + bucketName + "/$(SCOPE)",
-		"CLONE_WALG_S3_PREFIX":             "s3://" + bucketName + "/$(CLONE_SCOPE)",
-		"WALE_BACKUP_THRESHOLD_PERCENTAGE": "100",
-		"AWS_ENDPOINT":                     awsEndpoint,
-		"WALE_S3_ENDPOINT":                 walES3Endpoint, // same as above, but slightly modified
-		"AWS_ACCESS_KEY_ID":                awsAccessKeyID,
-		"AWS_SECRET_ACCESS_KEY":            awsSecretAccessKey,
-		"AWS_S3_FORCE_PATH_STYLE":          "true",
-		"AWS_REGION":                       region,         // now we can use AWS S3
-		"WALG_DISABLE_S3_SSE":              walgDisableSSE, // disable server side encryption if key is nil
-		"WALG_S3_SSE":                      walgSSE,        // server side encryption key
-		"BACKUP_SCHEDULE":                  backupSchedule,
-		"BACKUP_NUM_TO_RETAIN":             backupNumToRetain,
-	}
-
-	cm := &v1.ConfigMap{}
-	ns := types.NamespacedName{
-		Name:      operatormanager.PodEnvCMName,
-		Namespace: p.ToPeripheralResourceNamespace(),
-	}
-	if err := r.SvcClient.Get(ctx, ns, cm); err != nil {
-		return fmt.Errorf("error while getting the pod environment configmap from service cluster: %w", err)
-	}
-	cm.Data = data
-	if err := r.SvcClient.Update(ctx, cm); err != nil {
-		return fmt.Errorf("error while updating the pod environment configmap in service cluster: %w", err)
+	if err := r.InstallOrUpdateOperator(ctx, p); err != nil {
+		return fmt.Errorf("error while installing zalando dependencies: %w", err)
 	}
 
 	return nil

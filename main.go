@@ -130,7 +130,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	opMgr, err := operatormanager.New(svcClusterConf, "external/svc-postgres-operator.yaml", scheme, ctrl.Log.WithName("OperatorManager"), pspName)
+	opMgr, err := operatormanager.New(ctrlPlaneClusterMgr.GetClient(), svcClusterConf, "external/svc-postgres-operator.yaml", scheme, ctrl.Log.WithName("OperatorManager"), pspName)
 	if err != nil {
 		setupLog.Error(err, "unable to create `OperatorManager`")
 		os.Exit(1)
@@ -165,7 +165,7 @@ func main() {
 	ctx := context.Background()
 
 	// update all existing operators to the current version
-	if err := opMgr.UpdateAllOperators(ctx); err != nil {
+	if err := opMgr.UpdateAllZalandoOperators(ctx); err != nil {
 		setupLog.Error(err, "error updating the postgres operators")
 	}
 

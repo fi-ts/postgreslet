@@ -9,9 +9,11 @@ package operatormanager
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	errs "errors"
 	"fmt"
 	"io/ioutil"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -58,6 +60,7 @@ var operatorPodMatchingLabels = client.MatchingLabels{operatorPodLabelName: oper
 
 // OperatorManager manages the operator
 type OperatorManager struct {
+	CtrlClient client.Client
 	client.Client
 	runtime.Decoder
 	list *corev1.List
@@ -68,7 +71,7 @@ type OperatorManager struct {
 }
 
 // New creates a new `OperatorManager`
-func New(conf *rest.Config, fileName string, scheme *runtime.Scheme, log logr.Logger, pspName string) (*OperatorManager, error) {
+func New(CtrlClient client.Client, conf *rest.Config, fileName string, scheme *runtime.Scheme, log logr.Logger, pspName string) (*OperatorManager, error) {
 	// Use no-cache client to avoid waiting for cashing.
 	client, err := client.New(conf, client.Options{
 		Scheme: scheme,
@@ -102,14 +105,16 @@ func New(conf *rest.Config, fileName string, scheme *runtime.Scheme, log logr.Lo
 }
 
 // InstallOrUpdateOperator installs or updates the operator Stored in `OperatorManager`
-func (m *OperatorManager) InstallOrUpdateOperator(ctx context.Context, namespace string) error {
+func (m *OperatorManager) InstallOrUpdateOperator(ctx context.Context, instance *pg.Postgres) error {
+	namespace := instance.ToPeripheralResourceNamespace()
+
 	// Make sure the namespace exists.
 	if err := m.createNamespace(ctx, namespace); err != nil {
 		return fmt.Errorf("error while ensuring the existence of namespace %v: %w", namespace, err)
 	}
 
 	// Add our (initially empty) custom pod environment configmap
-	if err := m.createPodEnvironmentConfigMap(ctx, namespace); err != nil {
+	if err := m.createOrUpdatePodEnvironmentConfigMap(ctx, instance); err != nil {
 		return fmt.Errorf("error while creating pod environment configmap %v: %w", namespace, err)
 	}
 
@@ -118,23 +123,11 @@ func (m *OperatorManager) InstallOrUpdateOperator(ctx context.Context, namespace
 		return fmt.Errorf("error while creating sidecars config %v: %w", namespace, err)
 	}
 
-	// Decode each YAML to `client.Object`, add the namespace to it and install it.
-	for _, item := range m.list.Items {
-		obj, _, err := m.Decoder.Decode(item.Raw, nil, nil)
-		if err != nil {
-			return fmt.Errorf("error while converting yaml to `client.Object`: %w", err)
-		}
-
-		cltObject, ok := obj.(client.Object)
-		if !ok {
-			return fmt.Errorf("unable to cast into client.Object")
-		}
-		if err := m.createNewClientObject(ctx, cltObject, namespace); err != nil {
-			return fmt.Errorf("error while creating the `client.Object`: %w", err)
-		}
+	if err := m.createOrUpdateZalandoOperator(ctx, namespace); err != nil {
+		return fmt.Errorf("failed to create or update zalando operator: %w", err)
 	}
+	m.log.Info("zalando operator installed or updated")
 
-	m.log.Info("operator installed")
 	return nil
 }
 
@@ -251,8 +244,8 @@ func (m *OperatorManager) UninstallOperator(ctx context.Context, namespace strin
 	return nil
 }
 
-// createNewClientObject adds namespace to obj and creates or patches it
-func (m *OperatorManager) createNewClientObject(ctx context.Context, obj client.Object, namespace string) error {
+// createOrUpdateNewClientObject adds namespace to obj and creates or updates it
+func (m *OperatorManager) createOrUpdateNewClientObject(ctx context.Context, obj client.Object, namespace string) error {
 	// remove any unwanted annotations, uids etc. Remember, these objects come straight from the YAML.
 	if err := m.ensureCleanMetadata(obj); err != nil {
 		return fmt.Errorf("error while ensuring the metadata of the `client.Object` is clean: %w", err)
@@ -433,31 +426,37 @@ func (m *OperatorManager) createNamespace(ctx context.Context, namespace string)
 	return nil
 }
 
-// createPodEnvironmentConfigMap creates a new ConfigMap with additional environment variables for the pods
-func (m *OperatorManager) createPodEnvironmentConfigMap(ctx context.Context, namespace string) error {
-	ns := types.NamespacedName{
+// createOrUpdatePodEnvironmentConfigMap creates a new ConfigMap with additional environment variables for the pods
+func (m *OperatorManager) createOrUpdatePodEnvironmentConfigMap(ctx context.Context, instance *pg.Postgres) error {
+	namespace := instance.ToPeripheralResourceNamespace()
+	objKey := types.NamespacedName{
 		Namespace: namespace,
 		Name:      PodEnvCMName,
 	}
-	if err := m.Get(ctx, ns, &v1.ConfigMap{}); err == nil {
-		// configmap already exists, nothing to do here
-		// we will update the configmap with the correct S3 config in the postgres controller
-		m.log.Info("Pod Environment ConfigMap already exists")
+	if err := m.Get(ctx, objKey, &v1.ConfigMap{}); err != nil {
+		if !errors.IsNotFound(err) {
+			return fmt.Errorf("failed to fetch configmap %v: %w", objKey, err)
+		}
+		cm := &v1.ConfigMap{}
+		if err := m.SetName(cm, PodEnvCMName); err != nil {
+			return fmt.Errorf("error while setting the name of the new Pod Environment ConfigMap to %v: %w", namespace, err)
+		}
+		if err := m.SetNamespace(cm, namespace); err != nil {
+			return fmt.Errorf("error while setting the namespace of the new Pod Environment ConfigMap to %v: %w", namespace, err)
+		}
+
+		if err := m.Create(ctx, cm); err != nil {
+			return fmt.Errorf("error while creating the new Pod Environment ConfigMap: %w", err)
+		}
+		m.log.Info("new Pod Environment ConfigMap created")
+
 		return nil
 	}
 
-	cm := &v1.ConfigMap{}
-	if err := m.SetName(cm, PodEnvCMName); err != nil {
-		return fmt.Errorf("error while setting the name of the new Pod Environment ConfigMap to %v: %w", namespace, err)
+	if err := m.updatePodEnvironmentConfigMap(ctx, instance); err != nil {
+		return fmt.Errorf("error while updating backup config: %w", err)
 	}
-	if err := m.SetNamespace(cm, namespace); err != nil {
-		return fmt.Errorf("error while setting the namespace of the new Pod Environment ConfigMap to %v: %w", namespace, err)
-	}
-
-	if err := m.Create(ctx, cm); err != nil {
-		return fmt.Errorf("error while creating the new Pod Environment ConfigMap: %w", err)
-	}
-	m.log.Info("new Pod Environment ConfigMap created")
+	m.log.Info("Pod Environment ConfigMap updated")
 
 	return nil
 }
@@ -609,6 +608,27 @@ func (m *OperatorManager) createOrUpdateExporterSidecarService(ctx context.Conte
 	return nil
 }
 
+// createOrUpdateZalandoOperator creates or updates only zalando's original operator
+func (m *OperatorManager) createOrUpdateZalandoOperator(ctx context.Context, namespace string) error {
+	// Decode each YAML to `client.Object`, add the namespace to it and install it.
+	for _, item := range m.list.Items {
+		obj, _, err := m.Decoder.Decode(item.Raw, nil, nil)
+		if err != nil {
+			return fmt.Errorf("error while converting yaml to `client.Object`: %w", err)
+		}
+
+		cltObject, ok := obj.(client.Object)
+		if !ok {
+			return fmt.Errorf("unable to cast into client.Object")
+		}
+		if err := m.createOrUpdateNewClientObject(ctx, cltObject, namespace); err != nil {
+			return fmt.Errorf("error while creating the `client.Object`: %w", err)
+		}
+	}
+
+	return nil
+}
+
 func (m *OperatorManager) deletePodEnvironmentConfigMap(ctx context.Context, namespace string) error {
 	cm := &v1.ConfigMap{}
 	if err := m.SetName(cm, PodEnvCMName); err != nil {
@@ -658,8 +678,100 @@ func (m *OperatorManager) toObjectKey(obj runtime.Object, namespace string) (cli
 	}, nil
 }
 
-// UpdateAllOperators Updates the manifests of all postgres operators managed by the postgreslet
-func (m *OperatorManager) UpdateAllOperators(ctx context.Context) error {
+func (m *OperatorManager) updatePodEnvironmentConfigMap(ctx context.Context, p *pg.Postgres) error {
+	log := m.log.WithValues("postgres", p.UID)
+	if p.Spec.BackupSecretRef == "" {
+		log.Info("No configured backupSecretRef found, skipping configuration of postgres backup")
+		return nil
+	}
+
+	// fetch secret
+	backupSecret := &v1.Secret{}
+	backupNamespace := types.NamespacedName{
+		Name:      p.Spec.BackupSecretRef,
+		Namespace: p.Namespace,
+	}
+	if err := m.CtrlClient.Get(ctx, backupNamespace, backupSecret); err != nil {
+		return fmt.Errorf("error while getting the backup secret from control plane cluster: %w", err)
+	}
+
+	backupConfigJSON, ok := backupSecret.Data[pg.BackupConfigKey]
+	if !ok {
+		return fmt.Errorf("no backupConfig stored in the secret")
+	}
+	var backupConfig pg.BackupConfig
+	err := json.Unmarshal(backupConfigJSON, &backupConfig)
+	if err != nil {
+		return fmt.Errorf("unable to unmarshal backupconfig:%w", err)
+	}
+
+	s3url, err := url.Parse(backupConfig.S3Endpoint)
+	if err != nil {
+		return fmt.Errorf("error while parsing the s3 endpoint url in the backup secret: %w", err)
+	}
+	// use the s3 endpoint as provided
+	awsEndpoint := s3url.String()
+	// modify the scheme to 'https+path'
+	s3url.Scheme = "https+path"
+	// use the modified s3 endpoint
+	walES3Endpoint := s3url.String()
+	// region
+	region := backupConfig.S3Region
+
+	// use the rest as provided in the secret
+	bucketName := backupConfig.S3BucketName
+	awsAccessKeyID := backupConfig.S3AccessKey
+	awsSecretAccessKey := backupConfig.S3SecretKey
+	backupSchedule := backupConfig.Schedule
+	backupNumToRetain := backupConfig.Retention
+
+	// s3 server side encryption SSE is enabled if the key is given
+	// TODO our s3 needs a small change to make this work
+	walgDisableSSE := "true"
+	walgSSE := ""
+	if backupConfig.S3EncryptionKey != nil {
+		walgDisableSSE = "false"
+		walgSSE = *backupConfig.S3EncryptionKey
+	}
+
+	// create updated content for pod environment configmap
+	data := map[string]string{
+		"USE_WALG_BACKUP":                  "true",
+		"USE_WALG_RESTORE":                 "true",
+		"WALE_S3_PREFIX":                   "s3://" + bucketName + "/$(SCOPE)",
+		"WALG_S3_PREFIX":                   "s3://" + bucketName + "/$(SCOPE)",
+		"CLONE_WALG_S3_PREFIX":             "s3://" + bucketName + "/$(CLONE_SCOPE)",
+		"WALE_BACKUP_THRESHOLD_PERCENTAGE": "100",
+		"AWS_ENDPOINT":                     awsEndpoint,
+		"WALE_S3_ENDPOINT":                 walES3Endpoint, // same as above, but slightly modified
+		"AWS_ACCESS_KEY_ID":                awsAccessKeyID,
+		"AWS_SECRET_ACCESS_KEY":            awsSecretAccessKey,
+		"AWS_S3_FORCE_PATH_STYLE":          "true",
+		"AWS_REGION":                       region,         // now we can use AWS S3
+		"WALG_DISABLE_S3_SSE":              walgDisableSSE, // disable server side encryption if key is nil
+		"WALG_S3_SSE":                      walgSSE,        // server side encryption key
+		"BACKUP_SCHEDULE":                  backupSchedule,
+		"BACKUP_NUM_TO_RETAIN":             backupNumToRetain,
+	}
+
+	cm := &v1.ConfigMap{}
+	ns := types.NamespacedName{
+		Name:      PodEnvCMName,
+		Namespace: p.ToPeripheralResourceNamespace(),
+	}
+	if err := m.Client.Get(ctx, ns, cm); err != nil {
+		return fmt.Errorf("error while getting the pod environment configmap from service cluster: %w", err)
+	}
+	cm.Data = data
+	if err := m.Client.Update(ctx, cm); err != nil {
+		return fmt.Errorf("error while updating the pod environment configmap in service cluster: %w", err)
+	}
+
+	return nil
+}
+
+// UpdateAllZalandoOperators Updates the manifests of all postgres operators managed by the postgreslet
+func (m *OperatorManager) UpdateAllZalandoOperators(ctx context.Context) error {
 	// fetch all operators (running or otherwise)
 	m.log.Info("Fetching all managed namespaces")
 	matchingLabels := client.MatchingLabels{
@@ -675,7 +787,7 @@ func (m *OperatorManager) UpdateAllOperators(ctx context.Context) error {
 	// update each namespace
 	for _, ns := range nsList.Items {
 		m.log.Info("Updating postgres operator installation", "namespace", ns.Name)
-		if err := m.InstallOrUpdateOperator(ctx, ns.Name); err != nil {
+		if err := m.createOrUpdateZalandoOperator(ctx, ns.Name); err != nil {
 			return err
 		}
 	}
