@@ -23,37 +23,37 @@ jobs:
     #     version: v1.32.2
     #     args: --timeout=5m
 
+    - name: Get Kubebuilder Version
+      id: get-kubebuilder-version
+      run: echo "::set-output name=version::$(make kubebuilder-version-ci)"
+      shell: bash
+
     - name: Ensure etcd
       id: Ensure-etcd
       uses: actions/cache@v2
       with:
         path: ~/go/bin/etcd
-        key: etcd
+        key: ${{ runner.os }}-kubebuilder-${{ steps.get-kubebuilder-version.outputs.version }}-etcd
 
     - name: Ensure kube-apiserver
       id: ensure-kube-apiserver
       uses: actions/cache@v2
       with:
         path: ~/go/bin/kube-apiserver
-        key: kube-apiserver
-
-    - name: Get Kubebuilder Version
-      id: get-kubebuilder-version
-      run: echo "::set-output name=version::$(make kubebuilder-version-ci)"
-      shell: bash
+        key: ${{ runner.os }}-kubebuilder-${{ steps.get-kubebuilder-version.outputs.version }}-kube-apiserver
 
     - name: Ensure Kubebuilder Metadata
       id: ensure-kubebuilder-metadata
       uses: actions/cache@v2
       with:
         path: ~/.kubebuilder/${{ steps.get-kubebuilder-version.outputs.version }}
-        key: kubebuilder
+        key: ${{ runner.os }}-kubebuilder-${{ steps.get-kubebuilder-version.outputs.version }}
 
     - name: Install Kubebuilder
       run: make kubebuilder
 
-    - name: Run tests
-      run: make test
+    # - name: Run tests
+    #   run: make test
 
     # - name: Figure out if running fork PR
     #   id: fork
