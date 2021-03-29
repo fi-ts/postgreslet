@@ -138,10 +138,9 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		log.Info("finalizer added")
 	}
 
-	// Check if zalando dependencies are installed. If not, install them.
-	if err := r.ensureZalandoDependencies(ctx, instance); err != nil {
+	if err := r.CreateOrUpdateOperator(ctx, instance); err != nil {
 		r.recorder.Eventf(instance, "Warning", "Error", "failed to install operator: %v", err)
-		return ctrl.Result{}, fmt.Errorf("error while ensuring Zalando dependencies: %w", err)
+		return ctrl.Result{}, fmt.Errorf("error while installing zalando dependencies: %w", err)
 	}
 
 	if err := r.createOrUpdateZalandoPostgresql(ctx, instance, log); err != nil {
@@ -227,15 +226,6 @@ func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context
 		return fmt.Errorf("failed to update zalando postgresql: %w", err)
 	}
 	log.Info("zalando postgresql updated", "zalando postgresql", u)
-
-	return nil
-}
-
-// ensureZalandoDependencies makes sure Zalando resources are installed in the service-cluster.
-func (r *PostgresReconciler) ensureZalandoDependencies(ctx context.Context, p *pg.Postgres) error {
-	if err := r.InstallOrUpdateOperator(ctx, p); err != nil {
-		return fmt.Errorf("error while installing zalando dependencies: %w", err)
-	}
 
 	return nil
 }

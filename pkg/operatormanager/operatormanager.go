@@ -104,8 +104,8 @@ func New(CtrlClient client.Client, conf *rest.Config, fileName string, scheme *r
 	}, nil
 }
 
-// InstallOrUpdateOperator installs or updates the operator Stored in `OperatorManager`
-func (m *OperatorManager) InstallOrUpdateOperator(ctx context.Context, instance *pg.Postgres) error {
+// CreateOrUpdateOperator installs or updates the operator Stored in `OperatorManager`
+func (m *OperatorManager) CreateOrUpdateOperator(ctx context.Context, instance *pg.Postgres) error {
 	namespace := instance.ToPeripheralResourceNamespace()
 
 	// Make sure the namespace exists.
