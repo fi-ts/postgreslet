@@ -24,7 +24,6 @@ FROM gcr.io/distroless/static:nonroot
 WORKDIR /
 COPY --from=builder /workspace/manager .
 COPY external/svc-postgres-operator.yaml external/svc-postgres-operator.yaml
-COPY external/crd-postgresql.yaml external/crd-postgresql.yaml
 USER nonroot:nonroot
 
 ENTRYPOINT ["/manager"]

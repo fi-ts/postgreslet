@@ -50,6 +50,8 @@ var (
 	externalYAMLDir     = filepath.Join("..", "external")
 	externalYAMLDirTest = filepath.Join(externalYAMLDir, "test")
 
+	HelmCRDDir = filepath.Join("..", "charts", "postgreslet", "crds")
+
 	instance = &pg.Postgres{}
 )
 
@@ -77,7 +79,7 @@ var _ = BeforeSuite(func(done Done) {
 	svcClusterTestEnv = &envtest.Environment{
 		CRDInstallOptions: envtest.CRDInstallOptions{
 			Paths: []string{
-				filepath.Join(externalYAMLDir, "crd-postgresql.yaml"),
+				filepath.Join(HelmCRDDir, "postgresql.yaml"),
 				filepath.Join(externalYAMLDirTest, "crd-clusterwidenetworkpolicy.yaml"),
 			},
 		},
