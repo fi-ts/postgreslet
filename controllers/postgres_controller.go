@@ -72,8 +72,6 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, nil
 	}
 
-	namespace := instance.ToPeripheralResourceNamespace()
-
 	// Delete
 	if instance.IsBeingDeleted() {
 		instance.Status.Description = "Terminating"
@@ -84,6 +82,7 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		log.Info("instance being deleted")
 
 		matchingLabels := instance.ToZalandoPostgresqlMatchingLabels()
+		namespace := instance.ToPeripheralResourceNamespace()
 
 		if err := r.deleteCWNP(ctx, instance); client.IgnoreNotFound(err) != nil { // todo: remove ignorenotfound
 			r.recorder.Event(instance, "Warning", "Error", "failed to delete ClusterwideNetworkPolicy")
