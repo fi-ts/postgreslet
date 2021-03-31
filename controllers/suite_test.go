@@ -134,7 +134,10 @@ var _ = BeforeSuite(func(done Done) {
 	svcClusterClient = svcClusterMgr.GetClient()
 	Expect(svcClusterClient).ToNot(BeNil())
 
-	createNamespace(svcClusterClient, "firewall")
+	// Available in production, but not here
+	createNamespace(ctrlClusterClient, "metal-extension-cloud")
+	createNamespace(svcClusterClient, firewall.ClusterwideNetworkPolicyNamespace)
+
 	createPostgresTestInstance(createBackupSecret())
 	createConfigMapSidecarConfig()
 	createCredentialSecrets()
@@ -155,9 +158,6 @@ func createBackupSecret() *core.Secret {
 	bytes, err := os.ReadFile(filepath.Join(externalYAMLDirTest, "secret-backup.yaml"))
 	Expect(err).ToNot(HaveOccurred())
 	Expect(yaml.Unmarshal(bytes, backupSecret)).Should(Succeed())
-
-	// Available in production, but not here
-	createNamespace(ctrlClusterClient, backupSecret.Namespace)
 
 	Expect(ctrlClusterClient.Create(newCtx(), backupSecret)).Should(Succeed())
 
