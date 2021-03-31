@@ -139,8 +139,8 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	}
 
 	if err := r.CreateOrUpdateOperator(ctx, instance); err != nil {
-		r.recorder.Eventf(instance, "Warning", "Error", "failed to install operator: %v", err)
-		return ctrl.Result{}, fmt.Errorf("error while installing zalando dependencies: %w", err)
+		r.recorder.Eventf(instance, "Warning", "Error", "failed to install or update operator: %v", err)
+		return ctrl.Result{}, fmt.Errorf("failed to install or update operator: %w", err)
 	}
 
 	if err := r.createOrUpdateZalandoPostgresql(ctx, instance, log); err != nil {
