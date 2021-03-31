@@ -10,12 +10,12 @@ import (
 	"time"
 
 	pg "github.com/fi-ts/postgreslet/api/v1"
+	"github.com/fi-ts/postgreslet/pkg/operatormanager"
 	firewall "github.com/metal-stack/firewall-controller/api/v1"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
 	core "k8s.io/api/core/v1"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 )
 
@@ -53,6 +53,15 @@ var _ = Describe("postgres controller", func() {
 			}, timeout, interval).Should(BeTrue())
 		})
 
+		It("should create pod-environment-configmap in service-cluster", func() {
+			Eventually(func() bool {
+				return svcClusterClient.Get(newCtx(), types.NamespacedName{
+					Namespace: instance.ToPeripheralResourceNamespace(),
+					Name:      operatormanager.PodEnvCMName,
+				}, &core.ConfigMap{}) == nil
+			}, timeout, interval).Should(BeTrue())
+		})
+
 		It("should create zalando postgresql in service-cluster", func() {
 			z := &zalando.Postgresql{}
 			Eventually(func() bool {
@@ -67,7 +76,7 @@ var _ = Describe("postgres controller", func() {
 				return svcClusterClient.Get(newCtx(), types.NamespacedName{
 					Namespace: instance.ToPeripheralResourceNamespace(),
 					Name:      instance.ToSvcLBName(),
-				}, &corev1.Service{}) == nil
+				}, &core.Service{}) == nil
 			}, timeout, interval).Should(BeTrue())
 		})
 
@@ -97,7 +106,7 @@ var _ = Describe("postgres controller", func() {
 				return svcClusterClient.Get(newCtx(), types.NamespacedName{
 					Namespace: instance.ToPeripheralResourceNamespace(),
 					Name:      instance.ToSvcLBName(),
-				}, &corev1.Service{}) == nil
+				}, &core.Service{}) == nil
 			}, timeout, interval).ShouldNot(BeTrue())
 		})
 

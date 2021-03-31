@@ -71,7 +71,7 @@ type OperatorManager struct {
 }
 
 // New creates a new `OperatorManager`
-func New(CtrlClient client.Client, conf *rest.Config, fileName string, scheme *runtime.Scheme, log logr.Logger, pspName string) (*OperatorManager, error) {
+func New(ctrlClient client.Client, conf *rest.Config, fileName string, scheme *runtime.Scheme, log logr.Logger, pspName string) (*OperatorManager, error) {
 	// Use no-cache client to avoid waiting for cashing.
 	client, err := client.New(conf, client.Options{
 		Scheme: scheme,
@@ -95,6 +95,7 @@ func New(CtrlClient client.Client, conf *rest.Config, fileName string, scheme *r
 	log.Info("new `OperatorManager` created")
 	return &OperatorManager{
 		MetadataAccessor: meta.NewAccessor(),
+		CtrlClient:       ctrlClient,
 		Client:           client,
 		Decoder:          deserializer,
 		list:             list,
