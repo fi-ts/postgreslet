@@ -454,7 +454,7 @@ func (m *OperatorManager) createOrUpdatePodEnvironmentConfigMap(ctx context.Cont
 	}
 
 	if err := m.updatePodEnvironmentConfigMap(ctx, instance); err != nil {
-		return fmt.Errorf("error while updating backup config: %w", err)
+		return fmt.Errorf("error while updating pod environment configmap: %w", err)
 	}
 	m.log.Info("Pod Environment ConfigMap updated")
 
