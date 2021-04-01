@@ -1,107 +1,60 @@
 # postgreslet
 
-A small controller which acts as a bridge between the zalando-postgres-operator and our postgres Resource.
+*Postgreslet* contains a *kubernetes* controller which reconciles instances of *FI-TS CustomResourceDefinition postgres* by using [*Zalando postgres operator*](https://github.com/zalando/postgres-operator). .
 
-## Run an example on two clusters, one as the control-cluster and the other as the service-cluster
+## Architecture
 
+*Postgreslet* is a *kubernetes deployment*, residing in every cluster on *FT-TS Cloud*. It watches *crd postgres* instances created in the *control plane cluster* and creates a series of *kubernetes* resources for each instance in the *service cluster*. One of them is the *Zalando postgres operator* which manages the *postgres database pod(s)*. More information can be found in [ARCHITECTURE.md](https://github.com/fi-ts/postgreslet/blob/main/ARCHITECTURE.md).
+![architecture](docs/diagrams/architecture.drawio.svg)
+
+## Demo
+
+*Postgres* is highly integrated with [*FI-TS cloudctl*](https://github.com/fi-ts/cloudctl) and *cloudapi*, but we can still try it out with [*kubectl*](https://kubernetes.io/docs/tasks/tools/) on top of [*kind*](https://kind.sigs.k8s.io/docs/user/quick-start/#installation).
+
+The instance we're going to create in the control-plane-cluster:
+```yaml
+apiVersion: database.fits.cloud/v1
+kind: Postgres
+metadata:
+  namespace: metal-extension-cloud
+  name: complete
+spec:
+  accessList:
+    sourceRanges:
+    - 1.2.3.4/24
+  maintenance:
+    - "Sun:21:00-22:00"
+  numberOfInstances: 2
+  partitionID: sample-partition
+  projectID: sample-project
+  size:
+    cpu: 500m
+    memory: 512Mi
+    storageSize: 1Gi
+  tenant: sample-tenant
+  version: "12"
+```
+
+We assume you already had `kubectl` and `kind` installed. The single command you need:
 ```bash
-# Create a local control-cluster. This step is optional if you already have a working kubeconfig/cluster
-# IMPORTANT: update the apiServerAddress to your needs so the service-cluster from down below can access the control-cluster.
-kind create cluster --name ctrl --kubeconfig ./kubeconfig --config ctrl-cluster-config
-
-# Copy the kubeconfig of the control-cluster to the project folder and name it `kubeconfig`.
-# When using kind as describe above, this file was already created
-# cp <EXISTING_KUBECONFIG> ./kubeconfig
-
-# Create a local service-cluster. This step is optional if you already have a working kubeconfig/cluster
-# This step will now set the kind as current context, which is important for the next step
-kind create cluster
-
-# Build and install our CRD in the control-cluster.
-# This step uses the "external" kubeconfig we copied to ./kubeconfig earlier. This can be configured in the Makefile
-make generate && make manifests && make install
-
-# Run the postgreslet in the service-cluster
-# This step uses the current-context of your default kubeconfig (e.g. ~/.kube/config)
-make run
-
-# In another terminal, apply the sample-postgres yaml file to the control-cluster.
-kubectl --kubeconfig kubeconfig get postgres
-kubectl --kubeconfig kubeconfig apply -f config/samples/complete.yaml
-kubectl --kubeconfig kubeconfig get postgres --watch
-
-# See the database pods running in the service-cluster.
-kubectl get postgresql,pod -A
-
-# Delete the sample-postgres from the control-cluster.
-kubectl --kubeconfig kubeconfig delete -f config/samples/complete.yaml
-
-# Uninstall the dependencies of this project from the remote control-cluster.
-make uninstall
+make two-kind-clusters
 ```
 
-## Install a local kubeconfig as secret in the service-cluster
-
-The following steps will create a _Secret_ called `postgreslet`, and add all files in the folder as keys to that secret.
-
-As we only copy one file, the secret will contain only one key named `controlplane-kubeconfig` which will contain the control plane kube config.
-
-```sh
-make secret
-```
-
-## Deploy Postgreslet on the local service-cluster and test it
-
-Deploy _postgrelet_ which consumes the _secret_ in the last section.
-
-```sh
-make kind-load-image
-make deploy
-```
-
-Create _postgres_ on control-cluster.
-
-```sh
-make install
-make create-postgres
-```
-
-Delete _postgres_ on control-cluster and all the local corresponding resources.
-
-```sh
-make delete-postgres
-```
-
-## Local Helm Development
-
-Delete and recreate all existing kind clusters (optional)
-
-```sh
-kind delete cluster --name ctrl
-kind delete cluster
-kind create cluster --name ctrl --kubeconfig ./kubeconfig --config ctrl-cluster-config
-kind create cluster
-```
-
-Build the charts
-
-```sh
-make helm-clean
-make helm
-```
-
-Prepare the control cluster
-
-```sh
-helm --kubeconfig kubeconfig upgrade --install postgreslet-support postgreslet-support-0.1.0.tgz
-kubectl --kubeconfig kubeconfig get postgres -A
-```
-
-Install the Postgreslet to the service cluster
-
-```sh
-make kind-load-image
-kubectl create namespace postgreslet-system
-helm upgrade --install postgreslet postgreslet-0.1.0.tgz --namespace postgreslet-system --set-file controlplaneKubeconfig=kubeconfig  --set image.tag=latest
-kubectl get po -A --watch
+Check the results in the service-cluster.
+```bash
+$ kubectl get pod -A
+NAMESPACE                            NAME                                         READY   STATUS    RESTARTS   AGE
+kube-system                          coredns-f9fd979d6-6gbfn                      1/1     Running   0          62s
+kube-system                          coredns-f9fd979d6-p8gbc                      1/1     Running   0          62s
+kube-system                          etcd-kind-control-plane                      1/1     Running   0          67s
+kube-system                          kindnet-7tdn9                                1/1     Running   0          62s
+kube-system                          kube-apiserver-kind-control-plane            1/1     Running   0          67s
+kube-system                          kube-controller-manager-kind-control-plane   0/1     Running   0          66s
+kube-system                          kube-proxy-728df                             1/1     Running   0          62s
+kube-system                          kube-scheduler-kind-control-plane            0/1     Running   0          66s
+local-path-storage                   local-path-provisioner-78776bfc44-t5sjh      1/1     Running   0          62s
+postgreslet-system                   postgreslet-8464df785c-2cf55                 1/1     Running   0          62s
+sampleproject-bd8ff6bd0a2d4edf96f4   postgres-operator-7c45557b9b-xhqgf           1/1     Running   0          52s
+sampleproject-bd8ff6bd0a2d4edf96f4   sampleproject-bd8ff6bd0a2d4edf96f4-0         3/3     Running   0          43s
+sampleproject-bd8ff6bd0a2d4edf96f4   sampleproject-bd8ff6bd0a2d4edf96f4-1         3/3     Running   0          6s
 ```

@@ -148,7 +148,7 @@ secret:
 	}
 
 create-postgres:
-	kubectl create ns metal-extension-cloud --dry-run=client --save-config -o yaml | kubectl apply -f -
+	kubectl create ns metal-extension-cloud --dry-run=client --save-config -o yaml | kubectl --kubeconfig kubeconfig apply -f -
 	kubectl --kubeconfig kubeconfig apply -f config/samples/complete.yaml
 
 delete-postgres:
@@ -199,3 +199,21 @@ endif
 
 kubebuilder-version-ci:
 	@echo ${KUBEBUILDER_VERSION}
+
+two-kind-clusters:
+	# control-plane-cluster
+	kind create cluster --name ctrl --kubeconfig ./kubeconfig
+	docker_ip=$$(docker inspect --format='{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' 'ctrl-control-plane') ;\
+	kubectl --kubeconfig=kubeconfig config set-cluster 'kind-ctrl' --server="https://$${docker_ip}:6443"
+	make install
+	make create-postgres
+	# service-clsuter
+	make helm-clean
+	make helm
+	kind create cluster
+	sed 's/z.Spec.Volume.StorageClass/\/\/z.Spec.Volume.StorageClass/' -i api/v1/postgres_types.go
+	make kind-load-image
+	sed 's/\/\/z.Spec.Volume.StorageClass/z.Spec.Volume.StorageClass/' -i api/v1/postgres_types.go
+	kubectl create ns postgreslet-system --dry-run=client --save-config -o yaml | kubectl apply -f -
+	make install-crd-cwnp
+	helm upgrade --install postgreslet postgreslet-0.1.0.tgz --namespace postgreslet-system --set-file controlplaneKubeconfig=kubeconfig  --set image.tag=latest
