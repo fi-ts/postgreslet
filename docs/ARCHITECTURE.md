@@ -4,7 +4,7 @@
 
 ### Control Plane Overview
 
-![overview](docs/diagrams/architecture.drawio.svg "Architecture Overview")
+![overview](diagrams/architecture.drawio.svg "Architecture Overview")
 
 ### cloud-api
 
@@ -312,7 +312,7 @@ UUID                                  TYPE   NAME    CPU    MEMORY    RETENTION 
 ```bash
 cloudctl billing database
 
-TENANT  PROJECTID                               PARTITION       TYPE NAME    STORAGE(GB*H) CPU*H MEMORY(GB*H) LIFETIME 
+TENANT  PROJECTID                               PARTITION       TYPE NAME    STORAGE(GB*H) CPU*H MEMORY(GB*H) LIFETIME
 fits    cd4eac58-46a5-4a31-b59f-2ec207baa817    fra-equ01       pg   my-db   1244          100   299          21d3h
 ```
 
@@ -335,4 +335,4 @@ fits    cd4eac58-46a5-4a31-b59f-2ec207baa817    fra-equ01       pg   my-db   124
   * database-api
   * postgreslet
   * postgres-operator
-  
+

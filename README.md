@@ -4,7 +4,7 @@
 
 ## Architecture
 
-*Postgreslet* is a *kubernetes deployment*, residing in every cluster on *FT-TS Cloud*. It watches *crd postgres* instances created in the *control plane cluster* and creates a series of *kubernetes* resources for each instance in the *service cluster*. One of them is the *Zalando postgres operator* which manages the *postgres database pod(s)*. More information can be found in [ARCHITECTURE.md](https://github.com/fi-ts/postgreslet/blob/main/ARCHITECTURE.md).
+*Postgreslet* is a *kubernetes deployment*, residing in every cluster on *FT-TS Cloud*. It watches *crd postgres* instances created in the *control plane cluster* and creates a series of *kubernetes* resources for each instance in the *service cluster*. One of them is the *Zalando postgres operator* which manages the *postgres database pod(s)*. More information can be found in [ARCHITECTURE.md](https://github.com/fi-ts/postgreslet/blob/main/docs/ARCHITECTURE.md).
 ![architecture](docs/diagrams/architecture.drawio.svg)
 
 ## Demo
