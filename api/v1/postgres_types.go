@@ -24,7 +24,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/yaml"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -317,7 +316,6 @@ func (p *Postgres) ToPeripheralResourceName() string {
 func (p *Postgres) ToUserPasswordsSecret(src *corev1.SecretList, scheme *runtime.Scheme) (*corev1.Secret, error) {
 	secret := &corev1.Secret{}
 	secret.Namespace = p.Namespace
-	// todo: Consider `p.Name + "-passwords", so the`
 	secret.Name = p.ToUserPasswordsSecretName()
 	secret.Type = corev1.SecretTypeOpaque
 	secret.Data = map[string][]byte{}
@@ -325,11 +323,6 @@ func (p *Postgres) ToUserPasswordsSecret(src *corev1.SecretList, scheme *runtime
 	// Fill in the contents of the new secret
 	for _, v := range src.Items {
 		secret.Data[string(v.Data["username"])] = v.Data["password"]
-	}
-
-	// Set the owner of the secret
-	if err := controllerutil.SetControllerReference(p, secret, scheme); err != nil {
-		return nil, err
 	}
 
 	return secret, nil
