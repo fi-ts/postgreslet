@@ -203,8 +203,8 @@ kubebuilder-version-ci:
 two-kind-clusters:
 	# control-plane-cluster
 	kind create cluster --name ctrl --kubeconfig ./kubeconfig
-	docker_ip=$$(docker inspect --format='{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' 'ctrl-control-plane') ;\
-	kubectl --kubeconfig=kubeconfig config set-cluster 'kind-ctrl' --server="https://$${docker_ip}:6443"
+	container_ip=$$(docker inspect --format='{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' 'ctrl-control-plane') ;\
+	kubectl --kubeconfig=kubeconfig config set-cluster 'kind-ctrl' --server="https://$${container_ip}:6443"
 	make install
 	make create-postgres
 	# service-clsuter
