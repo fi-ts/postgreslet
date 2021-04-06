@@ -35,14 +35,29 @@ spec:
   version: "12"
 ```
 
-We assume you already had `kubectl` and `kind` installed. The single command you need:
+We assume *kubectl* and *kind* had already installed. Then, the single command to create two *kind* clusters, deploy *postgreslet*, and create an *postgres* instance:
 ```bash
 make two-kind-clusters
 ```
 
+Check the results in the control-plane-cluster.
+```bash
+watch kubectl --kubeconfig kubeconfig get postgres -A
+```
+
+Eventually, the result reads:
+```bash
+NAMESPACE               NAME       TENANT          VERSION   REPLICAS   IP    PORT    STATUS
+metal-extension-cloud   complete   sample-tenant   12        2                32000   Running
+```
+
 Check the results in the service-cluster.
 ```bash
-$ kubectl get pod -A
+watch kubectl get pod -A
+```
+
+Eventually, the results read:
+```bash
 NAMESPACE                            NAME                                         READY   STATUS    RESTARTS   AGE
 kube-system                          coredns-f9fd979d6-6gbfn                      1/1     Running   0          62s
 kube-system                          coredns-f9fd979d6-p8gbc                      1/1     Running   0          62s
@@ -57,4 +72,12 @@ postgreslet-system                   postgreslet-8464df785c-2cf55               
 sampleproject-bd8ff6bd0a2d4edf96f4   postgres-operator-7c45557b9b-xhqgf           1/1     Running   0          52s
 sampleproject-bd8ff6bd0a2d4edf96f4   sampleproject-bd8ff6bd0a2d4edf96f4-0         3/3     Running   0          43s
 sampleproject-bd8ff6bd0a2d4edf96f4   sampleproject-bd8ff6bd0a2d4edf96f4-1         3/3     Running   0          6s
+```
+The *postgreslet* and the corresponding *pods* to the *postgres* instance, i.e. *postgres-operator* and database instances, can be observed.
+
+## cloudctl
+
+In production, [cloudctl](https://github.com/fi-ts/cloudctl) is the client. More info can be found with:
+```bash
+cloudctl postgres --help
 ```
