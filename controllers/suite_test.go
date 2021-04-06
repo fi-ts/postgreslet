@@ -109,6 +109,7 @@ var _ = BeforeSuite(func(done Done) {
 
 	// Todo: OperatorManager should be a reconciler
 	opMgr, err := operatormanager.New(
+		ctrlClusterMgr.GetClient(),
 		svcClusterCfg,
 		filepath.Join(externalYAMLDir, "svc-postgres-operator.yaml"),
 		scheme,
@@ -142,8 +143,11 @@ var _ = BeforeSuite(func(done Done) {
 	svcClusterClient = svcClusterMgr.GetClient()
 	Expect(svcClusterClient).ToNot(BeNil())
 
-	createNamespace(svcClusterClient, "firewall")
-	createPostgresTestInstance()
+	// Available in production, but not here
+	createNamespace(ctrlClusterClient, "metal-extension-cloud")
+	createNamespace(svcClusterClient, firewall.ClusterwideNetworkPolicyNamespace)
+
+	createPostgresTestInstance(createBackupSecret())
 	createConfigMapSidecarConfig()
 	createCredentialSecrets()
 }, 1000)
@@ -157,6 +161,17 @@ var _ = AfterSuite(func() {
 	err = svcClusterTestEnv.Stop()
 	Expect(err).ToNot(HaveOccurred())
 })
+
+func createBackupSecret() *core.Secret {
+	backupSecret := &core.Secret{}
+	bytes, err := os.ReadFile(filepath.Join(externalYAMLDirTest, "secret-backup.yaml"))
+	Expect(err).ToNot(HaveOccurred())
+	Expect(yaml.Unmarshal(bytes, backupSecret)).Should(Succeed())
+
+	Expect(ctrlClusterClient.Create(newCtx(), backupSecret)).Should(Succeed())
+
+	return backupSecret
+}
 
 func createCredentialSecrets() {
 	defer GinkgoRecover()
@@ -201,14 +216,15 @@ func createNamespace(client client.Client, ns string) {
 	Expect(client.Create(newCtx(), nsObj)).Should(Succeed())
 }
 
-func createPostgresTestInstance() {
+func createPostgresTestInstance(backupSecret *core.Secret) {
 	defer GinkgoRecover()
 
+	// Parse the test instance
 	bytes, err := os.ReadFile(filepath.Join("..", "config", "samples", "complete.yaml"))
 	Expect(err).ToNot(HaveOccurred())
 	Expect(yaml.Unmarshal(bytes, instance)).Should(Succeed())
 
-	createNamespace(ctrlClusterClient, instance.Namespace)
+	instance.Spec.BackupSecretRef = backupSecret.Name
 
 	Expect(ctrlClusterClient.Create(newCtx(), instance)).Should(Succeed())
 }
