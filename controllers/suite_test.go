@@ -61,83 +61,87 @@ func TestAPIs(t *testing.T) {
 		[]Reporter{printer.NewlineReporter{}})
 }
 
-var _ = BeforeSuite(func(done Done) {
-	defer close(done)
+var _ = BeforeSuite(func() {
+	done := make(chan interface{})
+	go func() {
+		defer close(done)
 
-	By("bootstrapping test environment")
+		By("bootstrapping test environment")
 
-	// Create test env for ctrl cluster and start it
-	ctrlClusterTestEnv = &envtest.Environment{
-		// Path to CRD from this project
-		CRDDirectoryPaths: []string{filepath.Join("..", "config", "crd", "bases")},
-	}
-	ctrlClusterCfg = startTestEnv(ctrlClusterTestEnv)
+		// Create test env for ctrl cluster and start it
+		ctrlClusterTestEnv = &envtest.Environment{
+			// Path to CRD from this project
+			CRDDirectoryPaths: []string{filepath.Join("..", "config", "crd", "bases")},
+		}
+		ctrlClusterCfg = startTestEnv(ctrlClusterTestEnv)
 
-	// Create test env for svc cluster and start it
-	svcClusterTestEnv = &envtest.Environment{
-		CRDInstallOptions: envtest.CRDInstallOptions{
-			Paths: []string{
-				filepath.Join(externalYAMLDir, "crd-postgresql.yaml"),
-				filepath.Join(externalYAMLDirTest, "crd-clusterwidenetworkpolicy.yaml"),
+		// Create test env for svc cluster and start it
+		svcClusterTestEnv = &envtest.Environment{
+			CRDInstallOptions: envtest.CRDInstallOptions{
+				Paths: []string{
+					filepath.Join(externalYAMLDir, "crd-postgresql.yaml"),
+					filepath.Join(externalYAMLDirTest, "crd-clusterwidenetworkpolicy.yaml"),
+				},
 			},
-		},
-	}
-	svcClusterCfg = startTestEnv(svcClusterTestEnv)
+		}
+		svcClusterCfg = startTestEnv(svcClusterTestEnv)
 
-	scheme := newScheme()
-	ctrlClusterMgr, err := cr.NewManager(ctrlClusterCfg, cr.Options{Scheme: scheme})
-	Expect(err).ToNot(HaveOccurred())
-	Expect(ctrlClusterMgr).ToNot(BeNil())
+		scheme := newScheme()
+		ctrlClusterMgr, err := cr.NewManager(ctrlClusterCfg, cr.Options{Scheme: scheme})
+		Expect(err).ToNot(HaveOccurred())
+		Expect(ctrlClusterMgr).ToNot(BeNil())
 
-	svcClusterMgr, err := cr.NewManager(svcClusterCfg, cr.Options{
-		MetricsBindAddress: "0",
-		Scheme:             scheme,
-	})
-	Expect(err).ToNot(HaveOccurred())
-	Expect(svcClusterMgr).ToNot(BeNil())
+		svcClusterMgr, err := cr.NewManager(svcClusterCfg, cr.Options{
+			MetricsBindAddress: "0",
+			Scheme:             scheme,
+		})
+		Expect(err).ToNot(HaveOccurred())
+		Expect(svcClusterMgr).ToNot(BeNil())
 
-	cr.SetLogger(zap.New(zap.UseDevMode(true)))
+		cr.SetLogger(zap.New(zap.UseDevMode(true)))
 
-	// Todo: OperatorManager should be a reconciler
-	opMgr, err := operatormanager.New(
-		svcClusterCfg,
-		filepath.Join(externalYAMLDir, "svc-postgres-operator.yaml"),
-		scheme,
-		cr.Log.WithName("OperatorManager"),
-		"test-psp")
-	Expect(err).ToNot(HaveOccurred())
+		// Todo: OperatorManager should be a reconciler
+		opMgr, err := operatormanager.New(
+			svcClusterCfg,
+			filepath.Join(externalYAMLDir, "svc-postgres-operator.yaml"),
+			scheme,
+			cr.Log.WithName("OperatorManager"),
+			"test-psp")
+		Expect(err).ToNot(HaveOccurred())
 
-	Expect((&PostgresReconciler{
-		CtrlClient:      ctrlClusterMgr.GetClient(),
-		SvcClient:       svcClusterMgr.GetClient(),
-		PartitionID:     "sample-partition",
-		Tenant:          "sample-tenant",
-		OperatorManager: opMgr,
-		LBManager:       lbmanager.New(svcClusterMgr.GetClient(), "127.0.0.1", int32(32000), int32(8000)),
-		Log:             cr.Log.WithName("controllers").WithName("Postgres"),
-	}).SetupWithManager(ctrlClusterMgr)).Should(Succeed())
+		Expect((&PostgresReconciler{
+			CtrlClient:      ctrlClusterMgr.GetClient(),
+			SvcClient:       svcClusterMgr.GetClient(),
+			PartitionID:     "sample-partition",
+			Tenant:          "sample-tenant",
+			OperatorManager: opMgr,
+			LBManager:       lbmanager.New(svcClusterMgr.GetClient(), "127.0.0.1", int32(32000), int32(8000)),
+			Log:             cr.Log.WithName("controllers").WithName("Postgres"),
+		}).SetupWithManager(ctrlClusterMgr)).Should(Succeed())
 
-	go startMgr(ctrlClusterMgr)
+		go startMgr(ctrlClusterMgr)
 
-	ctrlClusterClient = ctrlClusterMgr.GetClient()
-	Expect(ctrlClusterClient).ToNot(BeNil())
+		ctrlClusterClient = ctrlClusterMgr.GetClient()
+		Expect(ctrlClusterClient).ToNot(BeNil())
 
-	Expect((&StatusReconciler{
-		CtrlClient: ctrlClusterMgr.GetClient(),
-		SvcClient:  svcClusterMgr.GetClient(),
-		Log:        cr.Log.WithName("controllers").WithName("Status"),
-	}).SetupWithManager(svcClusterMgr)).Should(Succeed())
+		Expect((&StatusReconciler{
+			CtrlClient: ctrlClusterMgr.GetClient(),
+			SvcClient:  svcClusterMgr.GetClient(),
+			Log:        cr.Log.WithName("controllers").WithName("Status"),
+		}).SetupWithManager(svcClusterMgr)).Should(Succeed())
 
-	go startMgr(svcClusterMgr)
+		go startMgr(svcClusterMgr)
 
-	svcClusterClient = svcClusterMgr.GetClient()
-	Expect(svcClusterClient).ToNot(BeNil())
+		svcClusterClient = svcClusterMgr.GetClient()
+		Expect(svcClusterClient).ToNot(BeNil())
 
-	createNamespace(svcClusterClient, "firewall")
-	createPostgresTestInstance()
-	createConfigMapSidecarConfig()
-	createCredentialSecrets()
-}, 1000)
+		createNamespace(svcClusterClient, "firewall")
+		createPostgresTestInstance()
+		createConfigMapSidecarConfig()
+		createCredentialSecrets()
+	}()
+	Eventually(done, 1000).Should(BeClosed())
+})
 
 var _ = AfterSuite(func() {
 	By("tearing down the test environment")
