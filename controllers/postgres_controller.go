@@ -12,6 +12,7 @@ import (
 
 	"github.com/go-logr/logr"
 	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
+	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/tools/record"
 
@@ -115,6 +116,10 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		if err := r.UninstallOperator(ctx, namespace); err != nil {
 			r.recorder.Eventf(instance, "Warning", "Error", "failed to uninstall operator: %v", err)
 			return ctrl.Result{}, fmt.Errorf("error while uninstalling operator: %w", err)
+		}
+
+		if err := r.deleteUserPasswordsSecret(ctx, instance); err != nil {
+			return ctrl.Result{}, err
 		}
 
 		instance.RemoveFinalizer(pg.PostgresFinalizerName)
@@ -225,6 +230,19 @@ func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context
 		return fmt.Errorf("failed to update zalando postgresql: %w", err)
 	}
 	log.Info("zalando postgresql updated", "zalando postgresql", u)
+
+	return nil
+}
+
+func (r *PostgresReconciler) deleteUserPasswordsSecret(ctx context.Context, instance *pg.Postgres) error {
+	secret := &corev1.Secret{}
+	secret.Namespace = instance.Namespace
+	secret.Name = instance.ToUserPasswordsSecretName()
+	if err := r.CtrlClient.Delete(ctx, secret); err != nil {
+		msgWithFormat := "failed to delete user passwords secret: %w"
+		r.recorder.Eventf(instance, "Warning", "Error", msgWithFormat, err)
+		return fmt.Errorf(msgWithFormat, err)
+	}
 
 	return nil
 }

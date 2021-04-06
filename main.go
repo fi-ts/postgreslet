@@ -24,7 +24,6 @@ import (
 
 	databasev1 "github.com/fi-ts/postgreslet/api/v1"
 	"github.com/fi-ts/postgreslet/controllers"
-	"github.com/fi-ts/postgreslet/pkg/crdinstaller"
 	"github.com/fi-ts/postgreslet/pkg/lbmanager"
 	"github.com/fi-ts/postgreslet/pkg/operatormanager"
 	firewall "github.com/metal-stack/firewall-controller/api/v1"
@@ -91,16 +90,6 @@ func main() {
 	)
 
 	svcClusterConf := ctrl.GetConfigOrDie()
-	i, err := crdinstaller.New(svcClusterConf, scheme, ctrl.Log.WithName("CRDInstaller"))
-	if err != nil {
-		setupLog.Error(err, "unable to create `CRDInstaller`")
-		os.Exit(1)
-	}
-	if err := i.Install("external/crd-postgresql.yaml"); err != nil {
-		setupLog.Error(err, "unable to install CRD Postgresql")
-		os.Exit(1)
-	}
-
 	svcClusterMgr, err := ctrl.NewManager(svcClusterConf, ctrl.Options{
 		Scheme:             scheme,
 		MetricsBindAddress: metricsAddrSvcMgr,

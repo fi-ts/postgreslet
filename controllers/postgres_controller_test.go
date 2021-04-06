@@ -7,8 +7,6 @@
 package controllers
 
 import (
-	"time"
-
 	pg "github.com/fi-ts/postgreslet/api/v1"
 	"github.com/fi-ts/postgreslet/pkg/operatormanager"
 	firewall "github.com/metal-stack/firewall-controller/api/v1"
@@ -20,12 +18,6 @@ import (
 )
 
 var _ = Describe("postgres controller", func() {
-	const (
-		// duration = time.Second * 10
-		interval = time.Second * 2
-		timeout  = time.Second * 30
-	)
-
 	BeforeEach(func() {})
 	AfterEach(func() {})
 
@@ -88,6 +80,15 @@ var _ = Describe("postgres controller", func() {
 				}, &firewall.ClusterwideNetworkPolicy{}) == nil
 			}, timeout, interval).Should(BeTrue())
 		})
+
+		It("should create user-passwords-secret in control-plane-cluster", func() {
+			Eventually(func() bool {
+				return ctrlClusterClient.Get(newCtx(), types.NamespacedName{
+					Namespace: instance.Namespace,
+					Name:      instance.ToUserPasswordsSecretName(),
+				}, &core.Secret{}) == nil
+			}, timeout, interval).Should(BeTrue())
+		})
 	})
 
 	Context("postgres instance being deleted", func() {
@@ -114,6 +115,15 @@ var _ = Describe("postgres controller", func() {
 			z := &zalando.Postgresql{}
 			Eventually(func() bool {
 				return svcClusterClient.Get(newCtx(), instance.ToPeripheralResourceLookupKey(), z) == nil
+			}, timeout, interval).ShouldNot(BeTrue())
+		})
+
+		It("should delete user-passwords-secret in control-plane-cluster", func() {
+			Eventually(func() bool {
+				return ctrlClusterClient.Get(newCtx(), types.NamespacedName{
+					Namespace: instance.Namespace,
+					Name:      instance.ToUserPasswordsSecretName(),
+				}, &core.Secret{}) == nil
 			}, timeout, interval).ShouldNot(BeTrue())
 		})
 	})

@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -38,6 +39,12 @@ import (
 // These tests use Ginkgo (BDD-style Go testing framework). Refer to
 // http://onsi.github.io/ginkgo/ to learn more about Ginkgo.
 
+const (
+	// duration = time.Second * 10
+	interval = time.Second * 2
+	timeout  = time.Second * 30
+)
+
 var (
 	ctrlClusterCfg     *rest.Config
 	ctrlClusterClient  client.Client
@@ -49,6 +56,8 @@ var (
 
 	externalYAMLDir     = filepath.Join("..", "external")
 	externalYAMLDirTest = filepath.Join(externalYAMLDir, "test")
+
+	HelmCRDDir = filepath.Join("..", "charts", "postgreslet", "crds")
 
 	instance = &pg.Postgres{}
 )
@@ -77,7 +86,7 @@ var _ = BeforeSuite(func(done Done) {
 	svcClusterTestEnv = &envtest.Environment{
 		CRDInstallOptions: envtest.CRDInstallOptions{
 			Paths: []string{
-				filepath.Join(externalYAMLDir, "crd-postgresql.yaml"),
+				filepath.Join(HelmCRDDir, "postgresql.yaml"),
 				filepath.Join(externalYAMLDirTest, "crd-clusterwidenetworkpolicy.yaml"),
 			},
 		},
@@ -174,10 +183,12 @@ func createCredentialSecrets() {
 		s := &core.Secret{}
 		Expect(yaml.Unmarshal(bytes, s)).Should(Succeed())
 
-		s.Namespace = instance.Namespace
+		s.Namespace = instance.ToPeripheralResourceNamespace()
 		s.Name = users[i] + "." + instance.Name + ".credentials"
-		s.Labels = instance.ToUserPasswordSecretMatchingLabels()
-		Expect(ctrlClusterClient.Create(newCtx(), s)).Should(Succeed())
+		s.Labels = instance.ToZalandoPostgresqlMatchingLabels()
+		Eventually(func() bool {
+			return svcClusterClient.Create(newCtx(), s) == nil
+		}, timeout, interval).Should(BeTrue())
 	}
 }
 
