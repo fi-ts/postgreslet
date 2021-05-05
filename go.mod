@@ -6,7 +6,7 @@ require (
 	github.com/go-logr/logr v0.3.0
 	github.com/metal-stack/firewall-controller v1.0.2-0.20210209073729-714a5bf22625
 	github.com/metal-stack/v v1.0.3
-	github.com/onsi/ginkgo v1.16.1
+	github.com/onsi/ginkgo v1.16.2
 	github.com/onsi/gomega v1.11.0
 	github.com/zalando/postgres-operator v1.6.1
 	inet.af/netaddr v0.0.0-20210203214853-aa702495c49b
