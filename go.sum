@@ -701,8 +701,8 @@ github.com/yuin/goldmark v1.1.25/go.mod h1:3hX8gzYuyVAZsxl0MRgGTJEmQBFcNTphYh9de
 github.com/yuin/goldmark v1.1.27/go.mod h1:3hX8gzYuyVAZsxl0MRgGTJEmQBFcNTphYh9decYSb74=
 github.com/yuin/goldmark v1.1.32/go.mod h1:3hX8gzYuyVAZsxl0MRgGTJEmQBFcNTphYh9decYSb74=
 github.com/yuin/goldmark v1.2.1/go.mod h1:3hX8gzYuyVAZsxl0MRgGTJEmQBFcNTphYh9decYSb74=
-github.com/zalando/postgres-operator v1.6.1 h1:e6QCoi1EIzKnkdukkAEf9Y05myxBUmW+sttfy+9XsI0=
-github.com/zalando/postgres-operator v1.6.1/go.mod h1:n4JW8ceoi21pqR+eCtWUrnpJ3oM8iWg+EImx3l0HjgM=
+github.com/zalando/postgres-operator v1.6.2 h1:qKvG0Rqt/VjereFslwi1YbIenqMUS4GTdP2wFPmj240=
+github.com/zalando/postgres-operator v1.6.2/go.mod h1:n4JW8ceoi21pqR+eCtWUrnpJ3oM8iWg+EImx3l0HjgM=
 go.etcd.io/bbolt v1.3.2/go.mod h1:IbVyRI1SCnLcuJnV2u8VeU0CEYM7e686BmAb1XKL+uU=
 go.etcd.io/bbolt v1.3.3/go.mod h1:IbVyRI1SCnLcuJnV2u8VeU0CEYM7e686BmAb1XKL+uU=
 go.etcd.io/bbolt v1.3.5/go.mod h1:G5EMThwa9y8QZGBClrRx5EY+Yw9kAhnjy3bSjsnlVTQ=
