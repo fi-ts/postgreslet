@@ -141,7 +141,7 @@ func (m *OperatorManager) InstallOrUpdateOperator(ctx context.Context, namespace
 // IsOperatorDeletable returns true when there's no running instance operated by the operator
 func (m *OperatorManager) IsOperatorDeletable(ctx context.Context, namespace string) (bool, error) {
 	setList := &appsv1.StatefulSetList{}
-	if err := m.List(ctx, setList, client.InNamespace(namespace), m.toInstanceMatchingLabels(namespace)); client.IgnoreNotFound(err) != nil {
+	if err := m.List(ctx, setList, client.InNamespace(namespace), m.toInstanceMatchingLabels()); client.IgnoreNotFound(err) != nil {
 		return false, fmt.Errorf("error while fetching the list of statefulsets operated by the operator: %w", err)
 	}
 	if setList != nil && len(setList.Items) != 0 {
@@ -150,7 +150,7 @@ func (m *OperatorManager) IsOperatorDeletable(ctx context.Context, namespace str
 	}
 
 	services := &corev1.ServiceList{}
-	if err := m.List(ctx, services, client.InNamespace(namespace), m.toInstanceMatchingLabels(namespace)); client.IgnoreNotFound(err) != nil {
+	if err := m.List(ctx, services, client.InNamespace(namespace), m.toInstanceMatchingLabels()); client.IgnoreNotFound(err) != nil {
 		return false, fmt.Errorf("error while fetching the list of services operated by the operator: %w", err)
 	}
 	if services != nil && len(services.Items) != 0 {
@@ -642,7 +642,7 @@ func (m *OperatorManager) deleteExporterSidecarService(ctx context.Context, name
 }
 
 // toInstanceMatchingLabels makes the matching labels for the pods of the instances operated by the operator
-func (m *OperatorManager) toInstanceMatchingLabels(namespace string) *client.MatchingLabels {
+func (m *OperatorManager) toInstanceMatchingLabels() *client.MatchingLabels {
 	return &client.MatchingLabels{"application": "spilo"}
 }
 

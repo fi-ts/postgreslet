@@ -79,6 +79,7 @@ func TestLBManager_nextFreePort(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := tt.lbMgr.nextFreePort(context.Background())
 			if (err != nil) != tt.wantErr {
