@@ -10,9 +10,9 @@ require (
 	github.com/onsi/gomega v1.12.0
 	github.com/zalando/postgres-operator v1.6.2
 	inet.af/netaddr v0.0.0-20210511181906-37180328850c
-	k8s.io/api v0.20.6
-	k8s.io/apiextensions-apiserver v0.20.6
-	k8s.io/apimachinery v0.20.6
-	k8s.io/client-go v0.20.6
+	k8s.io/api v0.21.1
+	k8s.io/apiextensions-apiserver v0.21.1
+	k8s.io/apimachinery v0.21.1
+	k8s.io/client-go v0.21.1
 	sigs.k8s.io/controller-runtime v0.8.3
 )
