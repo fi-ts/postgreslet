@@ -7,8 +7,6 @@ spec:
   accessList:
     sourceRanges:
     - 1.2.3.4/24
-  backup:
-    s3BucketURL: ""
   maintenance:
     - "Sun:21:00-22:00"
   numberOfInstances: 2
