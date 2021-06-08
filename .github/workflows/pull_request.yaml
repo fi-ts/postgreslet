@@ -20,8 +20,7 @@ jobs:
     - name: Lint
       uses: golangci/golangci-lint-action@v2
       with:
-        version: v1.32.2
-        args: --timeout=5m
+        args: -p bugs -p unused --timeout=5m
 
     - name: Get Kubebuilder Version
       id: get-kubebuilder-version
@@ -69,12 +68,12 @@ jobs:
 
     - name: Build Docker image
       run: |
-        export DOCKER_TAG=pr-${GITHUB_HEAD_REF}
+        export DOCKER_TAG=pr-$(echo ${GITHUB_HEAD_REF} | tr '/' '-')
         make docker-build
 
     - name: Push Docker image
       run: |
         # pull request images are prefixed with 'pr' to prevent them from overriding released images
-        export DOCKER_TAG=pr-${GITHUB_HEAD_REF}
+        export DOCKER_TAG=pr-$(echo ${GITHUB_HEAD_REF} | tr '/' '-')
         make docker-push
       if: steps.fork.outputs.is_fork_pr == 'false'

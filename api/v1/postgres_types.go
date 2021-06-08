@@ -24,7 +24,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/yaml"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
@@ -317,7 +316,6 @@ func (p *Postgres) ToPeripheralResourceName() string {
 func (p *Postgres) ToUserPasswordsSecret(src *corev1.SecretList, scheme *runtime.Scheme) (*corev1.Secret, error) {
 	secret := &corev1.Secret{}
 	secret.Namespace = p.Namespace
-	// todo: Consider `p.Name + "-passwords", so the`
 	secret.Name = p.ToUserPasswordsSecretName()
 	secret.Type = corev1.SecretTypeOpaque
 	secret.Data = map[string][]byte{}
@@ -325,11 +323,6 @@ func (p *Postgres) ToUserPasswordsSecret(src *corev1.SecretList, scheme *runtime
 	// Fill in the contents of the new secret
 	for _, v := range src.Items {
 		secret.Data[string(v.Data["username"])] = v.Data["password"]
-	}
-
-	// Set the owner of the secret
-	if err := controllerutil.SetControllerReference(p, secret, scheme); err != nil {
-		return nil, err
 	}
 
 	return secret, nil
@@ -376,7 +369,7 @@ func (p *Postgres) generateTeamID() string {
 
 func (p *Postgres) generateDatabaseName() string {
 	// We only want letters and numbers
-	generatedDatabaseName := alphaNumericRegExp.ReplaceAllString(string(p.UID), "")
+	generatedDatabaseName := alphaNumericRegExp.ReplaceAllString(string(p.Name), "")
 
 	// Limit size
 	maxLen := 20
@@ -410,6 +403,8 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 
 	z.Spec.NumberOfInstances = p.Spec.NumberOfInstances
 	z.Spec.PostgresqlParam.PgVersion = p.Spec.Version
+	// TODO set shared_buffer from p.Spec.Size.SharedBuffer
+	// z.Spec.PostgresqlParam.Parameters = map[string]string{}
 	z.Spec.Resources.ResourceRequests.CPU = p.Spec.Size.CPU
 	z.Spec.Resources.ResourceRequests.Memory = p.Spec.Size.Memory
 	z.Spec.Resources.ResourceLimits.CPU = p.Spec.Size.CPU

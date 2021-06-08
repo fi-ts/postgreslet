@@ -1,5 +1,5 @@
 # Build the manager binary
-FROM golang:1.15 as builder
+FROM golang:1.16 as builder
 
 WORKDIR /workspace
 # Copy the Go Modules manifests
@@ -24,7 +24,6 @@ FROM gcr.io/distroless/static:nonroot
 WORKDIR /
 COPY --from=builder /workspace/manager .
 COPY external/svc-postgres-operator.yaml external/svc-postgres-operator.yaml
-COPY external/crd-postgresql.yaml external/crd-postgresql.yaml
 USER nonroot:nonroot
 
 ENTRYPOINT ["/manager"]
