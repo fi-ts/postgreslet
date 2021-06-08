@@ -369,7 +369,7 @@ func (p *Postgres) generateTeamID() string {
 
 func (p *Postgres) generateDatabaseName() string {
 	// We only want letters and numbers
-	generatedDatabaseName := alphaNumericRegExp.ReplaceAllString(string(p.UID), "")
+	generatedDatabaseName := alphaNumericRegExp.ReplaceAllString(string(p.Name), "")
 
 	// Limit size
 	maxLen := 20
