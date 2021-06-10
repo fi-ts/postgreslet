@@ -9,6 +9,7 @@ package v1
 import (
 	"fmt"
 	"reflect"
+	"strconv"
 
 	"regexp"
 
@@ -17,6 +18,7 @@ import (
 	"inet.af/netaddr"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -50,6 +52,8 @@ const (
 	BackupConfigLabelName string = "postgres.database.fits.cloud/is-backup"
 	// BackupConfigKey defines the key under which the BackupConfig is stored in the data map.
 	BackupConfigKey = "config"
+	// SharedBufferParameterKey defines the key under which the shared buffer size is stored in the parameters map. Defined by the postgres-operator/patroni
+	SharedBufferParameterKey = "shared_buffer"
 )
 
 var (
@@ -403,8 +407,8 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 
 	z.Spec.NumberOfInstances = p.Spec.NumberOfInstances
 	z.Spec.PostgresqlParam.PgVersion = p.Spec.Version
-	// TODO set shared_buffer from p.Spec.Size.SharedBuffer
-	// z.Spec.PostgresqlParam.Parameters = map[string]string{}
+	z.Spec.PostgresqlParam.Parameters = map[string]string{}
+	setSharedBufferSize(z.Spec.PostgresqlParam.Parameters, p.Spec.Size.SharedBuffer)
 	z.Spec.Resources.ResourceRequests.CPU = p.Spec.Size.CPU
 	z.Spec.Resources.ResourceRequests.Memory = p.Spec.Size.Memory
 	z.Spec.Resources.ResourceLimits.CPU = p.Spec.Size.CPU
@@ -543,4 +547,19 @@ func (p *Postgres) buildSidecars(c *corev1.ConfigMap) []zalando.Sidecar {
 	}
 
 	return sidecars
+}
+
+// setSharedBufferSize converts and, if valid, sets the shared_buffer parameter in the given map.
+func setSharedBufferSize(parameters map[string]string, shmSize string) {
+	// First step is to convert the string back to a quantity
+	size, err := resource.ParseQuantity(shmSize)
+	if err == nil {
+		// if successful, get the given shared buffer size in bytes.
+		sizeInBytes, ok := size.AsInt64()
+		if ok && sizeInBytes >= (32*1024*1024) {
+			// if more than 32Mi (our minimum value), convert the value to MB as required by postgres (although the docs are not very specific about that)
+			sizeInMB := sizeInBytes / (1024 * 1024)
+			parameters[SharedBufferParameterKey] = strconv.FormatInt(sizeInMB, 10) + "MB"
+		}
+	}
 }
