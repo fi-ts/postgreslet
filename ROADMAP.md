@@ -12,7 +12,7 @@
 * Preview Customers
 
 * Dirty Image #53
-* Stand-By Cluster
+* Stand-By Cluster #227
 * Custom K8s Service Master/Slave Switch (exposed Service is a custom one) #76
 
 * Custom Locale/Collation Support #223
