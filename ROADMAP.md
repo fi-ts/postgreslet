@@ -19,3 +19,5 @@
 * Clone/Restore #128
 
 * Unprivileged ServiceAccount for Postgres Containers #88
+
+* Dedicated etcd Instance for the operators #224
