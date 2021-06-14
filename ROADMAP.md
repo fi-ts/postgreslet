@@ -2,7 +2,8 @@
 
 * Monitoring, specifically (automated?) Prom Installation #9
 
-* Static IP Support (per db or service cluster)
+* Static IP Support (per db or service cluster) #225
+* Pre-determined ports #226
 * Support for MPLS IPs #188
 
 * Dirty Image #53
