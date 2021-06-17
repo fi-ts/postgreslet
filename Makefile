@@ -155,12 +155,14 @@ delete-postgres:
 	kubectl --kubeconfig kubeconfig delete -f config/samples/complete.yaml
 
 helm-clean:
-	rm -f charts/postgreslet/Chart.lock
-	rm -f charts/postgreslet/charts/*
+	rm -f ../../metal-stack/helm-charts/charts/postgreslet/Chart.lock
+	rm -f ../../metal-stack/helm-charts/charts/postgreslet/charts/*
 
 helm:
-	helm dependency build charts/postgreslet/
-	helm package charts/postgreslet/
+	cp config/crd/bases/database.fits.cloud_postgres.yaml charts/postgreslet-support/crds/postgres.yaml
+	helm package charts/postgreslet-support/
+	helm dependency build ../../metal-stack/helm-charts/charts/postgreslet/
+	helm package ../../metal-stack/helm-charts/charts/postgreslet/
 
 test-cwnp:
 	./hack/test-cwnp.sh
