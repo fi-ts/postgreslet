@@ -81,6 +81,13 @@ func main() {
 	ctrlClusterKubeconfig = viper.GetString(ctrlPlaneKubeConfifgFlg)
 
 	lbIP = viper.GetString(loadBalancerIPFlg)
+	if len(lbIP) > 0 {
+		// todo: Shift the logic to a dedicated pkg for args validation.
+		if ip := net.ParseIP(lbIP); ip == nil {
+			ctrl.Log.Error(nil, fmt.Sprintf("Cannot parse provided %s %q, exiting.", loadBalancerIPFlg, lbIP))
+			os.Exit(1)
+		}
+	}
 
 	// todo: Check the default port range start and size.
 	viper.SetDefault(portRangeStartFlg, 32000)
@@ -94,14 +101,6 @@ func main() {
 	storageClass = viper.GetString(storageClassFlg)
 
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
-
-	if len(lbIP) > 0 {
-		// todo: Shift the logic to a dedicated pkg for args validation.
-		if ip := net.ParseIP(lbIP); ip == nil {
-			ctrl.Log.Error(nil, fmt.Sprintf("IP %s not valid", lbIP))
-			os.Exit(1)
-		}
-	}
 
 	ctrl.Log.Info("flag",
 		metricsAddrSvcMgrFlg, metricsAddrSvcMgr,
