@@ -70,22 +70,29 @@ func main() {
 	replacer := strings.NewReplacer("-", "_")
 	viper.SetEnvKeyReplacer(replacer)
 
+	viper.BindEnv(metricsAddrSvcMgrFlg)
 	viper.SetDefault(metricsAddrSvcMgrFlg, ":8080")
 	metricsAddrSvcMgr = viper.GetString(metricsAddrSvcMgrFlg)
 
+	viper.BindEnv(metricsAddrCtrlMgrFlg)
 	viper.SetDefault(metricsAddrCtrlMgrFlg, "0")
 	metricsAddrCtrlMgr = viper.GetString(metricsAddrCtrlMgrFlg)
 
+	viper.BindEnv(enableLeaderElectionFlg)
 	viper.SetDefault(enableLeaderElectionFlg, false)
 	enableLeaderElection = viper.GetBool(enableLeaderElectionFlg)
 
+	viper.BindEnv(partitionIDFlg)
 	partitionID = viper.GetString(partitionIDFlg)
 
+	viper.BindEnv(tenantFlg)
 	tenant = viper.GetString(tenantFlg)
 
+	viper.BindEnv(ctrlPlaneKubeConfifgFlg)
 	viper.SetDefault(ctrlPlaneKubeConfifgFlg, "/var/run/secrets/postgreslet/kube/config")
 	ctrlClusterKubeconfig = viper.GetString(ctrlPlaneKubeConfifgFlg)
 
+	viper.BindEnv(loadBalancerIPFlg)
 	lbIP = viper.GetString(loadBalancerIPFlg)
 	if len(lbIP) > 0 {
 		// todo: Shift the logic to a dedicated pkg for args validation.
@@ -96,14 +103,18 @@ func main() {
 	}
 
 	// todo: Check the default port range start and size.
+	viper.BindEnv(portRangeStartFlg)
 	viper.SetDefault(portRangeStartFlg, 32000)
 	portRangeStart = viper.GetInt(portRangeStartFlg)
+	viper.BindEnv(portRangeSizeFlg)
 	viper.SetDefault(portRangeSizeFlg, 8000)
 	portRangeSize = viper.GetInt(portRangeSizeFlg)
 
+	viper.BindEnv(customPSPNameFlg)
 	viper.SetDefault(customPSPNameFlg, "postgres-operator-psp")
 	pspName = viper.GetString(customPSPNameFlg)
 
+	viper.BindEnv(storageClassFlg)
 	storageClass = viper.GetString(storageClassFlg)
 
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
