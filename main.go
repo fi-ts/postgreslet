@@ -66,7 +66,7 @@ func main() {
 	var enableLeaderElection bool
 	var portRangeStart, portRangeSize int
 
-	viper.SetEnvPrefix(envPrefix)
+	// viper.SetEnvPrefix(envPrefix)
 	replacer := strings.NewReplacer("-", "_")
 	viper.SetEnvKeyReplacer(replacer)
 
