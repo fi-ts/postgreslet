@@ -33,7 +33,7 @@ import (
 )
 
 const (
-	envPrefix               = "pg"
+	// envPrefix               = "pg"
 	metricsAddrSvcMgrFlg    = "metrics-addr-svc-mgr"
 	metricsAddrCtrlMgrFlg   = "metrics-addr-ctrl-mgr"
 	enableLeaderElectionFlg = "enable-leader-election"
