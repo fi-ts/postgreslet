@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strings"
 
 	"github.com/metal-stack/v"
 	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
@@ -32,6 +33,7 @@ import (
 )
 
 const (
+	envPrefix               = "pg"
 	metricsAddrSvcMgrFlg    = "metrics-addr-svc-mgr"
 	metricsAddrCtrlMgrFlg   = "metrics-addr-ctrl-mgr"
 	enableLeaderElectionFlg = "enable-leader-election"
@@ -63,6 +65,10 @@ func main() {
 	var metricsAddrCtrlMgr, metricsAddrSvcMgr, partitionID, tenant, ctrlClusterKubeconfig, pspName, lbIP, storageClass string
 	var enableLeaderElection bool
 	var portRangeStart, portRangeSize int
+
+	viper.SetEnvPrefix(envPrefix)
+	replacer := strings.NewReplacer("-", "_")
+	viper.SetEnvKeyReplacer(replacer)
 
 	viper.SetDefault(metricsAddrSvcMgrFlg, ":8080")
 	metricsAddrSvcMgr = viper.GetString(metricsAddrSvcMgrFlg)
