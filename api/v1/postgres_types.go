@@ -129,8 +129,6 @@ type PostgresSpec struct {
 	NumberOfInstances int32 `json:"numberOfInstances,omitempty"`
 
 	// Version is the version of Postgre-as-a-Service
-	// +kubebuilder:validation:Enum="12";
-	// +kubebuilder:default="12"
 	Version string `json:"version,omitempty"`
 
 	// Size of the database

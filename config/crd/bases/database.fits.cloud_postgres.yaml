@@ -113,10 +113,7 @@ spec:
                 description: Tenant metal tenant
                 type: string
               version:
-                default: "12"
                 description: Version is the version of Postgre-as-a-Service
-                enum:
-                - "12"
                 type: string
             type: object
           status:
