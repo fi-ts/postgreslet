@@ -67,6 +67,7 @@ func main() {
 	var portRangeStart, portRangeSize int
 
 	// viper.SetEnvPrefix(envPrefix)
+	viper.AutomaticEnv()
 	replacer := strings.NewReplacer("-", "_")
 	viper.SetEnvKeyReplacer(replacer)
 
