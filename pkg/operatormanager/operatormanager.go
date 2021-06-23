@@ -15,9 +15,9 @@ import (
 	"strconv"
 	"strings"
 
-	coreosv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	pg "github.com/fi-ts/postgreslet/api/v1"
 	"github.com/go-logr/logr"
+	coreosv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"

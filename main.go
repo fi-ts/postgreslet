@@ -13,8 +13,8 @@ import (
 	"net"
 	"os"
 
-	coreosv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/metal-stack/v"
+	coreosv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
