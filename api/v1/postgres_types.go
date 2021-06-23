@@ -53,7 +53,7 @@ const (
 	// BackupConfigKey defines the key under which the BackupConfig is stored in the data map.
 	BackupConfigKey = "config"
 	// SharedBufferParameterKey defines the key under which the shared buffer size is stored in the parameters map. Defined by the postgres-operator/patroni
-	SharedBufferParameterKey = "shared_buffer"
+	SharedBufferParameterKey = "shared_buffers"
 )
 
 var (
