@@ -1,23 +1,20 @@
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: database
----
 apiVersion: database.fits.cloud/v1
 kind: Postgres
 metadata:
-  namespace: database
-  name: sample-name-a
+  namespace: metal-extension-cloud
+  name: complete
 spec:
   accessList:
     sourceRanges:
     - 1.2.3.4/24
-  backup:
-    s3BucketURL: ""
+  maintenance:
+    - "Sun:21:00-22:00"
   numberOfInstances: 2
   partitionID: sample-partition
-  projectID: projectid-a
+  projectID: sample-project
   size:
+    cpu: 500m
+    memory: 512Mi
     storageSize: 1Gi
   tenant: sample-tenant
   version: "12"

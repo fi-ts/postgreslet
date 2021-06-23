@@ -18,21 +18,24 @@ import (
 	"inet.af/netaddr"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/apimachinery/pkg/util/yaml"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
 const (
-	// UIDLabelName Name of the label referencing the owning Postgres resource in the control cluster
-	UIDLabelName string = "postgres.database.fits.cloud/uuid"
+	// UIDLabelName Name of the label referencing the owning Postgres resource uid in the control cluster
+	UIDLabelName string = "postgres.database.fits.cloud/uid"
+	// NameLabelName Name of the label referencing the owning Postgres resource name in the control cluster (which might not be unique)
+	NameLabelName string = "postgres.database.fits.cloud/name"
 	// TenantLabelName Name of the tenant label
 	TenantLabelName string = "postgres.database.fits.cloud/tenant"
 	// ProjectIDLabelName Name of the ProjectID label
@@ -43,22 +46,21 @@ const (
 	ManagedByLabelValue string = "postgreslet"
 	// PostgresFinalizerName Name of the finalizer to use
 	PostgresFinalizerName string = "postgres.finalizers.database.fits.cloud"
-	// SidecarsCMName Namem of the ConfigMap containing the config for the sidecars
-	SidecarsCMName string = "postgres-sidecars-configmap"
-	// SidecarsCMFluentBitConfKey Name of the key containing the fluent-bit.conf config file
-	SidecarsCMFluentBitConfKey string = "fluent-bit.conf"
-	// FluentBitSidecarName Defines the name of the fluent-bit sidecar
-	FluentBitSidecarName string = "postgres-fluentbit"
-	// SidecarsCMExporterQueriesKey Name of the key containing the queries.yaml config file
-	SidecarsCMExporterQueriesKey string = "queries.yaml"
-	// ExporterSidecarName Defines the name of the postgres exporter sidecar
-	ExporterSidecarName string = "postgres-exporter"
 	// CreatedByAnnotationKey is used to store who in person created this database
 	CreatedByAnnotationKey string = "postgres.database.fits.cloud/created-by"
 	// BackupConfigLabelName if set to true, this secret stores the backupConfig
 	BackupConfigLabelName string = "postgres.database.fits.cloud/is-backup"
 	// BackupConfigKey defines the key under which the BackupConfig is stored in the data map.
 	BackupConfigKey = "config"
+	// SharedBufferParameterKey defines the key under which the shared buffer size is stored in the parameters map. Defined by the postgres-operator/patroni
+	SharedBufferParameterKey = "shared_buffer"
+)
+
+var (
+	ZalandoPostgresqlTypeMeta = metav1.TypeMeta{
+		APIVersion: "acid.zalan.do/v1",
+		Kind:       "postgresql",
+	}
 )
 
 // BackupConfig defines all properties to configure backup of a database.
@@ -72,6 +74,8 @@ type BackupConfig struct {
 	ProjectID string `json:"project"`
 	// Tenant the tenant of the backup
 	Tenant string `json:"tenant"`
+	// CreatedBy is the name of the person or technical account which created this backupConfig
+	CreatedBy string `json:"createdBy"`
 	// Retention defines how many versions should be held in s3
 	Retention string `json:"retention"`
 	// Schedule in cron syntax when to run the backup periodically
@@ -87,79 +91,18 @@ type BackupConfig struct {
 	S3AccessKey string `json:"s3accesskey"`
 	// S3SecretKey is the secretkey which must match to the accesskey
 	S3SecretKey string `json:"s3secretkey"`
+	// S3EncryptionKey if set, server side s3 encryption is used.
+	S3EncryptionKey *string `json:"s3encryptionkey,omitempty"`
 }
-
-var (
-	ZalandoPostgresqlTypeMeta = metav1.TypeMeta{
-		APIVersion: "acid.zalan.do/v1",
-		Kind:       "postgresql",
-	}
-
-	additionalVolumes = []zalando.AdditionalVolume{
-		{
-			Name:      "empty",
-			MountPath: "/opt/empty",
-			TargetContainers: []string{
-				"all",
-			},
-			VolumeSource: corev1.VolumeSource{
-				EmptyDir: &corev1.EmptyDirVolumeSource{},
-			},
-		},
-		{
-			Name:      "postgres-exporter-configmap",
-			MountPath: "/metrics",
-			TargetContainers: []string{
-				ExporterSidecarName,
-			},
-			VolumeSource: corev1.VolumeSource{
-				ConfigMap: &corev1.ConfigMapVolumeSource{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: SidecarsCMName,
-					},
-					Items: []corev1.KeyToPath{
-						{
-							Key:  SidecarsCMExporterQueriesKey,
-							Path: "queries.yaml",
-						},
-					},
-				},
-			},
-		},
-		{
-			Name:      "postgres-fluentbit-configmap",
-			MountPath: "/fluent-bit/etc",
-			TargetContainers: []string{
-				FluentBitSidecarName,
-			},
-			VolumeSource: corev1.VolumeSource{
-				ConfigMap: &corev1.ConfigMapVolumeSource{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: SidecarsCMName,
-					},
-					Items: []corev1.KeyToPath{
-						{
-							Key:  SidecarsCMFluentBitConfKey,
-							Path: "fluent-bit.conf",
-						},
-					},
-				},
-			},
-		},
-	}
-
-	ExporterSidecarPortName intstr.IntOrString = intstr.IntOrString{
-		Type:   intstr.String,
-		StrVal: "exporter",
-	}
-)
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="Tenant",type=string,JSONPath=`.spec.tenant`
 // +kubebuilder:printcolumn:name="Version",type=string,JSONPath=`.spec.version`
+// +kubebuilder:printcolumn:name="Replicas",type=string,JSONPath=`.spec.numberOfInstances`
+// +kubebuilder:printcolumn:name="IP",type=string,JSONPath=`.status.socket.ip`
+// +kubebuilder:printcolumn:name="Port",type=integer,JSONPath=`.status.socket.port`
 // +kubebuilder:printcolumn:name="Status",type=string,JSONPath=`.status.description`
-// +kubebuilder:printcolumn:name="Load-Balancer-IP",type=string,JSONPath=`.status.socket.ip`
-// +kubebuilder:printcolumn:name="Load-Balancer-Port",type=integer,JSONPath=`.status.socket.port`
 
 // Postgres is the Schema for the postgres API
 type Postgres struct {
@@ -190,8 +133,6 @@ type PostgresSpec struct {
 	NumberOfInstances int32 `json:"numberOfInstances,omitempty"`
 
 	// Version is the version of Postgre-as-a-Service
-	// +kubebuilder:validation:Enum="12";
-	// +kubebuilder:default="12"
 	Version string `json:"version,omitempty"`
 
 	// Size of the database
@@ -377,7 +318,6 @@ func (p *Postgres) ToPeripheralResourceName() string {
 func (p *Postgres) ToUserPasswordsSecret(src *corev1.SecretList, scheme *runtime.Scheme) (*corev1.Secret, error) {
 	secret := &corev1.Secret{}
 	secret.Namespace = p.Namespace
-	// todo: Consider `p.Name + "-passwords", so the`
 	secret.Name = p.ToUserPasswordsSecretName()
 	secret.Type = corev1.SecretTypeOpaque
 	secret.Data = map[string][]byte{}
@@ -385,11 +325,6 @@ func (p *Postgres) ToUserPasswordsSecret(src *corev1.SecretList, scheme *runtime
 	// Fill in the contents of the new secret
 	for _, v := range src.Items {
 		secret.Data[string(v.Data["username"])] = v.Data["password"]
-	}
-
-	// Set the owner of the secret
-	if err := controllerutil.SetControllerReference(p, secret, scheme); err != nil {
-		return nil, err
 	}
 
 	return secret, nil
@@ -409,13 +344,15 @@ func (p *Postgres) ToBackupSecretName() string {
 func (p *Postgres) ToUserPasswordsSecretListOption() []client.ListOption {
 	return []client.ListOption{
 		client.InNamespace(p.ToPeripheralResourceNamespace()),
-		client.MatchingLabels(
-			map[string]string{
-				"application":  "spilo",
-				"cluster-name": p.ToPeripheralResourceName(),
-				"team":         p.generateTeamID(),
-			},
-		),
+		p.ToZalandoPostgresqlMatchingLabels(),
+	}
+}
+
+func (p *Postgres) ToUserPasswordSecretMatchingLabels() map[string]string {
+	return map[string]string{
+		"application":  "spilo",
+		"cluster-name": p.ToPeripheralResourceName(),
+		"team":         p.generateTeamID(),
 	}
 }
 
@@ -434,7 +371,7 @@ func (p *Postgres) generateTeamID() string {
 
 func (p *Postgres) generateDatabaseName() string {
 	// We only want letters and numbers
-	generatedDatabaseName := alphaNumericRegExp.ReplaceAllString(string(p.UID), "")
+	generatedDatabaseName := alphaNumericRegExp.ReplaceAllString(string(p.Name), "")
 
 	// Limit size
 	maxLen := 20
@@ -450,7 +387,14 @@ func (p *Postgres) ToPeripheralResourceNamespace() string {
 	return p.ToPeripheralResourceName()
 }
 
-func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *corev1.ConfigMap) (*unstructured.Unstructured, error) {
+func (p *Postgres) ToPeripheralResourceLookupKey() types.NamespacedName {
+	return types.NamespacedName{
+		Namespace: p.ToPeripheralResourceNamespace(),
+		Name:      p.ToPeripheralResourceName(),
+	}
+}
+
+func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *corev1.ConfigMap, sc string) (*unstructured.Unstructured, error) {
 	if z == nil {
 		z = &zalando.Postgresql{}
 	}
@@ -461,16 +405,19 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 
 	z.Spec.NumberOfInstances = p.Spec.NumberOfInstances
 	z.Spec.PostgresqlParam.PgVersion = p.Spec.Version
+	z.Spec.PostgresqlParam.Parameters = map[string]string{}
+	setSharedBufferSize(z.Spec.PostgresqlParam.Parameters, p.Spec.Size.SharedBuffer)
 	z.Spec.Resources.ResourceRequests.CPU = p.Spec.Size.CPU
 	z.Spec.Resources.ResourceRequests.Memory = p.Spec.Size.Memory
 	z.Spec.Resources.ResourceLimits.CPU = p.Spec.Size.CPU
 	z.Spec.Resources.ResourceLimits.Memory = p.Spec.Size.Memory
 	z.Spec.TeamID = p.generateTeamID()
 	z.Spec.Volume.Size = p.Spec.Size.StorageSize
+	z.Spec.Volume.StorageClass = sc
 
 	// skip if the configmap does not exist
 	if c != nil {
-		z.Spec.AdditionalVolumes = additionalVolumes
+		z.Spec.AdditionalVolumes = p.buildAdditionalVolumes(c)
 		z.Spec.Sidecars = p.buildSidecars(c)
 	}
 
@@ -509,9 +456,10 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 
 func (p *Postgres) ToZalandoPostgresqlMatchingLabels() client.MatchingLabels {
 	return client.MatchingLabels{
-		ProjectIDLabelName: p.Spec.PartitionID,
+		ProjectIDLabelName: p.Spec.ProjectID,
 		TenantLabelName:    p.Spec.Tenant,
 		UIDLabelName:       string(p.UID),
+		NameLabelName:      p.Name,
 	}
 }
 
@@ -559,77 +507,57 @@ func init() {
 	SchemeBuilder.Register(&Postgres{}, &PostgresList{})
 }
 
+func (p *Postgres) buildAdditionalVolumes(c *corev1.ConfigMap) []zalando.AdditionalVolume {
+	if c == nil {
+		// abort if the global configmap is not there
+		return nil
+	}
+
+	// Unmarshal yaml-string of additional volumes
+	volumes := []zalando.AdditionalVolume{}
+	if err := yaml.Unmarshal([]byte(c.Data["additional-volumes"]), &volumes); err != nil {
+		return nil
+	}
+
+	return volumes
+}
+
 func (p *Postgres) buildSidecars(c *corev1.ConfigMap) []zalando.Sidecar {
 	if c == nil {
 		// abort if the global configmap is not there
 		return nil
 	}
 
-	exporterContainerPort, error := strconv.ParseInt(c.Data["postgres-exporter-container-port"], 10, 32)
-	if error != nil {
-		// todo log error
-		exporterContainerPort = 9187
+	// Unmarshal yaml-string of exporter
+	sidecars := []zalando.Sidecar{}
+	if err := yaml.Unmarshal([]byte(c.Data["sidecars"]), &sidecars); err != nil {
+		return nil
 	}
-	return []zalando.Sidecar{
-		{
-			Name:        ExporterSidecarName,
-			DockerImage: c.Data["postgres-exporter-image"],
-			Ports: []corev1.ContainerPort{
-				{
-					Name:          ExporterSidecarPortName.StrVal,
-					ContainerPort: int32(exporterContainerPort),
-					Protocol:      corev1.ProtocolTCP,
-				},
-			},
-			Resources: zalando.Resources{
-				ResourceLimits: zalando.ResourceDescription{
-					CPU:    c.Data["postgres-exporter-limits-cpu"],
-					Memory: c.Data["postgres-exporter-limits-memory"],
-				},
-				ResourceRequests: zalando.ResourceDescription{
-					CPU:    c.Data["postgres-exporter-requests-cpu"],
-					Memory: c.Data["postgres-exporter-requests-memory"],
-				},
-			},
-			Env: []corev1.EnvVar{
-				{
-					Name:  "DATA_SOURCE_URI",
-					Value: "127.0.0.1:5432/postgres?sslmode=disable",
-				},
-				{
-					Name:  "DATA_SOURCE_USER",
-					Value: "postgres",
-				},
-				{
-					Name: "DATA_SOURCE_PASS",
-					ValueFrom: &corev1.EnvVarSource{
-						SecretKeyRef: &corev1.SecretKeySelector{
-							LocalObjectReference: corev1.LocalObjectReference{
-								Name: "postgres." + p.ToPeripheralResourceName() + ".credentials",
-							},
-							Key: "password",
-						},
-					},
-				},
-				{
-					Name:  "PG_EXPORTER_EXTEND_QUERY_PATH",
-					Value: "/metrics/queries.yaml",
-				},
-			},
-		},
-		{
-			Name:        FluentBitSidecarName,
-			DockerImage: c.Data["postgres-fluentbit-image"],
-			Resources: zalando.Resources{
-				ResourceLimits: zalando.ResourceDescription{
-					CPU:    c.Data["postgres-fluentbit-limits-cpu"],
-					Memory: c.Data["postgres-fluentbit-limits-memory"],
-				},
-				ResourceRequests: zalando.ResourceDescription{
-					CPU:    c.Data["postgres-fluentbit-requests-cpu"],
-					Memory: c.Data["postgres-fluentbit-requests-memory"],
-				},
-			},
-		},
+
+	// Deal with dynamically assigned name
+	for i := range sidecars {
+		for j := range sidecars[i].Env {
+			if sidecars[i].Env[j].ValueFrom != nil && sidecars[i].Env[j].ValueFrom.SecretKeyRef != nil {
+				sidecars[i].Env[j].ValueFrom.SecretKeyRef.Name = "postgres." + p.ToPeripheralResourceName() + ".credentials"
+				break
+			}
+		}
+	}
+
+	return sidecars
+}
+
+// setSharedBufferSize converts and, if valid, sets the shared_buffer parameter in the given map.
+func setSharedBufferSize(parameters map[string]string, shmSize string) {
+	// First step is to convert the string back to a quantity
+	size, err := resource.ParseQuantity(shmSize)
+	if err == nil {
+		// if successful, get the given shared buffer size in bytes.
+		sizeInBytes, ok := size.AsInt64()
+		if ok && sizeInBytes >= (32*1024*1024) {
+			// if more than 32Mi (our minimum value), convert the value to MB as required by postgres (although the docs are not very specific about that)
+			sizeInMB := sizeInBytes / (1024 * 1024)
+			parameters[SharedBufferParameterKey] = strconv.FormatInt(sizeInMB, 10) + "MB"
+		}
 	}
 }

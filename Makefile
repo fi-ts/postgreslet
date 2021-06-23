@@ -28,7 +28,7 @@ all: manager
 
 # Run tests
 test: generate fmt vet manifests
-	go test ./... -coverprofile cover.out
+	KUBEBUILDER_ASSETS=${GOBIN} go test ./... -coverprofile cover.out -v
 
 # todo: Modify Dockerfile to include the version magic
 # Build manager binary
@@ -42,7 +42,7 @@ manager: generate fmt vet manifests
 	strip bin/manager
 
 # Run against the configured Kubernetes cluster in ~/.kube/config
-run: generate fmt vet manifests install-crd-cwnp
+run: generate fmt vet manifests install-configmap-sidecars install-crd-cwnp
 	go run ./main.go \
 	-partition-id sample-partition \
 	-tenant sample-tenant \
@@ -148,17 +148,17 @@ secret:
 	}
 
 create-postgres:
-	kubectl --kubeconfig kubeconfig apply -f config/samples/database_v1_postgres.yaml
+	kubectl create ns metal-extension-cloud --dry-run=client --save-config -o yaml | kubectl --kubeconfig kubeconfig apply -f -
+	kubectl --kubeconfig kubeconfig apply -f config/samples/complete.yaml
 
 delete-postgres:
-	kubectl --kubeconfig kubeconfig delete -f config/samples/database_v1_postgres.yaml
+	kubectl --kubeconfig kubeconfig delete -f config/samples/complete.yaml
 
 helm-clean:
 	rm -f charts/postgreslet/Chart.lock
 	rm -f charts/postgreslet/charts/*
 
 helm:
-	helm package charts/postgreslet-support/
 	helm dependency build charts/postgreslet/
 	helm package charts/postgreslet/
 
@@ -172,6 +172,51 @@ install-crd-cwnp:
 uninstall-crd-cwnp:
 	kubectl delete ns firewall
 	kubectl delete -f https://raw.githubusercontent.com/metal-stack/firewall-controller/master/config/crd/bases/metal-stack.io_clusterwidenetworkpolicies.yaml
+
+configmap-sidecars:
+	helm template postgreslet --namespace postgreslet-system charts/postgreslet --show-only templates/configmap-sidecars.yaml > external/test/configmap-sidecars.yaml
+
+install-configmap-sidecars:
+	kubectl create ns postgreslet-system --dry-run=client --save-config -o yaml | kubectl apply -f -
+	kubectl apply -f external/test/configmap-sidecars.yaml
+
+# Todo: Add release version when the changes in main branch are released
+crd-cwnp-for-testing:
+	curl https://raw.githubusercontent.com/metal-stack/firewall-controller/master/config/crd/bases/metal-stack.io_clusterwidenetworkpolicies.yaml -o external/test/crd-clusterwidenetworkpolicy.yaml
+
+KUBEBUILDER_VERSION:=2.3.2
+kubebuilder:
+ifeq (,$(wildcard ~/.kubebuilder/${KUBEBUILDER_VERSION}))
+	{ \
+	os=$$(go env GOOS) ;\
+	arch=$$(go env GOARCH) ;\
+	curl -L https://go.kubebuilder.io/dl/${KUBEBUILDER_VERSION}/$${os}/$${arch} | tar -xz -C /tmp/ ;\
+	mv /tmp/kubebuilder_${KUBEBUILDER_VERSION}_$${os}_$${arch}/bin/* ${GOBIN} ;\
+	mkdir -p ~/.kubebuilder ;\
+	touch ~/.kubebuilder/${KUBEBUILDER_VERSION} ;\
+	}
+endif
+
+kubebuilder-version-ci:
+	@echo ${KUBEBUILDER_VERSION}
+
+two-kind-clusters:
+	# control-plane-cluster
+	kind create cluster --name ctrl --kubeconfig ./kubeconfig
+	container_ip=$$(docker inspect --format='{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' 'ctrl-control-plane') ;\
+	kubectl --kubeconfig=kubeconfig config set-cluster 'kind-ctrl' --server="https://$${container_ip}:6443"
+	make install
+	make create-postgres
+	# service-clsuter
+	make helm-clean
+	make helm
+	kind create cluster
+	sed 's/z.Spec.Volume.StorageClass/\/\/z.Spec.Volume.StorageClass/' -i api/v1/postgres_types.go
+	make kind-load-image
+	sed 's/\/\/z.Spec.Volume.StorageClass/z.Spec.Volume.StorageClass/' -i api/v1/postgres_types.go
+	kubectl create ns postgreslet-system --dry-run=client --save-config -o yaml | kubectl apply -f -
+	make install-crd-cwnp
+	helm upgrade --install postgreslet postgreslet-0.1.0.tgz --namespace postgreslet-system --set-file controlplaneKubeconfig=kubeconfig  --set image.tag=latest
 
 install-crd-servicemonitor:
 	kubectl apply -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/v0.45.0/example/prometheus-operator-crd/monitoring.coreos.com_servicemonitors.yaml
