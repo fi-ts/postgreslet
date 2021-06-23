@@ -93,7 +93,7 @@ func (m *LBManager) nextFreeSocket(ctx context.Context) (string, int32, error) {
 
 	// If there are already any managed services, store all the used ports in a slice.
 	// Also store the LoadBalancerIP.
-	portsInUse := make([]int32, len(lbs.Items))
+	portsInUse := make([]int32, 0, len(lbs.Items))
 	for i := range lbs.Items {
 		svc := lbs.Items[i]
 		if len(svc.Spec.Ports) > 0 {
