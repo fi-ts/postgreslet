@@ -90,6 +90,7 @@ var _ = BeforeSuite(func() {
 				Paths: []string{
 					filepath.Join(HelmCRDDir, "postgresql.yaml"),
 					filepath.Join(externalYAMLDirTest, "crd-clusterwidenetworkpolicy.yaml"),
+					filepath.Join(externalYAMLDirTest, "crd-servicemonitors.yaml"),
 				},
 			},
 		}
