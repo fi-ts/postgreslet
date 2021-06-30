@@ -609,7 +609,7 @@ func (m *OperatorManager) createOrUpdateExporterSidecarService(ctx context.Conte
 	}
 	// todo: handle errors other than `NotFound`
 
-	// local configmap does not exist, creating it
+	// local servicemonitor does not exist, creating it
 	if err := m.Create(ctx, pes); err != nil {
 		return fmt.Errorf("error while creating the postgres-exporter service: %w", err)
 	}
@@ -631,6 +631,7 @@ func (m *OperatorManager) createOrUpdateExporterSidecarServiceMonitor(ctx contex
 		return fmt.Errorf("error while setting the namespace of the postgres-exporter servicemonitor to %v: %w", namespace, err)
 	}
 	labels := map[string]string{
+		// TODO add labels for tenant and project
 		"app":     "postgres-exporter",
 		"release": "prometheus",
 	}
@@ -669,7 +670,7 @@ func (m *OperatorManager) createOrUpdateExporterSidecarServiceMonitor(ctx contex
 	}
 	// todo: handle errors other than `NotFound`
 
-	// local configmap does not exist, creating it
+	// local servicemonitor does not exist, creating it
 	if err := m.Create(ctx, pesm); err != nil {
 		return fmt.Errorf("error while creating the postgres-exporter servicemonitor: %w", err)
 	}
