@@ -15,6 +15,7 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	coreosv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	core "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/yaml"
@@ -231,6 +232,7 @@ func newScheme() *runtime.Scheme {
 	Expect(firewall.AddToScheme(scheme)).Should(Succeed())
 	Expect(pg.AddToScheme(scheme)).Should(Succeed())
 	Expect(zalando.AddToScheme(scheme)).Should(Succeed())
+	Expect(coreosv1.AddToScheme(scheme)).Should(Succeed())
 
 	// +kubebuilder:scaffold:scheme
 
