@@ -54,6 +54,8 @@ const (
 	BackupConfigKey = "config"
 	// SharedBufferParameterKey defines the key under which the shared buffer size is stored in the parameters map. Defined by the postgres-operator/patroni
 	SharedBufferParameterKey = "shared_buffers"
+
+	teamIDPrefix = "db"
 )
 
 var (
@@ -359,6 +361,9 @@ func (p *Postgres) ToUserPasswordSecretMatchingLabels() map[string]string {
 func (p *Postgres) generateTeamID() string {
 	// We only want letters and numbers
 	generatedTeamID := alphaNumericRegExp.ReplaceAllString(p.Spec.ProjectID, "")
+
+	// Prefix `db` to make sure the string is a valid dns entry (aka does not start with a number)
+	generatedTeamID = teamIDPrefix + generatedTeamID
 
 	// Limit size
 	maxLen := 16
