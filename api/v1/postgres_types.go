@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"reflect"
 	"strconv"
-	"strings"
 
 	"regexp"
 
@@ -55,6 +54,8 @@ const (
 	BackupConfigKey = "config"
 	// SharedBufferParameterKey defines the key under which the shared buffer size is stored in the parameters map. Defined by the postgres-operator/patroni
 	SharedBufferParameterKey = "shared_buffers"
+
+	teamIDPrefix = "db"
 )
 
 var (
@@ -362,10 +363,7 @@ func (p *Postgres) generateTeamID() string {
 	generatedTeamID := alphaNumericRegExp.ReplaceAllString(p.Spec.ProjectID, "")
 
 	// Prefix `db` to make sure the string is a valid dns entry (aka does not start with a number)
-	var b strings.Builder
-	b.WriteString("db")
-	b.WriteString(generatedTeamID)
-	generatedTeamID = b.String()
+	generatedTeamID = teamIDPrefix + generatedTeamID
 
 	// Limit size
 	maxLen := 16
