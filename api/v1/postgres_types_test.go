@@ -148,42 +148,42 @@ func TestPostgres_ToPeripheralResourceName(t *testing.T) {
 		postgresName string
 	}{
 		{
-			name:         "beginning with letter",
+			name:         "letters",
 			projectID:    "abc",
 			postgresName: "bca",
 		},
 		{
-			name:         "beginning with number",
+			name:         "numbers at the beginning",
 			projectID:    "1bc",
 			postgresName: "1cb",
 		},
 		{
-			name:         "contains number in the middle",
+			name:         "numbers in the middle",
 			projectID:    "a1c",
 			postgresName: "c1a",
 		},
 		{
-			name:         "ends with number",
+			name:         "numbers at the end",
 			projectID:    "ab1",
 			postgresName: "ba1",
 		},
 		{
-			name:         "contains non-alphanumeric characters",
+			name:         "non-alphanumeric characters",
 			projectID:    "ab-cd.ef@12",
 			postgresName: "ba.dc-fe@21",
 		},
 		{
-			name:         "contains non-alphanumeric characters",
+			name:         "non-alphanumeric characters beginning with numbers",
 			projectID:    "12@ab-cd.ef",
 			postgresName: "21@ba-dc.fe",
 		},
 		{
-			name:         "more than 16 chars long",
+			name:         "too many letters",
 			projectID:    "abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdef",
 			postgresName: "abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdef",
 		},
 		{
-			name:         "more than 16 numbers long",
+			name:         "too many numbers",
 			projectID:    "123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890",
 			postgresName: "123456789012345678901234567890121234567890123456789012345678901212345678901234567890123456789012",
 		},
@@ -203,6 +203,12 @@ func TestPostgres_ToPeripheralResourceName(t *testing.T) {
 			got := p.ToPeripheralResourceName()
 			if !dnsRegExp.MatchString(got) {
 				t.Errorf("Postgres.ToPeripheralResourceName() got %v, not a valid DNS name", got)
+			}
+			//This resource name will be used as part of the name of other resources, hence we need to limit it's length,
+			// e.g. "postgres.bce25ade7552494c-33d21de46d284ea6bec0.credentials"
+			maxLen := 37
+			if len(got) > maxLen {
+				t.Errorf("Postgres.ToPeripheralResourceName() got %v, more than %d characters long", got, maxLen)
 			}
 		})
 	}
