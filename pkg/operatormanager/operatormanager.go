@@ -662,6 +662,8 @@ func (m *OperatorManager) createOrUpdateExporterSidecarServiceMonitor(ctx contex
 	}
 	old := &coreosv1.ServiceMonitor{}
 	if err := m.Get(ctx, ns, old); err == nil {
+		// Copy the resource version
+		pesm.ObjectMeta.ResourceVersion = old.ObjectMeta.ResourceVersion
 		if err := m.Update(ctx, pesm); err != nil {
 			return fmt.Errorf("error while updating the postgres-exporter servicemonitor: %w", err)
 		}
