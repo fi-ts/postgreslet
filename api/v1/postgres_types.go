@@ -360,7 +360,7 @@ func (p *Postgres) ToUserPasswordSecretMatchingLabels() map[string]string {
 
 func (p *Postgres) generateTeamID() string {
 	// We only want letters and numbers
-	generatedTeamID := alphaNumericRegExp.ReplaceAllString(p.Spec.ProjectID, "")
+	generatedTeamID := alphaNumericRegExp.ReplaceAllString(p.Spec.Tenant, "")
 
 	// Prefix `db` to make sure the string is a valid dns entry (aka does not start with a number)
 	generatedTeamID = teamIDPrefix + generatedTeamID
@@ -376,7 +376,7 @@ func (p *Postgres) generateTeamID() string {
 
 func (p *Postgres) generateDatabaseName() string {
 	// We only want letters and numbers
-	generatedDatabaseName := alphaNumericRegExp.ReplaceAllString(string(p.Name), "")
+	generatedDatabaseName := alphaNumericRegExp.ReplaceAllString(string(p.Spec.Description), "")
 
 	// Limit size
 	maxLen := 20
@@ -388,8 +388,28 @@ func (p *Postgres) generateDatabaseName() string {
 }
 
 func (p *Postgres) ToPeripheralResourceNamespace() string {
-	// as we have one namespace per database, we simplify things by also using the database name as namespace name
-	return p.ToPeripheralResourceName()
+	// We only want letters and numbers
+	generatedTeamID := alphaNumericRegExp.ReplaceAllString(p.Spec.ProjectID, "")
+
+	// Prefix `db` to make sure the string is a valid dns entry (aka does not start with a number)
+	generatedTeamID = teamIDPrefix + generatedTeamID
+
+	// Limit size
+	maxLen := 16
+	if len(generatedTeamID) > maxLen {
+		generatedTeamID = generatedTeamID[:maxLen]
+	}
+
+	// We only want letters and numbers
+	generatedDatabaseName := alphaNumericRegExp.ReplaceAllString(string(p.Name), "")
+
+	// Limit size
+	maxLen = 20
+	if len(generatedDatabaseName) > maxLen {
+		generatedDatabaseName = generatedDatabaseName[:maxLen]
+	}
+
+	return generatedTeamID + "-" + generatedDatabaseName
 }
 
 func (p *Postgres) ToPeripheralResourceLookupKey() types.NamespacedName {
