@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"reflect"
 	"strconv"
+	"strings"
 
 	"regexp"
 
@@ -55,7 +56,7 @@ const (
 	// SharedBufferParameterKey defines the key under which the shared buffer size is stored in the parameters map. Defined by the postgres-operator/patroni
 	SharedBufferParameterKey = "shared_buffers"
 
-	teamIDPrefix = "db"
+	teamIDPrefix = "pg"
 )
 
 var (
@@ -365,6 +366,9 @@ func (p *Postgres) generateTeamID() string {
 	// Prefix `db` to make sure the string is a valid dns entry (aka does not start with a number)
 	generatedTeamID = teamIDPrefix + generatedTeamID
 
+	// and only lower case
+	generatedTeamID = strings.ToLower(generatedTeamID)
+
 	// Limit size
 	maxLen := 16
 	if len(generatedTeamID) > maxLen {
@@ -378,6 +382,9 @@ func (p *Postgres) generateDatabaseName() string {
 	// We only want letters and numbers
 	generatedDatabaseName := alphaNumericRegExp.ReplaceAllString(string(p.Spec.Description), "")
 
+	// and only lower case
+	generatedDatabaseName = strings.ToLower(generatedDatabaseName)
+
 	// Limit size
 	maxLen := 20
 	if len(generatedDatabaseName) > maxLen {
@@ -390,9 +397,6 @@ func (p *Postgres) generateDatabaseName() string {
 func (p *Postgres) ToPeripheralResourceNamespace() string {
 	// We only want letters and numbers
 	generatedTeamID := alphaNumericRegExp.ReplaceAllString(p.Spec.ProjectID, "")
-
-	// Prefix `db` to make sure the string is a valid dns entry (aka does not start with a number)
-	generatedTeamID = teamIDPrefix + generatedTeamID
 
 	// Limit size
 	maxLen := 16
