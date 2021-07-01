@@ -93,42 +93,42 @@ func TestPostgres_generateTeamID(t *testing.T) {
 		{
 			name:      "beginning with letter",
 			projectID: "abc",
-			want:      "abc",
+			want:      "dbabc",
 		},
 		{
 			name:      "beginning with number",
 			projectID: "1bc",
-			want:      "xbc",
+			want:      "db1bc",
 		},
 		{
 			name:      "contains number in the middle",
 			projectID: "a1c",
-			want:      "a1c",
+			want:      "dba1c",
 		},
 		{
 			name:      "ends with number",
 			projectID: "ab1",
-			want:      "ab1",
+			want:      "dbab1",
 		},
 		{
 			name:      "contains non-alphanumeric characters",
 			projectID: "ab-cd.ef@12",
-			want:      "abcdef12",
+			want:      "dbabcdef12",
 		},
 		{
 			name:      "contains non-alphanumeric characters",
 			projectID: "12@ab-cd.ef",
-			want:      "x2abcdef",
+			want:      "db12abcdef",
 		},
 		{
 			name:      "more than 16 chars long",
 			projectID: "abcdefabcdefabcdefabcdefabcdefab",
-			want:      "abcdefabcdefabcd",
+			want:      "dbabcdefabcdefab",
 		},
 		{
 			name:      "more than 16 numbers long",
 			projectID: "12345678901234567890123456789012",
-			want:      "x234567890123456",
+			want:      "db12345678901234",
 		},
 	}
 	for _, tt := range tests {

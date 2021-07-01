@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"reflect"
 	"strconv"
+	"strings"
 
 	"regexp"
 
@@ -202,7 +203,6 @@ var SvcLoadBalancerLabel = map[string]string{
 }
 
 var alphaNumericRegExp *regexp.Regexp = regexp.MustCompile("[^a-zA-Z0-9]+")
-var alphaBeginRegExp *regexp.Regexp = regexp.MustCompile("^[0-9]")
 
 // HasSourceRanges returns true if SourceRanges are set
 func (p *Postgres) HasSourceRanges() bool {
@@ -360,8 +360,12 @@ func (p *Postgres) ToUserPasswordSecretMatchingLabels() map[string]string {
 func (p *Postgres) generateTeamID() string {
 	// We only want letters and numbers
 	generatedTeamID := alphaNumericRegExp.ReplaceAllString(p.Spec.ProjectID, "")
-	// And we have to make sure to start with a letter. when in doubt, use x.
-	generatedTeamID = alphaBeginRegExp.ReplaceAllString(generatedTeamID, "x")
+
+	// Prefix `db` to make sure the string is a valid dns entry (aka does not start with a number)
+	var b strings.Builder
+	b.WriteString("db")
+	b.WriteString(generatedTeamID)
+	generatedTeamID = b.String()
 
 	// Limit size
 	maxLen := 16
