@@ -216,6 +216,7 @@ two-kind-clusters:
 	sed 's/\/\/z.Spec.Volume.StorageClass/z.Spec.Volume.StorageClass/' -i api/v1/postgres_types.go
 	kubectl create ns postgreslet-system --dry-run=client --save-config -o yaml | kubectl apply -f -
 	make install-crd-cwnp
+	make install-crd-servicemonitor
 	helm upgrade --install postgreslet postgreslet-0.1.0.tgz --namespace postgreslet-system --set-file controlplaneKubeconfig=kubeconfig  --set image.tag=latest
 
 install-crd-servicemonitor:

@@ -8,10 +8,10 @@ package main
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"net"
 	"os"
+	"strings"
 
 	"github.com/metal-stack/v"
 	coreosv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
@@ -28,8 +28,24 @@ import (
 	"github.com/fi-ts/postgreslet/pkg/lbmanager"
 	"github.com/fi-ts/postgreslet/pkg/operatormanager"
 	firewall "github.com/metal-stack/firewall-controller/api/v1"
+	"github.com/spf13/viper"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	// +kubebuilder:scaffold:imports
+)
+
+const (
+	// envPrefix               = "pg"
+	metricsAddrSvcMgrFlg    = "metrics-addr-svc-mgr"
+	metricsAddrCtrlMgrFlg   = "metrics-addr-ctrl-mgr"
+	enableLeaderElectionFlg = "enable-leader-election"
+	partitionIDFlg          = "partition-id"
+	tenantFlg               = "tenant"
+	ctrlPlaneKubeConfifgFlg = "controlplane-kubeconfig"
+	loadBalancerIPFlg       = "load-balancer-ip"
+	portRangeStartFlg       = "port-range-start"
+	portRangeSizeFlg        = "port-range-size"
+	customPSPNameFlg        = "custom-psp-name"
+	storageClassFlg         = "storage-class"
 )
 
 var (
@@ -51,44 +67,64 @@ func main() {
 	var metricsAddrCtrlMgr, metricsAddrSvcMgr, partitionID, tenant, ctrlClusterKubeconfig, pspName, lbIP, storageClass string
 	var enableLeaderElection bool
 	var portRangeStart, portRangeSize int
-	flag.StringVar(&metricsAddrSvcMgr, "metrics-addr-svc-mgr", ":8080", "The address the metric endpoint of the service cluster manager binds to.")
-	flag.StringVar(&metricsAddrCtrlMgr, "metrics-addr-ctrl-mgr", "0", "The address the metric endpoint of the control cluster manager binds to.")
-	flag.BoolVar(&enableLeaderElection, "enable-leader-election", false,
-		"Enable leader election for controller manager. "+
-			"Enabling this will ensure there is only one active controller manager.")
-	flag.StringVar(&partitionID, "partition-id", "", "The partition ID of the worker-cluster.")
-	flag.StringVar(&tenant, "tenant", "", "The tenant name.")
-	flag.StringVar(&ctrlClusterKubeconfig, "controlplane-kubeconfig", "/var/run/secrets/postgreslet/kube/config", "The path to the kubeconfig to talk to the control plane")
-	flag.StringVar(&lbIP, "load-balancer-ip", "", "The load-balancer IP of postgres in this cluster. If not set one will be provisioned dynamically.")
-	// todo: Check the default port range start and size.
-	flag.IntVar(&portRangeStart, "port-range-start", 32000, "The start of the port range of services LoadBalancer.")
-	flag.IntVar(&portRangeSize, "port-range-size", 8000, "The size of the port range of services LoadBalancer.")
-	flag.StringVar(&pspName, "custom-psp-name", "postgres-operator-psp", "The name of our custom PodSecurityPolicy. Will be added to the ClusterRoles.")
-	flag.StringVar(&storageClass, "storage-class", "", "The name of the storageClass to use for the postgres cluster pods.")
-	flag.Parse()
 
-	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
+	// TODO enable Prefix and update helm chart
+	// viper.SetEnvPrefix(envPrefix)
+	viper.AutomaticEnv()
+	replacer := strings.NewReplacer("-", "_")
+	viper.SetEnvKeyReplacer(replacer)
 
+	viper.SetDefault(metricsAddrSvcMgrFlg, ":8080")
+	metricsAddrSvcMgr = viper.GetString(metricsAddrSvcMgrFlg)
+
+	viper.SetDefault(metricsAddrCtrlMgrFlg, "0")
+	metricsAddrCtrlMgr = viper.GetString(metricsAddrCtrlMgrFlg)
+
+	viper.SetDefault(enableLeaderElectionFlg, false)
+	enableLeaderElection = viper.GetBool(enableLeaderElectionFlg)
+
+	// TODO move all the GetStrings to the controllers where they are needed and don't pass along those strings.
+	partitionID = viper.GetString(partitionIDFlg)
+
+	tenant = viper.GetString(tenantFlg)
+
+	viper.SetDefault(ctrlPlaneKubeConfifgFlg, "/var/run/secrets/postgreslet/kube/config")
+	ctrlClusterKubeconfig = viper.GetString(ctrlPlaneKubeConfifgFlg)
+
+	lbIP = viper.GetString(loadBalancerIPFlg)
 	if len(lbIP) > 0 {
 		// todo: Shift the logic to a dedicated pkg for args validation.
 		if ip := net.ParseIP(lbIP); ip == nil {
-			ctrl.Log.Error(nil, fmt.Sprintf("IP %s not valid", lbIP))
+			ctrl.Log.Error(nil, fmt.Sprintf("Cannot parse provided %s %q, exiting.", loadBalancerIPFlg, lbIP))
 			os.Exit(1)
 		}
 	}
 
-	// todo: Remove
+	// todo: Check the default port range start and size.
+	viper.SetDefault(portRangeStartFlg, 32000)
+	portRangeStart = viper.GetInt(portRangeStartFlg)
+	viper.SetDefault(portRangeSizeFlg, 8000)
+	portRangeSize = viper.GetInt(portRangeSizeFlg)
+
+	viper.SetDefault(customPSPNameFlg, "postgres-operator-psp")
+	pspName = viper.GetString(customPSPNameFlg)
+
+	storageClass = viper.GetString(storageClassFlg)
+
+	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
+
 	ctrl.Log.Info("flag",
-		"metrics-addr-svc-mgr", metricsAddrSvcMgr,
-		"metrics-addr-ctrl-mgr", metricsAddrCtrlMgr,
-		"enable-leader-election", enableLeaderElection,
-		"partition-id", partitionID,
-		"tenant", tenant,
-		"load-balancer-ip", lbIP,
-		"port-range-start", portRangeStart,
-		"port-range-size", portRangeSize,
-		"custom-psp-name", pspName,
-		"storage-class", storageClass,
+		metricsAddrSvcMgrFlg, metricsAddrSvcMgr,
+		metricsAddrCtrlMgrFlg, metricsAddrCtrlMgr,
+		enableLeaderElectionFlg, enableLeaderElection,
+		partitionIDFlg, partitionID,
+		tenantFlg, tenant,
+		ctrlPlaneKubeConfifgFlg, ctrlClusterKubeconfig,
+		loadBalancerIPFlg, lbIP,
+		portRangeStartFlg, portRangeStart,
+		portRangeSizeFlg, portRangeSize,
+		customPSPNameFlg, pspName,
+		storageClassFlg, storageClass,
 	)
 
 	svcClusterConf := ctrl.GetConfigOrDie()
