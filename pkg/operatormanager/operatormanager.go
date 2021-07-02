@@ -409,11 +409,9 @@ func (m *OperatorManager) editConfigMap(cm *v1.ConfigMap, namespace string) {
 		cm.Data["etcd_host"] = etcdHost
 	}
 
-	viper.SetDefault(CRDValidationFlg, false)
+	viper.SetDefault(CRDValidationFlg, true)
 	enableCRDValidation := viper.GetBool(CRDValidationFlg)
-	if enableCRDValidation {
-		cm.Data["enable_crd_validation"] = strconv.FormatBool(enableCRDValidation)
-	}
+	cm.Data["enable_crd_validation"] = strconv.FormatBool(enableCRDValidation)
 }
 
 // ensureCleanMetadata ensures obj has clean metadata
