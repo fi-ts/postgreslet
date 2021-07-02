@@ -117,7 +117,7 @@ var _ = BeforeSuite(func() {
 			filepath.Join(externalYAMLDir, "svc-postgres-operator.yaml"),
 			scheme,
 			cr.Log.WithName("OperatorManager"),
-			"test-psp")
+			&operatormanager.Options{PspName: "test-psp"})
 		Expect(err).ToNot(HaveOccurred())
 
 		Expect((&PostgresReconciler{
