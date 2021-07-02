@@ -56,8 +56,9 @@ const (
 
 	sidecarsCMName = "postgres-sidecars-configmap"
 
-	DockerImageFlg = "docker-image"
-	EtcdHostFlg    = "etcd-host"
+	DockerImageFlg   = "docker-image"
+	EtcdHostFlg      = "etcd-host"
+	CRDValidationFlg = "enable-crd-validation"
 )
 
 // operatorPodMatchingLabels is for listing operator pods
@@ -406,6 +407,12 @@ func (m *OperatorManager) editConfigMap(cm *v1.ConfigMap, namespace string) {
 	etcdHost := viper.GetString(EtcdHostFlg)
 	if etcdHost != "" {
 		cm.Data["etcd_host"] = etcdHost
+	}
+
+	viper.SetDefault(CRDValidationFlg, false)
+	enableCRDValidation := viper.GetBool(CRDValidationFlg)
+	if enableCRDValidation {
+		cm.Data["enable_crd_validation"] = strconv.FormatBool(enableCRDValidation)
 	}
 }
 
