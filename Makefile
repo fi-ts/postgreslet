@@ -217,3 +217,6 @@ two-kind-clusters:
 	kubectl create ns postgreslet-system --dry-run=client --save-config -o yaml | kubectl apply -f -
 	make install-crd-cwnp
 	helm upgrade --install postgreslet postgreslet-0.1.0.tgz --namespace postgreslet-system --set-file controlplaneKubeconfig=kubeconfig  --set image.tag=latest
+
+install-crd-servicemonitor:
+	kubectl apply -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/v0.45.0/example/prometheus-operator-crd/monitoring.coreos.com_servicemonitors.yaml

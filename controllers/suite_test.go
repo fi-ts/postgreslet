@@ -15,6 +15,7 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	coreosv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	core "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/yaml"
@@ -42,7 +43,7 @@ import (
 const (
 	// duration = time.Second * 10
 	interval = time.Second * 2
-	timeout  = time.Second * 60
+	timeout  = time.Second * 180
 )
 
 var (
@@ -90,6 +91,7 @@ var _ = BeforeSuite(func() {
 				Paths: []string{
 					filepath.Join(HelmCRDDir, "postgresql.yaml"),
 					filepath.Join(externalYAMLDirTest, "crd-clusterwidenetworkpolicy.yaml"),
+					filepath.Join(externalYAMLDirTest, "crd-servicemonitors.yaml"),
 				},
 			},
 		}
@@ -230,6 +232,7 @@ func newScheme() *runtime.Scheme {
 	Expect(firewall.AddToScheme(scheme)).Should(Succeed())
 	Expect(pg.AddToScheme(scheme)).Should(Succeed())
 	Expect(zalando.AddToScheme(scheme)).Should(Succeed())
+	Expect(coreosv1.AddToScheme(scheme)).Should(Succeed())
 
 	// +kubebuilder:scaffold:scheme
 
