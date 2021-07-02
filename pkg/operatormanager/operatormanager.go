@@ -18,6 +18,7 @@ import (
 	pg "github.com/fi-ts/postgreslet/api/v1"
 	"github.com/go-logr/logr"
 	coreosv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
+	"github.com/spf13/viper"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
@@ -54,6 +55,9 @@ const (
 	SidecarsCMExporterQueriesKey string = "queries.yaml"
 
 	sidecarsCMName = "postgres-sidecars-configmap"
+
+	DockerImageFlg = "docker-image"
+	EtcdHostFlg    = "etcd-host"
 )
 
 // operatorPodMatchingLabels is for listing operator pods
@@ -391,6 +395,18 @@ func (m *OperatorManager) editConfigMap(cm *v1.ConfigMap, namespace string) {
 	s := []string{pg.TenantLabelName, pg.ProjectIDLabelName, pg.UIDLabelName, pg.NameLabelName}
 	// TODO maybe use a precompiled string here
 	cm.Data["inherited_labels"] = strings.Join(s, ",")
+
+	viper.SetDefault(DockerImageFlg, "")
+	dockerImage := viper.GetString(DockerImageFlg)
+	if dockerImage != "" {
+		cm.Data["docker_image"] = dockerImage
+	}
+
+	viper.SetDefault(EtcdHostFlg, "")
+	etcdHost := viper.GetString(EtcdHostFlg)
+	if etcdHost != "" {
+		cm.Data["etcd_host"] = etcdHost
+	}
 }
 
 // ensureCleanMetadata ensures obj has clean metadata
