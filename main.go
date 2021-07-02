@@ -68,6 +68,7 @@ func main() {
 	var enableLeaderElection bool
 	var portRangeStart, portRangeSize int
 
+	// TODO enable Prefix and update helm chart
 	// viper.SetEnvPrefix(envPrefix)
 	viper.AutomaticEnv()
 	replacer := strings.NewReplacer("-", "_")
@@ -82,6 +83,7 @@ func main() {
 	viper.SetDefault(enableLeaderElectionFlg, false)
 	enableLeaderElection = viper.GetBool(enableLeaderElectionFlg)
 
+	// TODO move all the GetStrings to the controllers where they are needed and don't pass along those strings.
 	partitionID = viper.GetString(partitionIDFlg)
 
 	tenant = viper.GetString(tenantFlg)
