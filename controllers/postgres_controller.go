@@ -119,10 +119,12 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 			r.recorder.Eventf(instance, "Warning", "Error", "failed to uninstall operator: %v", err)
 			return ctrl.Result{}, fmt.Errorf("error while uninstalling operator: %w", err)
 		}
+		log.Info("corresponding operator deleted")
 
 		if err := r.deleteUserPasswordsSecret(ctx, instance); err != nil {
 			return ctrl.Result{}, err
 		}
+		log.Info("corresponding passwords secret deleted")
 
 		instance.RemoveFinalizer(pg.PostgresFinalizerName)
 		if err := r.CtrlClient.Update(ctx, instance); err != nil {
@@ -241,7 +243,7 @@ func (r *PostgresReconciler) deleteUserPasswordsSecret(ctx context.Context, inst
 	secret := &corev1.Secret{}
 	secret.Namespace = instance.Namespace
 	secret.Name = instance.ToUserPasswordsSecretName()
-	if err := r.CtrlClient.Delete(ctx, secret); err != nil {
+	if err := r.CtrlClient.Delete(ctx, secret); client.IgnoreNotFound(err) != nil {
 		msgWithFormat := "failed to delete user passwords secret: %w"
 		r.recorder.Eventf(instance, "Warning", "Error", msgWithFormat, err)
 		return fmt.Errorf(msgWithFormat, err)

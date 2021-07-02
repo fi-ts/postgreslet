@@ -17,18 +17,24 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
+    - jsonPath: .spec.tenant
+      name: Tenant
+      type: string
     - jsonPath: .spec.version
       name: Version
       type: string
+    - jsonPath: .spec.numberOfInstances
+      name: Replicas
+      type: string
+    - jsonPath: .status.socket.ip
+      name: IP
+      type: string
+    - jsonPath: .status.socket.port
+      name: Port
+      type: integer
     - jsonPath: .status.description
       name: Status
       type: string
-    - jsonPath: .status.lbSocket.ip
-      name: Load-Balancer-IP
-      type: string
-    - jsonPath: .status.lbSocket.port
-      name: Load-Balancer-Port
-      type: integer
     name: v1
     schema:
       openAPIV3Schema:
@@ -59,48 +65,19 @@ spec:
                       type: string
                     type: array
                 type: object
-              backup:
-                description: 'todo: add default Backup parametes of the database backup'
-                properties:
-                  retention:
-                    description: Retention defines how many days a backup will persist
-                    format: int32
-                    type: integer
-                  s3BucketURL:
-                    description: S3BucketURL defines the URL of the S3 bucket for
-                      backup
-                    type: string
-                  schedule:
-                    description: Schedule defines how often a backup should be made,
-                      in cron format
-                    type: string
-                  secretname:
-                    description: SecretName reference to the secret where the backup
-                      credentials are stored
-                    type: string
-                type: object
+              backupSecretRef:
+                description: BackupSecretRef reference to the secret where the backup
+                  credentials are stored
+                type: string
               description:
                 description: Description
                 type: string
               maintenance:
                 description: 'todo: add default Maintenance defines automatic maintenance
                   of the database'
-                properties:
-                  timeWindow:
-                    description: TimeWindow defines when the maintenance should happen
-                    properties:
-                      end:
-                        format: date-time
-                        type: string
-                      start:
-                        format: date-time
-                        type: string
-                    type: object
-                  weekday:
-                    description: Weekday defines when the operator is allowed to do
-                      maintenance
-                    type: integer
-                type: object
+                items:
+                  type: string
+                type: array
               numberOfInstances:
                 default: 1
                 description: NumberOfInstances number of replicas
@@ -113,15 +90,14 @@ spec:
               projectID:
                 description: ProjectID metal project ID
                 type: string
-              secretname:
-                description: SecretName reference to the secret where the user credentials
-                  are stored
-                type: string
               size:
                 description: Size of the database
                 properties:
                   cpu:
                     description: CPU is in the format as pod.spec.resource.request.cpu
+                    type: string
+                  memory:
+                    description: Memory is in the format as pod.spec.resource.request.memory
                     type: string
                   sharedBuffer:
                     description: SharedBuffer of the database
@@ -137,15 +113,14 @@ spec:
                 description: Tenant metal tenant
                 type: string
               version:
-                default: "12"
                 description: Version is the version of Postgre-as-a-Service
-                enum:
-                - "12"
                 type: string
             type: object
           status:
             description: PostgresStatus defines the observed state of Postgres
             properties:
+              childName:
+                type: string
               description:
                 description: 'INSERT ADDITIONAL STATUS FIELD - define observed state
                   of cluster Important: Run "make" to regenerate code after modifying

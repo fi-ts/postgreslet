@@ -42,7 +42,7 @@ import (
 const (
 	// duration = time.Second * 10
 	interval = time.Second * 2
-	timeout  = time.Second * 30
+	timeout  = time.Second * 60
 )
 
 var (
