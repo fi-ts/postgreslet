@@ -182,6 +182,11 @@ func main() {
 		os.Exit(1)
 	}
 
+	var lbMgrOpts *lbmanager.Options = &lbmanager.Options{
+		LBIP:           lbIP,
+		PortRangeStart: int32(portRangeStart),
+		PortRangeSize:  int32(portRangeSize),
+	}
 	if err = (&controllers.PostgresReconciler{
 		CtrlClient:      ctrlPlaneClusterMgr.GetClient(),
 		SvcClient:       svcClusterMgr.GetClient(),
@@ -191,7 +196,7 @@ func main() {
 		Tenant:          tenant,
 		StorageClass:    storageClass,
 		OperatorManager: opMgr,
-		LBManager:       lbmanager.New(svcClusterMgr.GetClient(), lbIP, int32(portRangeStart), int32(portRangeSize)),
+		LBManager:       lbmanager.New(svcClusterMgr.GetClient(), lbMgrOpts),
 	}).SetupWithManager(ctrlPlaneClusterMgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Postgres")
 		os.Exit(1)
