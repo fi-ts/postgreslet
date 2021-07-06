@@ -62,6 +62,7 @@ var operatorPodMatchingLabels = client.MatchingLabels{operatorPodLabelName: oper
 // Options
 type Options struct {
 	PspName       string
+	OperatorImage string
 	DockerImage   string
 	EtcdHost      string
 	CRDValidation bool
@@ -361,6 +362,12 @@ func (m *OperatorManager) createNewClientObject(ctx context.Context, obj client.
 		}
 	case *appsv1.Deployment:
 		m.log.Info("handling Deployment")
+		if len(v.Spec.Template.Spec.Containers) != 1 {
+			m.log.Info("Unexpected number of containers in deployment, ignoring.")
+		} else if m.options.OperatorImage != "" {
+			m.log.Info("Patching operator image", "image", m.options.OperatorImage)
+			v.Spec.Template.Spec.Containers[0].Image = m.options.OperatorImage
+		}
 		err = m.Get(ctx, key, &appsv1.Deployment{})
 	default:
 		return errs.New("unknown `client.Object`")

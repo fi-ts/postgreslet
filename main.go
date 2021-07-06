@@ -46,9 +46,10 @@ const (
 	portRangeSizeFlg        = "port-range-size"
 	customPSPNameFlg        = "custom-psp-name"
 	storageClassFlg         = "storage-class"
-	dockerImageFlg          = "docker-image"
+	postgresImageFlg        = "postgres-image"
 	etcdHostFlg             = "etcd-host"
 	crdValidationFlg        = "enable-crd-validation"
+	operatorImageFlg        = "operator-image"
 )
 
 var (
@@ -67,7 +68,7 @@ func init() {
 }
 
 func main() {
-	var metricsAddrCtrlMgr, metricsAddrSvcMgr, partitionID, tenant, ctrlClusterKubeconfig, pspName, lbIP, storageClass, dockerImage, etcdHost string
+	var metricsAddrCtrlMgr, metricsAddrSvcMgr, partitionID, tenant, ctrlClusterKubeconfig, pspName, lbIP, storageClass, postgresImage, etcdHost, operatorImage string
 	var enableLeaderElection, enableCRDValidation bool
 	var portRangeStart, portRangeSize int
 
@@ -114,7 +115,8 @@ func main() {
 
 	storageClass = viper.GetString(storageClassFlg)
 
-	dockerImage = viper.GetString(dockerImageFlg)
+	operatorImage = viper.GetString(operatorImageFlg)
+	postgresImage = viper.GetString(postgresImageFlg)
 
 	etcdHost = viper.GetString(etcdHostFlg)
 
@@ -135,7 +137,8 @@ func main() {
 		portRangeSizeFlg, portRangeSize,
 		customPSPNameFlg, pspName,
 		storageClassFlg, storageClass,
-		dockerImageFlg, dockerImage,
+		operatorImageFlg, operatorImage,
+		postgresImageFlg, postgresImage,
 		etcdHostFlg, etcdHost,
 		crdValidationFlg, enableCRDValidation,
 	)
@@ -172,7 +175,8 @@ func main() {
 
 	var opMgrOpts *operatormanager.Options = &operatormanager.Options{
 		PspName:       pspName,
-		DockerImage:   dockerImage,
+		OperatorImage: operatorImage,
+		DockerImage:   postgresImage,
 		EtcdHost:      etcdHost,
 		CRDValidation: enableCRDValidation,
 	}
