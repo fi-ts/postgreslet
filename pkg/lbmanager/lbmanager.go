@@ -11,21 +11,23 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// LBManager Responsible for the creation and deletion of externally accessible Services to access the Postgresql clusters managed by the Postgreslet.
-type LBManager struct {
-	client.Client
+type Options struct {
 	LBIP           string
 	PortRangeStart int32
 	PortRangeSize  int32
 }
 
+// LBManager Responsible for the creation and deletion of externally accessible Services to access the Postgresql clusters managed by the Postgreslet.
+type LBManager struct {
+	client.Client
+	options Options
+}
+
 // New Creates a new LBManager with the given configuration
-func New(client client.Client, lbIP string, portRangeStart, portRangeSize int32) *LBManager {
+func New(client client.Client, opt Options) *LBManager {
 	return &LBManager{
-		Client:         client,
-		LBIP:           lbIP,
-		PortRangeStart: portRangeStart,
-		PortRangeSize:  portRangeSize,
+		Client:  client,
+		options: opt,
 	}
 }
 
@@ -44,9 +46,9 @@ func (m *LBManager) CreateSvcLBIfNone(ctx context.Context, in *api.Postgres) err
 			return fmt.Errorf("failed to get a free port for creating Service of type LoadBalancer: %w", err)
 		}
 		var lbIPToUse string
-		if m.LBIP != "" {
+		if m.options.LBIP != "" {
 			// a specific IP was configured in the config, so use that one
-			lbIPToUse = m.LBIP
+			lbIPToUse = m.options.LBIP
 		} else if existingLBIP != "" {
 			// no ip was configured, but one is already in use, so use the existing one
 			lbIPToUse = existingLBIP
@@ -88,7 +90,7 @@ func (m *LBManager) nextFreeSocket(ctx context.Context) (string, int32, error) {
 
 	// If there are none, this will be the first (managed) service we create, so start with PortRangeStart and return
 	if len(lbs.Items) == 0 {
-		return anyExistingLBIP, m.PortRangeStart, nil
+		return anyExistingLBIP, m.options.PortRangeStart, nil
 	}
 
 	// If there are already any managed services, store all the used ports in a slice.
@@ -109,7 +111,7 @@ func (m *LBManager) nextFreeSocket(ctx context.Context) (string, int32, error) {
 	// Now try all ports in the configured port range to find a free one.
 	// While not as effective as other implementations, this allows us to freely change PortRangeStart and PortRangeSize
 	// retroactively without breaking the implementation.
-	for port := m.PortRangeStart; port < m.PortRangeStart+m.PortRangeSize; port++ {
+	for port := m.options.PortRangeStart; port < m.options.PortRangeStart+m.options.PortRangeSize; port++ {
 		if containsElem(portsInUse, port) {
 			// Port already in use, try the next one
 			continue

@@ -59,6 +59,15 @@ const (
 // operatorPodMatchingLabels is for listing operator pods
 var operatorPodMatchingLabels = client.MatchingLabels{operatorPodLabelName: operatorPodLabelValue}
 
+// Options
+type Options struct {
+	PspName       string
+	OperatorImage string
+	DockerImage   string
+	EtcdHost      string
+	CRDValidation bool
+}
+
 // OperatorManager manages the operator
 type OperatorManager struct {
 	client.Client
@@ -67,13 +76,13 @@ type OperatorManager struct {
 	log  logr.Logger
 	meta.MetadataAccessor
 	*runtime.Scheme
-	pspName string
+	options Options
 }
 
 // New creates a new `OperatorManager`
-func New(conf *rest.Config, fileName string, scheme *runtime.Scheme, log logr.Logger, pspName string) (*OperatorManager, error) {
+func New(confRest *rest.Config, fileName string, scheme *runtime.Scheme, log logr.Logger, opt Options) (*OperatorManager, error) {
 	// Use no-cache client to avoid waiting for cashing.
-	client, err := client.New(conf, client.Options{
+	client, err := client.New(confRest, client.Options{
 		Scheme: scheme,
 	})
 	if err != nil {
@@ -100,7 +109,7 @@ func New(conf *rest.Config, fileName string, scheme *runtime.Scheme, log logr.Lo
 		list:             list,
 		Scheme:           scheme,
 		log:              log,
-		pspName:          pspName,
+		options:          opt,
 	}, nil
 }
 
@@ -284,7 +293,7 @@ func (m *OperatorManager) createNewClientObject(ctx context.Context, obj client.
 			APIGroups:     []string{"extensions"},
 			Verbs:         []string{"use"},
 			Resources:     []string{"podsecuritypolicies"},
-			ResourceNames: []string{m.pspName},
+			ResourceNames: []string{m.options.PspName},
 		}
 		v.Rules = append(v.Rules, pspPolicyRule)
 
@@ -339,7 +348,7 @@ func (m *OperatorManager) createNewClientObject(ctx context.Context, obj client.
 		return nil
 	case *v1.ConfigMap:
 		m.log.Info("handling ConfigMap")
-		m.editConfigMap(v, namespace)
+		m.editConfigMap(v, namespace, m.options)
 		err = m.Get(ctx, key, &v1.ConfigMap{})
 	case *v1.Service:
 		m.log.Info("handling Service")
@@ -353,6 +362,12 @@ func (m *OperatorManager) createNewClientObject(ctx context.Context, obj client.
 		}
 	case *appsv1.Deployment:
 		m.log.Info("handling Deployment")
+		if len(v.Spec.Template.Spec.Containers) != 1 {
+			m.log.Info("Unexpected number of containers in deployment, ignoring.")
+		} else if m.options.OperatorImage != "" {
+			m.log.Info("Patching operator image", "image", m.options.OperatorImage)
+			v.Spec.Template.Spec.Containers[0].Image = m.options.OperatorImage
+		}
 		err = m.Get(ctx, key, &appsv1.Deployment{})
 	default:
 		return errs.New("unknown `client.Object`")
@@ -381,7 +396,7 @@ func (m *OperatorManager) createNewClientObject(ctx context.Context, obj client.
 }
 
 // editConfigMap adds info to cm
-func (m *OperatorManager) editConfigMap(cm *v1.ConfigMap, namespace string) {
+func (m *OperatorManager) editConfigMap(cm *v1.ConfigMap, namespace string, options Options) {
 	cm.Data["watched_namespace"] = namespace
 	// TODO don't use the same serviceaccount for operator and databases, see #88
 	cm.Data["pod_service_account_name"] = serviceAccountName
@@ -391,6 +406,16 @@ func (m *OperatorManager) editConfigMap(cm *v1.ConfigMap, namespace string) {
 	s := []string{pg.TenantLabelName, pg.ProjectIDLabelName, pg.UIDLabelName, pg.NameLabelName}
 	// TODO maybe use a precompiled string here
 	cm.Data["inherited_labels"] = strings.Join(s, ",")
+
+	if options.DockerImage != "" {
+		cm.Data["docker_image"] = options.DockerImage
+	}
+
+	if options.EtcdHost != "" {
+		cm.Data["etcd_host"] = options.EtcdHost
+	}
+
+	cm.Data["enable_crd_validation"] = strconv.FormatBool(options.CRDValidation)
 }
 
 // ensureCleanMetadata ensures obj has clean metadata

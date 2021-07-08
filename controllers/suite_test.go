@@ -117,7 +117,7 @@ var _ = BeforeSuite(func() {
 			filepath.Join(externalYAMLDir, "svc-postgres-operator.yaml"),
 			scheme,
 			cr.Log.WithName("OperatorManager"),
-			"test-psp")
+			operatormanager.Options{PspName: "test-psp"})
 		Expect(err).ToNot(HaveOccurred())
 
 		Expect((&PostgresReconciler{
@@ -126,7 +126,7 @@ var _ = BeforeSuite(func() {
 			PartitionID:     "sample-partition",
 			Tenant:          "sample-tenant",
 			OperatorManager: opMgr,
-			LBManager:       lbmanager.New(svcClusterMgr.GetClient(), "127.0.0.1", int32(32000), int32(8000)),
+			LBManager:       lbmanager.New(svcClusterMgr.GetClient(), lbmanager.Options{LBIP: "127.0.0.1", PortRangeStart: int32(32000), PortRangeSize: int32(8000)}),
 			Log:             cr.Log.WithName("controllers").WithName("Postgres"),
 		}).SetupWithManager(ctrlClusterMgr)).Should(Succeed())
 

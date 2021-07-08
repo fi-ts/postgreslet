@@ -46,6 +46,10 @@ const (
 	portRangeSizeFlg        = "port-range-size"
 	customPSPNameFlg        = "custom-psp-name"
 	storageClassFlg         = "storage-class"
+	postgresImageFlg        = "postgres-image"
+	etcdHostFlg             = "etcd-host"
+	crdValidationFlg        = "enable-crd-validation"
+	operatorImageFlg        = "operator-image"
 )
 
 var (
@@ -64,8 +68,8 @@ func init() {
 }
 
 func main() {
-	var metricsAddrCtrlMgr, metricsAddrSvcMgr, partitionID, tenant, ctrlClusterKubeconfig, pspName, lbIP, storageClass string
-	var enableLeaderElection bool
+	var metricsAddrCtrlMgr, metricsAddrSvcMgr, partitionID, tenant, ctrlClusterKubeconfig, pspName, lbIP, storageClass, postgresImage, etcdHost, operatorImage string
+	var enableLeaderElection, enableCRDValidation bool
 	var portRangeStart, portRangeSize int
 
 	// TODO enable Prefix and update helm chart
@@ -111,6 +115,14 @@ func main() {
 
 	storageClass = viper.GetString(storageClassFlg)
 
+	operatorImage = viper.GetString(operatorImageFlg)
+	postgresImage = viper.GetString(postgresImageFlg)
+
+	etcdHost = viper.GetString(etcdHostFlg)
+
+	viper.SetDefault(crdValidationFlg, true)
+	enableCRDValidation = viper.GetBool(crdValidationFlg)
+
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 
 	ctrl.Log.Info("flag",
@@ -125,6 +137,10 @@ func main() {
 		portRangeSizeFlg, portRangeSize,
 		customPSPNameFlg, pspName,
 		storageClassFlg, storageClass,
+		operatorImageFlg, operatorImage,
+		postgresImageFlg, postgresImage,
+		etcdHostFlg, etcdHost,
+		crdValidationFlg, enableCRDValidation,
 	)
 
 	svcClusterConf := ctrl.GetConfigOrDie()
@@ -157,12 +173,24 @@ func main() {
 		os.Exit(1)
 	}
 
-	opMgr, err := operatormanager.New(svcClusterConf, "external/svc-postgres-operator.yaml", scheme, ctrl.Log.WithName("OperatorManager"), pspName)
+	var opMgrOpts operatormanager.Options = operatormanager.Options{
+		PspName:       pspName,
+		OperatorImage: operatorImage,
+		DockerImage:   postgresImage,
+		EtcdHost:      etcdHost,
+		CRDValidation: enableCRDValidation,
+	}
+	opMgr, err := operatormanager.New(svcClusterConf, "external/svc-postgres-operator.yaml", scheme, ctrl.Log.WithName("OperatorManager"), opMgrOpts)
 	if err != nil {
 		setupLog.Error(err, "unable to create `OperatorManager`")
 		os.Exit(1)
 	}
 
+	var lbMgrOpts lbmanager.Options = lbmanager.Options{
+		LBIP:           lbIP,
+		PortRangeStart: int32(portRangeStart),
+		PortRangeSize:  int32(portRangeSize),
+	}
 	if err = (&controllers.PostgresReconciler{
 		CtrlClient:      ctrlPlaneClusterMgr.GetClient(),
 		SvcClient:       svcClusterMgr.GetClient(),
@@ -172,7 +200,7 @@ func main() {
 		Tenant:          tenant,
 		StorageClass:    storageClass,
 		OperatorManager: opMgr,
-		LBManager:       lbmanager.New(svcClusterMgr.GetClient(), lbIP, int32(portRangeStart), int32(portRangeSize)),
+		LBManager:       lbmanager.New(svcClusterMgr.GetClient(), lbMgrOpts),
 	}).SetupWithManager(ctrlPlaneClusterMgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Postgres")
 		os.Exit(1)
