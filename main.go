@@ -173,7 +173,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	var opMgrOpts *operatormanager.Options = &operatormanager.Options{
+	var opMgrOpts operatormanager.Options = operatormanager.Options{
 		PspName:       pspName,
 		OperatorImage: operatorImage,
 		DockerImage:   postgresImage,

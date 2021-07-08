@@ -76,11 +76,11 @@ type OperatorManager struct {
 	log  logr.Logger
 	meta.MetadataAccessor
 	*runtime.Scheme
-	options *Options
+	options Options
 }
 
 // New creates a new `OperatorManager`
-func New(confRest *rest.Config, fileName string, scheme *runtime.Scheme, log logr.Logger, opt *Options) (*OperatorManager, error) {
+func New(confRest *rest.Config, fileName string, scheme *runtime.Scheme, log logr.Logger, opt Options) (*OperatorManager, error) {
 	// Use no-cache client to avoid waiting for cashing.
 	client, err := client.New(confRest, client.Options{
 		Scheme: scheme,
@@ -396,7 +396,7 @@ func (m *OperatorManager) createNewClientObject(ctx context.Context, obj client.
 }
 
 // editConfigMap adds info to cm
-func (m *OperatorManager) editConfigMap(cm *v1.ConfigMap, namespace string, options *Options) {
+func (m *OperatorManager) editConfigMap(cm *v1.ConfigMap, namespace string, options Options) {
 	cm.Data["watched_namespace"] = namespace
 	// TODO don't use the same serviceaccount for operator and databases, see #88
 	cm.Data["pod_service_account_name"] = serviceAccountName
