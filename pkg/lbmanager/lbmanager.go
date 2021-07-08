@@ -20,11 +20,11 @@ type Options struct {
 // LBManager Responsible for the creation and deletion of externally accessible Services to access the Postgresql clusters managed by the Postgreslet.
 type LBManager struct {
 	client.Client
-	options *Options
+	options Options
 }
 
 // New Creates a new LBManager with the given configuration
-func New(client client.Client, opt *Options) *LBManager {
+func New(client client.Client, opt Options) *LBManager {
 	return &LBManager{
 		Client:  client,
 		options: opt,

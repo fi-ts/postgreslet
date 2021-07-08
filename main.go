@@ -186,7 +186,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	var lbMgrOpts *lbmanager.Options = &lbmanager.Options{
+	var lbMgrOpts lbmanager.Options = lbmanager.Options{
 		LBIP:           lbIP,
 		PortRangeStart: int32(portRangeStart),
 		PortRangeSize:  int32(portRangeSize),

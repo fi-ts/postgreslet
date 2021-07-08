@@ -126,7 +126,7 @@ var _ = BeforeSuite(func() {
 			PartitionID:     "sample-partition",
 			Tenant:          "sample-tenant",
 			OperatorManager: opMgr,
-			LBManager:       lbmanager.New(svcClusterMgr.GetClient(), &lbmanager.Options{LBIP: "127.0.0.1", PortRangeStart: int32(32000), PortRangeSize: int32(8000)}),
+			LBManager:       lbmanager.New(svcClusterMgr.GetClient(), lbmanager.Options{LBIP: "127.0.0.1", PortRangeStart: int32(32000), PortRangeSize: int32(8000)}),
 			Log:             cr.Log.WithName("controllers").WithName("Postgres"),
 		}).SetupWithManager(ctrlClusterMgr)).Should(Succeed())
 

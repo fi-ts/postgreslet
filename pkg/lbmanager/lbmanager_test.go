@@ -25,7 +25,7 @@ func TestLBManager_nextFreePort(t *testing.T) {
 			name: "no svc in the cluster",
 			lbMgr: &LBManager{
 				Client: fake.NewClientBuilder().WithScheme(scheme()).WithLists(svcListWithPorts()).Build(),
-				options: &Options{
+				options: Options{
 					LBIP:           "0.0.0.0",
 					PortRangeStart: portRangeStart,
 					PortRangeSize:  portRangeSize,
@@ -38,7 +38,7 @@ func TestLBManager_nextFreePort(t *testing.T) {
 			name: "one svc already in the cluster",
 			lbMgr: &LBManager{
 				Client: fake.NewClientBuilder().WithScheme(scheme()).WithLists(svcListWithPorts(0)).Build(),
-				options: &Options{
+				options: Options{
 					LBIP:           "0.0.0.0",
 					PortRangeStart: portRangeStart,
 					PortRangeSize:  portRangeSize,
@@ -51,7 +51,7 @@ func TestLBManager_nextFreePort(t *testing.T) {
 			name: "last free port left",
 			lbMgr: &LBManager{
 				Client: fake.NewClientBuilder().WithScheme(scheme()).WithLists(svcListWithPorts(0, 1, 2, 3)).Build(),
-				options: &Options{
+				options: Options{
 					LBIP:           "0.0.0.0",
 					PortRangeStart: portRangeStart,
 					PortRangeSize:  portRangeSize,
@@ -64,7 +64,7 @@ func TestLBManager_nextFreePort(t *testing.T) {
 			name: "no free port",
 			lbMgr: &LBManager{
 				Client: fake.NewClientBuilder().WithScheme(scheme()).WithLists(svcListWithPorts(0, 1, 2, 3, 4)).Build(),
-				options: &Options{
+				options: Options{
 					LBIP:           "0.0.0.0",
 					PortRangeStart: portRangeStart,
 					PortRangeSize:  portRangeSize,
@@ -77,7 +77,7 @@ func TestLBManager_nextFreePort(t *testing.T) {
 			name: "re-use releaased port",
 			lbMgr: &LBManager{
 				Client: fake.NewClientBuilder().WithScheme(scheme()).WithLists(svcListWithPorts(0, 2, 3)).Build(),
-				options: &Options{
+				options: Options{
 					LBIP:           "0.0.0.0",
 					PortRangeStart: portRangeStart,
 					PortRangeSize:  portRangeSize,
