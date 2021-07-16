@@ -10,7 +10,9 @@ import (
 	"regexp"
 	"testing"
 
+	"github.com/google/uuid"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 func Test_setSharedBufferSize(t *testing.T) {
@@ -195,6 +197,7 @@ func TestPostgres_ToPeripheralResourceName(t *testing.T) {
 			p := &Postgres{
 				ObjectMeta: v1.ObjectMeta{
 					Name: tt.postgresName,
+					UID:  types.UID(uuid.NewString()),
 				},
 				Spec: PostgresSpec{
 					ProjectID: tt.projectID,
