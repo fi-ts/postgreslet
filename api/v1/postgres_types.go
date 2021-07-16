@@ -385,8 +385,18 @@ func (p *Postgres) generateDatabaseName() string {
 	// and only lower case
 	generatedDatabaseName = strings.ToLower(generatedDatabaseName)
 
-	// Limit size
-	maxLen := 20
+	// Limit the length of the description part of the name
+	maxLen := 15
+	if len(generatedDatabaseName) > maxLen {
+		generatedDatabaseName = generatedDatabaseName[:maxLen]
+	}
+
+	// Add UID in the mix
+	generatedDatabaseName += alphaNumericRegExp.ReplaceAllString(string(p.UID), "")
+
+	// Limit to final size
+	// This way, we have at least 5 chars of the uid as part of the database name.
+	maxLen = 20
 	if len(generatedDatabaseName) > maxLen {
 		generatedDatabaseName = generatedDatabaseName[:maxLen]
 	}
