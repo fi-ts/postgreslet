@@ -11,10 +11,10 @@ require (
 	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.49.0
 	github.com/spf13/viper v1.8.1
 	github.com/zalando/postgres-operator v1.6.3
-	inet.af/netaddr v0.0.0-20210707202901-70468d781e6c
-	k8s.io/api v0.21.2
-	k8s.io/apiextensions-apiserver v0.21.2
-	k8s.io/apimachinery v0.21.2
-	k8s.io/client-go v0.21.2
+	inet.af/netaddr v0.0.0-20210718074554-06ca8145d722
+	k8s.io/api v0.21.3
+	k8s.io/apiextensions-apiserver v0.21.3
+	k8s.io/apimachinery v0.21.3
+	k8s.io/client-go v0.21.3
 	sigs.k8s.io/controller-runtime v0.9.2
 )

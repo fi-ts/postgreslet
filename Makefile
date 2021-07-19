@@ -33,6 +33,7 @@ test: generate fmt vet manifests
 # todo: Modify Dockerfile to include the version magic
 # Build manager binary
 manager: generate fmt vet manifests
+	CGO_ENABLED=0 \
 	go build -a -ldflags "-extldflags '-static' \
 						-X 'github.com/metal-stack/v.Version=$(VERSION)' \
 						-X 'github.com/metal-stack/v.Revision=$(GITVERSION)' \
