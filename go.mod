@@ -4,7 +4,7 @@ go 1.16
 
 require (
 	github.com/go-logr/logr v0.4.0
-	github.com/metal-stack/firewall-controller v1.0.9
+	github.com/metal-stack/firewall-controller v1.0.10
 	github.com/metal-stack/v v1.0.3
 	github.com/onsi/ginkgo v1.16.2
 	github.com/onsi/gomega v1.13.0
