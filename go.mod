@@ -6,15 +6,15 @@ require (
 	github.com/go-logr/logr v0.4.0
 	github.com/metal-stack/firewall-controller v1.0.9
 	github.com/metal-stack/v v1.0.3
-	github.com/onsi/ginkgo v1.16.2
-	github.com/onsi/gomega v1.13.0
-	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.48.1
-	github.com/spf13/viper v1.8.0
-	github.com/zalando/postgres-operator v1.6.2
-	inet.af/netaddr v0.0.0-20210511181906-37180328850c
-	k8s.io/api v0.20.6
-	k8s.io/apiextensions-apiserver v0.20.6
-	k8s.io/apimachinery v0.20.6
-	k8s.io/client-go v0.20.6
-	sigs.k8s.io/controller-runtime v0.8.3
+	github.com/onsi/ginkgo v1.16.4
+	github.com/onsi/gomega v1.14.0
+	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.49.0
+	github.com/spf13/viper v1.8.1
+	github.com/zalando/postgres-operator v1.6.3
+	inet.af/netaddr v0.0.0-20210718074554-06ca8145d722
+	k8s.io/api v0.21.3
+	k8s.io/apiextensions-apiserver v0.21.3
+	k8s.io/apimachinery v0.21.3
+	k8s.io/client-go v0.21.3
+	sigs.k8s.io/controller-runtime v0.9.2
 )

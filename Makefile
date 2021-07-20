@@ -20,7 +20,7 @@ BUILDDATE := $(shell date -Iseconds)
 VERSION := $(or ${DOCKER_TAG},latest)
 
 # Postgres operator variables for YAML download
-POSTGRES_OPERATOR_VERSION ?= v1.6.1
+POSTGRES_OPERATOR_VERSION ?= v1.6.3
 POSTGRES_OPERATOR_URL ?= https://raw.githubusercontent.com/zalando/postgres-operator/$(POSTGRES_OPERATOR_VERSION)/manifests
 POSTGRES_CRD_URL ?= https://raw.githubusercontent.com/zalando/postgres-operator/$(POSTGRES_OPERATOR_VERSION)/charts/postgres-operator/crds/postgresqls.yaml
 
@@ -33,6 +33,7 @@ test: generate fmt vet manifests
 # todo: Modify Dockerfile to include the version magic
 # Build manager binary
 manager: generate fmt vet manifests
+	CGO_ENABLED=0 \
 	go build -a -ldflags "-extldflags '-static' \
 						-X 'github.com/metal-stack/v.Version=$(VERSION)' \
 						-X 'github.com/metal-stack/v.Revision=$(GITVERSION)' \
@@ -105,7 +106,7 @@ ifeq (, $(shell which controller-gen))
 	CONTROLLER_GEN_TMP_DIR=$$(mktemp -d) ;\
 	cd $$CONTROLLER_GEN_TMP_DIR ;\
 	go mod init tmp ;\
-	go get sigs.k8s.io/controller-tools/cmd/controller-gen@v0.2.5 ;\
+	go get sigs.k8s.io/controller-tools/cmd/controller-gen@v0.6.1 ;\
 	rm -rf $$CONTROLLER_GEN_TMP_DIR ;\
 	}
 CONTROLLER_GEN=$(GOBIN)/controller-gen
