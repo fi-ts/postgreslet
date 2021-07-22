@@ -8,12 +8,13 @@ package main
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"net"
 	"os"
+	"strings"
 
 	"github.com/metal-stack/v"
+	coreosv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -27,8 +28,28 @@ import (
 	"github.com/fi-ts/postgreslet/pkg/lbmanager"
 	"github.com/fi-ts/postgreslet/pkg/operatormanager"
 	firewall "github.com/metal-stack/firewall-controller/api/v1"
+	"github.com/spf13/viper"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	// +kubebuilder:scaffold:imports
+)
+
+const (
+	// envPrefix               = "pg"
+	metricsAddrSvcMgrFlg    = "metrics-addr-svc-mgr"
+	metricsAddrCtrlMgrFlg   = "metrics-addr-ctrl-mgr"
+	enableLeaderElectionFlg = "enable-leader-election"
+	partitionIDFlg          = "partition-id"
+	tenantFlg               = "tenant"
+	ctrlPlaneKubeConfifgFlg = "controlplane-kubeconfig"
+	loadBalancerIPFlg       = "load-balancer-ip"
+	portRangeStartFlg       = "port-range-start"
+	portRangeSizeFlg        = "port-range-size"
+	customPSPNameFlg        = "custom-psp-name"
+	storageClassFlg         = "storage-class"
+	postgresImageFlg        = "postgres-image"
+	etcdHostFlg             = "etcd-host"
+	crdValidationFlg        = "enable-crd-validation"
+	operatorImageFlg        = "operator-image"
 )
 
 var (
@@ -42,51 +63,84 @@ func init() {
 	_ = databasev1.AddToScheme(scheme)
 	_ = firewall.AddToScheme(scheme)
 	_ = zalando.AddToScheme(scheme)
+	_ = coreosv1.AddToScheme(scheme)
 	// +kubebuilder:scaffold:scheme
 }
 
 func main() {
-	var metricsAddrCtrlMgr, metricsAddrSvcMgr, partitionID, tenant, ctrlClusterKubeconfig, pspName, lbIP, storageClass string
-	var enableLeaderElection bool
+	var metricsAddrCtrlMgr, metricsAddrSvcMgr, partitionID, tenant, ctrlClusterKubeconfig, pspName, lbIP, storageClass, postgresImage, etcdHost, operatorImage string
+	var enableLeaderElection, enableCRDValidation bool
 	var portRangeStart, portRangeSize int
-	flag.StringVar(&metricsAddrSvcMgr, "metrics-addr-svc-mgr", ":8080", "The address the metric endpoint of the service cluster manager binds to.")
-	flag.StringVar(&metricsAddrCtrlMgr, "metrics-addr-ctrl-mgr", "0", "The address the metric endpoint of the control cluster manager binds to.")
-	flag.BoolVar(&enableLeaderElection, "enable-leader-election", false,
-		"Enable leader election for controller manager. "+
-			"Enabling this will ensure there is only one active controller manager.")
-	flag.StringVar(&partitionID, "partition-id", "", "The partition ID of the worker-cluster.")
-	flag.StringVar(&tenant, "tenant", "", "The tenant name.")
-	flag.StringVar(&ctrlClusterKubeconfig, "controlplane-kubeconfig", "/var/run/secrets/postgreslet/kube/config", "The path to the kubeconfig to talk to the control plane")
-	flag.StringVar(&lbIP, "load-balancer-ip", "", "The load-balancer IP of postgres in this cluster. If not set one will be provisioned dynamically.")
-	// todo: Check the default port range start and size.
-	flag.IntVar(&portRangeStart, "port-range-start", 32000, "The start of the port range of services LoadBalancer.")
-	flag.IntVar(&portRangeSize, "port-range-size", 8000, "The size of the port range of services LoadBalancer.")
-	flag.StringVar(&pspName, "custom-psp-name", "postgres-operator-psp", "The name of our custom PodSecurityPolicy. Will be added to the ClusterRoles.")
-	flag.StringVar(&storageClass, "storage-class", "", "The name of the storageClass to use for the postgres cluster pods.")
-	flag.Parse()
 
-	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
+	// TODO enable Prefix and update helm chart
+	// viper.SetEnvPrefix(envPrefix)
+	viper.AutomaticEnv()
+	replacer := strings.NewReplacer("-", "_")
+	viper.SetEnvKeyReplacer(replacer)
 
+	viper.SetDefault(metricsAddrSvcMgrFlg, ":8080")
+	metricsAddrSvcMgr = viper.GetString(metricsAddrSvcMgrFlg)
+
+	viper.SetDefault(metricsAddrCtrlMgrFlg, "0")
+	metricsAddrCtrlMgr = viper.GetString(metricsAddrCtrlMgrFlg)
+
+	viper.SetDefault(enableLeaderElectionFlg, false)
+	enableLeaderElection = viper.GetBool(enableLeaderElectionFlg)
+
+	// TODO move all the GetStrings to the controllers where they are needed and don't pass along those strings.
+	partitionID = viper.GetString(partitionIDFlg)
+
+	tenant = viper.GetString(tenantFlg)
+
+	viper.SetDefault(ctrlPlaneKubeConfifgFlg, "/var/run/secrets/postgreslet/kube/config")
+	ctrlClusterKubeconfig = viper.GetString(ctrlPlaneKubeConfifgFlg)
+
+	lbIP = viper.GetString(loadBalancerIPFlg)
 	if len(lbIP) > 0 {
 		// todo: Shift the logic to a dedicated pkg for args validation.
 		if ip := net.ParseIP(lbIP); ip == nil {
-			ctrl.Log.Error(nil, fmt.Sprintf("IP %s not valid", lbIP))
+			ctrl.Log.Error(nil, fmt.Sprintf("Cannot parse provided %s %q, exiting.", loadBalancerIPFlg, lbIP))
 			os.Exit(1)
 		}
 	}
 
-	// todo: Remove
+	// todo: Check the default port range start and size.
+	viper.SetDefault(portRangeStartFlg, 32000)
+	portRangeStart = viper.GetInt(portRangeStartFlg)
+	viper.SetDefault(portRangeSizeFlg, 8000)
+	portRangeSize = viper.GetInt(portRangeSizeFlg)
+
+	viper.SetDefault(customPSPNameFlg, "postgres-operator-psp")
+	pspName = viper.GetString(customPSPNameFlg)
+
+	storageClass = viper.GetString(storageClassFlg)
+
+	operatorImage = viper.GetString(operatorImageFlg)
+	postgresImage = viper.GetString(postgresImageFlg)
+
+	etcdHost = viper.GetString(etcdHostFlg)
+
+	viper.SetDefault(crdValidationFlg, true)
+	enableCRDValidation = viper.GetBool(crdValidationFlg)
+
+	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
+
 	ctrl.Log.Info("flag",
-		"metrics-addr-svc-mgr", metricsAddrSvcMgr,
-		"metrics-addr-ctrl-mgr", metricsAddrCtrlMgr,
-		"enable-leader-election", enableLeaderElection,
-		"partition-id", partitionID,
-		"tenant", tenant,
-		"load-balancer-ip", lbIP,
-		"port-range-start", portRangeStart,
-		"port-range-size", portRangeSize,
-		"custom-psp-name", pspName,
-		"storage-class", storageClass,
+		metricsAddrSvcMgrFlg, metricsAddrSvcMgr,
+		metricsAddrCtrlMgrFlg, metricsAddrCtrlMgr,
+		enableLeaderElectionFlg, enableLeaderElection,
+		partitionIDFlg, partitionID,
+		tenantFlg, tenant,
+		ctrlPlaneKubeConfifgFlg, ctrlClusterKubeconfig,
+		loadBalancerIPFlg, lbIP,
+		portRangeStartFlg, portRangeStart,
+		portRangeSizeFlg, portRangeSize,
+		customPSPNameFlg, pspName,
+		storageClassFlg, storageClass,
+		operatorImageFlg, operatorImage,
+		postgresImageFlg, postgresImage,
+		etcdHostFlg, etcdHost,
+		crdValidationFlg, enableCRDValidation,
 	)
 
 	svcClusterConf := ctrl.GetConfigOrDie()
@@ -119,12 +173,24 @@ func main() {
 		os.Exit(1)
 	}
 
-	opMgr, err := operatormanager.New(svcClusterConf, "external/svc-postgres-operator.yaml", scheme, ctrl.Log.WithName("OperatorManager"), pspName)
+	var opMgrOpts operatormanager.Options = operatormanager.Options{
+		PspName:       pspName,
+		OperatorImage: operatorImage,
+		DockerImage:   postgresImage,
+		EtcdHost:      etcdHost,
+		CRDValidation: enableCRDValidation,
+	}
+	opMgr, err := operatormanager.New(svcClusterConf, "external/svc-postgres-operator.yaml", scheme, ctrl.Log.WithName("OperatorManager"), opMgrOpts)
 	if err != nil {
 		setupLog.Error(err, "unable to create `OperatorManager`")
 		os.Exit(1)
 	}
 
+	var lbMgrOpts lbmanager.Options = lbmanager.Options{
+		LBIP:           lbIP,
+		PortRangeStart: int32(portRangeStart),
+		PortRangeSize:  int32(portRangeSize),
+	}
 	if err = (&controllers.PostgresReconciler{
 		CtrlClient:      ctrlPlaneClusterMgr.GetClient(),
 		SvcClient:       svcClusterMgr.GetClient(),
@@ -134,7 +200,7 @@ func main() {
 		Tenant:          tenant,
 		StorageClass:    storageClass,
 		OperatorManager: opMgr,
-		LBManager:       lbmanager.New(svcClusterMgr.GetClient(), lbIP, int32(portRangeStart), int32(portRangeSize)),
+		LBManager:       lbmanager.New(svcClusterMgr.GetClient(), lbMgrOpts),
 	}).SetupWithManager(ctrlPlaneClusterMgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Postgres")
 		os.Exit(1)

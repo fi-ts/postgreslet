@@ -454,6 +454,11 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 	z.Spec.Volume.Size = p.Spec.Size.StorageSize
 	z.Spec.Volume.StorageClass = sc
 
+	// TODO make configurable?
+	z.Spec.Patroni.TTL = 130
+	z.Spec.Patroni.SynchronousMode = true
+	z.Spec.Patroni.SynchronousModeStrict = false
+
 	// skip if the configmap does not exist
 	if c != nil {
 		z.Spec.AdditionalVolumes = p.buildAdditionalVolumes(c)

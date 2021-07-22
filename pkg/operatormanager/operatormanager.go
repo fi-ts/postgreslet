@@ -11,18 +11,19 @@ import (
 	"encoding/base64"
 	errs "errors"
 	"fmt"
-	"io/ioutil"
+	"os"
 	"strconv"
 	"strings"
 
 	pg "github.com/fi-ts/postgreslet/api/v1"
 	"github.com/go-logr/logr"
+	coreosv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/apimachinery/pkg/types"
@@ -43,7 +44,8 @@ const (
 	operatorPodLabelName  string = "name"
 	operatorPodLabelValue string = "postgres-operator"
 
-	postgresExporterServiceName string = "postgres-exporter"
+	postgresExporterServiceName     string = "postgres-exporter"
+	postgresExporterServicePortName string = "metrics"
 
 	// SidecarsCMFluentBitConfKey Name of the key containing the fluent-bit.conf config file
 	SidecarsCMFluentBitConfKey string = "fluent-bit.conf"
@@ -56,6 +58,15 @@ const (
 // operatorPodMatchingLabels is for listing operator pods
 var operatorPodMatchingLabels = client.MatchingLabels{operatorPodLabelName: operatorPodLabelValue}
 
+// Options
+type Options struct {
+	PspName       string
+	OperatorImage string
+	DockerImage   string
+	EtcdHost      string
+	CRDValidation bool
+}
+
 // OperatorManager manages the operator
 type OperatorManager struct {
 	client.Client
@@ -64,20 +75,20 @@ type OperatorManager struct {
 	log  logr.Logger
 	meta.MetadataAccessor
 	*runtime.Scheme
-	pspName string
+	options Options
 }
 
 // New creates a new `OperatorManager`
-func New(conf *rest.Config, fileName string, scheme *runtime.Scheme, log logr.Logger, pspName string) (*OperatorManager, error) {
+func New(confRest *rest.Config, fileName string, scheme *runtime.Scheme, log logr.Logger, opt Options) (*OperatorManager, error) {
 	// Use no-cache client to avoid waiting for cashing.
-	client, err := client.New(conf, client.Options{
+	client, err := client.New(confRest, client.Options{
 		Scheme: scheme,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("error while creating new k8s client: %w", err)
 	}
 
-	bb, err := ioutil.ReadFile(fileName)
+	bb, err := os.ReadFile(fileName)
 	if err != nil {
 		return nil, fmt.Errorf("error while reading operator yaml file: %w", err)
 	}
@@ -97,7 +108,7 @@ func New(conf *rest.Config, fileName string, scheme *runtime.Scheme, log logr.Lo
 		list:             list,
 		Scheme:           scheme,
 		log:              log,
-		pspName:          pspName,
+		options:          opt,
 	}, nil
 }
 
@@ -271,9 +282,9 @@ func (m *OperatorManager) createNewClientObject(ctx context.Context, obj client.
 
 	// perform different modifications on the parsed objects based on their kind
 	switch v := obj.(type) {
-	case *v1.ServiceAccount:
+	case *corev1.ServiceAccount:
 		m.log.Info("handling ServiceAccount")
-		err = m.Get(ctx, key, &v1.ServiceAccount{})
+		err = m.Get(ctx, key, &corev1.ServiceAccount{})
 	case *rbacv1.ClusterRole:
 		m.log.Info("handling ClusterRole")
 		// Add our psp
@@ -281,7 +292,7 @@ func (m *OperatorManager) createNewClientObject(ctx context.Context, obj client.
 			APIGroups:     []string{"extensions"},
 			Verbs:         []string{"use"},
 			Resources:     []string{"podsecuritypolicies"},
-			ResourceNames: []string{m.pspName},
+			ResourceNames: []string{m.options.PspName},
 		}
 		v.Rules = append(v.Rules, pspPolicyRule)
 
@@ -334,13 +345,13 @@ func (m *OperatorManager) createNewClientObject(ctx context.Context, obj client.
 
 		// we already patched the object, no need to go through the update path at the bottom of this function
 		return nil
-	case *v1.ConfigMap:
+	case *corev1.ConfigMap:
 		m.log.Info("handling ConfigMap")
-		m.editConfigMap(v, namespace)
-		err = m.Get(ctx, key, &v1.ConfigMap{})
-	case *v1.Service:
+		m.editConfigMap(v, namespace, m.options)
+		err = m.Get(ctx, key, &corev1.ConfigMap{})
+	case *corev1.Service:
 		m.log.Info("handling Service")
-		got := v1.Service{}
+		got := corev1.Service{}
 		err = m.Get(ctx, key, &got)
 		if err == nil {
 			// Copy the ResourceVersion
@@ -350,6 +361,12 @@ func (m *OperatorManager) createNewClientObject(ctx context.Context, obj client.
 		}
 	case *appsv1.Deployment:
 		m.log.Info("handling Deployment")
+		if len(v.Spec.Template.Spec.Containers) != 1 {
+			m.log.Info("Unexpected number of containers in deployment, ignoring.")
+		} else if m.options.OperatorImage != "" {
+			m.log.Info("Patching operator image", "image", m.options.OperatorImage)
+			v.Spec.Template.Spec.Containers[0].Image = m.options.OperatorImage
+		}
 		err = m.Get(ctx, key, &appsv1.Deployment{})
 	default:
 		return errs.New("unknown `client.Object`")
@@ -378,7 +395,7 @@ func (m *OperatorManager) createNewClientObject(ctx context.Context, obj client.
 }
 
 // editConfigMap adds info to cm
-func (m *OperatorManager) editConfigMap(cm *v1.ConfigMap, namespace string) {
+func (m *OperatorManager) editConfigMap(cm *corev1.ConfigMap, namespace string, options Options) {
 	cm.Data["watched_namespace"] = namespace
 	// TODO don't use the same serviceaccount for operator and databases, see #88
 	cm.Data["pod_service_account_name"] = serviceAccountName
@@ -388,6 +405,16 @@ func (m *OperatorManager) editConfigMap(cm *v1.ConfigMap, namespace string) {
 	s := []string{pg.TenantLabelName, pg.ProjectIDLabelName, pg.UIDLabelName, pg.NameLabelName}
 	// TODO maybe use a precompiled string here
 	cm.Data["inherited_labels"] = strings.Join(s, ",")
+
+	if options.DockerImage != "" {
+		cm.Data["docker_image"] = options.DockerImage
+	}
+
+	if options.EtcdHost != "" {
+		cm.Data["etcd_host"] = options.EtcdHost
+	}
+
+	cm.Data["enable_crd_validation"] = strconv.FormatBool(options.CRDValidation)
 }
 
 // ensureCleanMetadata ensures obj has clean metadata
@@ -439,14 +466,14 @@ func (m *OperatorManager) createPodEnvironmentConfigMap(ctx context.Context, nam
 		Namespace: namespace,
 		Name:      PodEnvCMName,
 	}
-	if err := m.Get(ctx, ns, &v1.ConfigMap{}); err == nil {
+	if err := m.Get(ctx, ns, &corev1.ConfigMap{}); err == nil {
 		// configmap already exists, nothing to do here
 		// we will update the configmap with the correct S3 config in the postgres controller
 		m.log.Info("Pod Environment ConfigMap already exists")
 		return nil
 	}
 
-	cm := &v1.ConfigMap{}
+	cm := &corev1.ConfigMap{}
 	if err := m.SetName(cm, PodEnvCMName); err != nil {
 		return fmt.Errorf("error while setting the name of the new Pod Environment ConfigMap to %v: %w", namespace, err)
 	}
@@ -469,7 +496,7 @@ func (m *OperatorManager) createOrUpdateSidecarsConfig(ctx context.Context, name
 		Namespace: "postgreslet-system",
 		Name:      "postgreslet-postgres-sidecars",
 	}
-	c := &v1.ConfigMap{}
+	c := &corev1.ConfigMap{}
 	if err := m.Get(ctx, cns, c); err != nil {
 		// configmap with configuration does not exists, nothing we can do here...
 		m.log.Error(err, "could not fetch config for sidecars")
@@ -486,11 +513,17 @@ func (m *OperatorManager) createOrUpdateSidecarsConfig(ctx context.Context, name
 		return fmt.Errorf("error while creating sidecars services %v: %w", namespace, err)
 	}
 
+	// Add services for our sidecars
+	err := m.createOrUpdateExporterSidecarServiceMonitor(ctx, namespace)
+	if err != nil {
+		return fmt.Errorf("error while creating sidecars servicemonitor %v: %w", namespace, err)
+	}
+
 	return nil
 }
 
-func (m *OperatorManager) createOrUpdateSidecarsConfigMap(ctx context.Context, namespace string, c *v1.ConfigMap) error {
-	sccm := &v1.ConfigMap{}
+func (m *OperatorManager) createOrUpdateSidecarsConfigMap(ctx context.Context, namespace string, c *corev1.ConfigMap) error {
+	sccm := &corev1.ConfigMap{}
 	if err := m.SetName(sccm, sidecarsCMName); err != nil {
 		return fmt.Errorf("error while setting the name of the new Sidecars ConfigMap to %v: %w", namespace, err)
 	}
@@ -519,7 +552,7 @@ func (m *OperatorManager) createOrUpdateSidecarsConfigMap(ctx context.Context, n
 		Namespace: namespace,
 		Name:      sidecarsCMName,
 	}
-	if err := m.Get(ctx, ns, &v1.ConfigMap{}); err == nil {
+	if err := m.Get(ctx, ns, &corev1.ConfigMap{}); err == nil {
 		// local configmap aleady exists, updating it
 		if err := m.Update(ctx, sccm); err != nil {
 			return fmt.Errorf("error while updating the new Sidecars ConfigMap: %w", err)
@@ -539,7 +572,7 @@ func (m *OperatorManager) createOrUpdateSidecarsConfigMap(ctx context.Context, n
 }
 
 // createOrUpdateExporterSidecarService ensures the neccessary services to acces the sidecars exist
-func (m *OperatorManager) createOrUpdateExporterSidecarService(ctx context.Context, namespace string, c *v1.ConfigMap) error {
+func (m *OperatorManager) createOrUpdateExporterSidecarService(ctx context.Context, namespace string, c *corev1.ConfigMap) error {
 	exporterServicePort, error := strconv.ParseInt(c.Data["postgres-exporter-service-port"], 10, 32)
 	if error != nil {
 		// todo log error
@@ -552,7 +585,7 @@ func (m *OperatorManager) createOrUpdateExporterSidecarService(ctx context.Conte
 		exporterServiceTargetPort = exporterServicePort
 	}
 
-	pes := &v1.Service{}
+	pes := &corev1.Service{}
 
 	if err := m.SetName(pes, postgresExporterServiceName); err != nil {
 		return fmt.Errorf("error while setting the name of the postgres-exporter service to %v: %w", namespace, err)
@@ -568,11 +601,11 @@ func (m *OperatorManager) createOrUpdateExporterSidecarService(ctx context.Conte
 		return fmt.Errorf("error while setting the namespace of the postgres-exporter service to %v: %w", namespace, err)
 	}
 
-	pes.Spec.Ports = []v1.ServicePort{
+	pes.Spec.Ports = []corev1.ServicePort{
 		{
-			Name:       "metrics",
+			Name:       postgresExporterServicePortName,
 			Port:       int32(exporterServicePort),
-			Protocol:   v1.ProtocolTCP,
+			Protocol:   corev1.ProtocolTCP,
 			TargetPort: intstr.FromInt(int(exporterServiceTargetPort)),
 		},
 	}
@@ -580,14 +613,14 @@ func (m *OperatorManager) createOrUpdateExporterSidecarService(ctx context.Conte
 		"application": "spilo",
 	}
 	pes.Spec.Selector = selector
-	pes.Spec.Type = v1.ServiceTypeClusterIP
+	pes.Spec.Type = corev1.ServiceTypeClusterIP
 
 	// try to fetch any existing postgres-exporter service
 	ns := types.NamespacedName{
 		Namespace: namespace,
 		Name:      postgresExporterServiceName,
 	}
-	old := &v1.Service{}
+	old := &corev1.Service{}
 	if err := m.Get(ctx, ns, old); err == nil {
 		// service exists, overwriting it (but using the same clusterip)
 		pes.Spec.ClusterIP = old.Spec.ClusterIP
@@ -600,7 +633,7 @@ func (m *OperatorManager) createOrUpdateExporterSidecarService(ctx context.Conte
 	}
 	// todo: handle errors other than `NotFound`
 
-	// local configmap does not exist, creating it
+	// local servicemonitor does not exist, creating it
 	if err := m.Create(ctx, pes); err != nil {
 		return fmt.Errorf("error while creating the postgres-exporter service: %w", err)
 	}
@@ -609,8 +642,71 @@ func (m *OperatorManager) createOrUpdateExporterSidecarService(ctx context.Conte
 	return nil
 }
 
+// createOrUpdateExporterSidecarService ensures the neccessary services to acces the sidecars exist
+func (m *OperatorManager) createOrUpdateExporterSidecarServiceMonitor(ctx context.Context, namespace string) error {
+
+	pesm := &coreosv1.ServiceMonitor{}
+
+	// TODO what's the correct name?
+	if err := m.SetName(pesm, postgresExporterServiceName); err != nil {
+		return fmt.Errorf("error while setting the name of the postgres-exporter servicemonitor to %v: %w", namespace, err)
+	}
+	if err := m.SetNamespace(pesm, namespace); err != nil {
+		return fmt.Errorf("error while setting the namespace of the postgres-exporter servicemonitor to %v: %w", namespace, err)
+	}
+	labels := map[string]string{
+		// TODO add labels for tenant and project
+		"app":     "postgres-exporter",
+		"release": "prometheus",
+	}
+	if err := m.SetLabels(pesm, labels); err != nil {
+		return fmt.Errorf("error while setting the namespace of the postgres-exporter servicemonitor to %v: %w", namespace, err)
+	}
+
+	pesm.Spec.Endpoints = []coreosv1.Endpoint{
+		{
+			Port: postgresExporterServicePortName,
+		},
+	}
+	pesm.Spec.NamespaceSelector = coreosv1.NamespaceSelector{
+		MatchNames: []string{namespace},
+	}
+	matchLabels := map[string]string{
+		// TODO use extraced string
+		"app": "postgres-exporter",
+	}
+	pesm.Spec.Selector = metav1.LabelSelector{
+		MatchLabels: matchLabels,
+	}
+
+	// try to fetch any existing postgres-exporter service
+	ns := types.NamespacedName{
+		Namespace: namespace,
+		Name:      postgresExporterServiceName,
+	}
+	old := &coreosv1.ServiceMonitor{}
+	if err := m.Get(ctx, ns, old); err == nil {
+		// Copy the resource version
+		pesm.ObjectMeta.ResourceVersion = old.ObjectMeta.ResourceVersion
+		if err := m.Update(ctx, pesm); err != nil {
+			return fmt.Errorf("error while updating the postgres-exporter servicemonitor: %w", err)
+		}
+		m.log.Info("postgres-exporter servicemonitor updated")
+		return nil
+	}
+	// todo: handle errors other than `NotFound`
+
+	// local servicemonitor does not exist, creating it
+	if err := m.Create(ctx, pesm); err != nil {
+		return fmt.Errorf("error while creating the postgres-exporter servicemonitor: %w", err)
+	}
+	m.log.Info("postgres-exporter servicemonitor created")
+
+	return nil
+}
+
 func (m *OperatorManager) deletePodEnvironmentConfigMap(ctx context.Context, namespace string) error {
-	cm := &v1.ConfigMap{}
+	cm := &corev1.ConfigMap{}
 	if err := m.SetName(cm, PodEnvCMName); err != nil {
 		return fmt.Errorf("error while setting the name of the Pod Environment ConfigMap to delete to %v: %w", PodEnvCMName, err)
 	}
@@ -626,7 +722,7 @@ func (m *OperatorManager) deletePodEnvironmentConfigMap(ctx context.Context, nam
 }
 
 func (m *OperatorManager) deleteExporterSidecarService(ctx context.Context, namespace string) error {
-	s := &v1.Service{}
+	s := &corev1.Service{}
 	if err := m.SetName(s, postgresExporterServiceName); err != nil {
 		return fmt.Errorf("error while setting the name of the postgres-exporter service to delete to %v: %w", PodEnvCMName, err)
 	}

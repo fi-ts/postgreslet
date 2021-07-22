@@ -15,6 +15,7 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	coreosv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	core "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/yaml"
@@ -22,7 +23,6 @@ import (
 	cr "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
-	"sigs.k8s.io/controller-runtime/pkg/envtest/printer"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
@@ -42,7 +42,7 @@ import (
 const (
 	// duration = time.Second * 10
 	interval = time.Second * 2
-	timeout  = time.Second * 60
+	timeout  = time.Second * 180
 )
 
 var (
@@ -65,9 +65,8 @@ var (
 func TestAPIs(t *testing.T) {
 	RegisterFailHandler(Fail)
 
-	RunSpecsWithDefaultAndCustomReporters(t,
-		"Controller Suite",
-		[]Reporter{printer.NewlineReporter{}})
+	RunSpecs(t,
+		"Controller Suite")
 }
 
 var _ = BeforeSuite(func() {
@@ -90,6 +89,7 @@ var _ = BeforeSuite(func() {
 				Paths: []string{
 					filepath.Join(HelmCRDDir, "postgresql.yaml"),
 					filepath.Join(externalYAMLDirTest, "crd-clusterwidenetworkpolicy.yaml"),
+					filepath.Join(externalYAMLDirTest, "crd-servicemonitors.yaml"),
 				},
 			},
 		}
@@ -115,7 +115,7 @@ var _ = BeforeSuite(func() {
 			filepath.Join(externalYAMLDir, "svc-postgres-operator.yaml"),
 			scheme,
 			cr.Log.WithName("OperatorManager"),
-			"test-psp")
+			operatormanager.Options{PspName: "test-psp"})
 		Expect(err).ToNot(HaveOccurred())
 
 		Expect((&PostgresReconciler{
@@ -124,7 +124,7 @@ var _ = BeforeSuite(func() {
 			PartitionID:     "sample-partition",
 			Tenant:          "sample-tenant",
 			OperatorManager: opMgr,
-			LBManager:       lbmanager.New(svcClusterMgr.GetClient(), "127.0.0.1", int32(32000), int32(8000)),
+			LBManager:       lbmanager.New(svcClusterMgr.GetClient(), lbmanager.Options{LBIP: "127.0.0.1", PortRangeStart: int32(32000), PortRangeSize: int32(8000)}),
 			Log:             cr.Log.WithName("controllers").WithName("Postgres"),
 		}).SetupWithManager(ctrlClusterMgr)).Should(Succeed())
 
@@ -230,6 +230,7 @@ func newScheme() *runtime.Scheme {
 	Expect(firewall.AddToScheme(scheme)).Should(Succeed())
 	Expect(pg.AddToScheme(scheme)).Should(Succeed())
 	Expect(zalando.AddToScheme(scheme)).Should(Succeed())
+	Expect(coreosv1.AddToScheme(scheme)).Should(Succeed())
 
 	// +kubebuilder:scaffold:scheme
 
