@@ -392,7 +392,7 @@ func (p *Postgres) generateDatabaseName() string {
 	}
 
 	// Add UID in the mix
-	generatedDatabaseName += alphaNumericRegExp.ReplaceAllString(string(p.UID), "")
+	generatedDatabaseName += alphaNumericRegExp.ReplaceAllString(string(p.Name), "")
 
 	// Limit to final size
 	// This way, we have at least 5 chars of the uid as part of the database name.
