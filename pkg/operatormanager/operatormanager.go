@@ -642,7 +642,7 @@ func (m *OperatorManager) createOrUpdateExporterSidecarService(ctx context.Conte
 	return nil
 }
 
-// createOrUpdateExporterSidecarService ensures the neccessary services to acces the sidecars exist
+// createOrUpdateExporterSidecarServiceMonitor ensures the servicemonitors for the sidecars exist
 func (m *OperatorManager) createOrUpdateExporterSidecarServiceMonitor(ctx context.Context, namespace string) error {
 
 	pesm := &coreosv1.ServiceMonitor{}
