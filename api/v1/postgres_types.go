@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"reflect"
 	"strconv"
+	"strings"
 
 	"regexp"
 
@@ -55,7 +56,7 @@ const (
 	// SharedBufferParameterKey defines the key under which the shared buffer size is stored in the parameters map. Defined by the postgres-operator/patroni
 	SharedBufferParameterKey = "shared_buffers"
 
-	teamIDPrefix = "db"
+	teamIDPrefix = "pg"
 )
 
 var (
@@ -360,10 +361,14 @@ func (p *Postgres) ToUserPasswordSecretMatchingLabels() map[string]string {
 
 func (p *Postgres) generateTeamID() string {
 	// We only want letters and numbers
-	generatedTeamID := alphaNumericRegExp.ReplaceAllString(p.Spec.ProjectID, "")
+	generatedTeamID := alphaNumericRegExp.ReplaceAllString(p.Spec.Tenant, "")
 
-	// Prefix `db` to make sure the string is a valid dns entry (aka does not start with a number)
+	// Add prefix to make sure the string is a valid dns entry (aka does not start with a number).
+	// Also acts as minimal teamID in case the Tenant does not contain any alphanumeric characters.
 	generatedTeamID = teamIDPrefix + generatedTeamID
+
+	// and only lower case
+	generatedTeamID = strings.ToLower(generatedTeamID)
 
 	// Limit size
 	maxLen := 16
@@ -376,10 +381,23 @@ func (p *Postgres) generateTeamID() string {
 
 func (p *Postgres) generateDatabaseName() string {
 	// We only want letters and numbers
-	generatedDatabaseName := alphaNumericRegExp.ReplaceAllString(string(p.Name), "")
+	generatedDatabaseName := alphaNumericRegExp.ReplaceAllString(string(p.Spec.Description), "")
 
-	// Limit size
-	maxLen := 20
+	// and only lower case
+	generatedDatabaseName = strings.ToLower(generatedDatabaseName)
+
+	// Limit the length of the description part of the name
+	maxLen := 15
+	if len(generatedDatabaseName) > maxLen {
+		generatedDatabaseName = generatedDatabaseName[:maxLen]
+	}
+
+	// Add UID in the mix
+	generatedDatabaseName += alphaNumericRegExp.ReplaceAllString(string(p.Name), "")
+
+	// Limit to final size
+	// This way, we have at least 5 chars of the uid as part of the database name.
+	maxLen = 20
 	if len(generatedDatabaseName) > maxLen {
 		generatedDatabaseName = generatedDatabaseName[:maxLen]
 	}
@@ -388,8 +406,25 @@ func (p *Postgres) generateDatabaseName() string {
 }
 
 func (p *Postgres) ToPeripheralResourceNamespace() string {
-	// as we have one namespace per database, we simplify things by also using the database name as namespace name
-	return p.ToPeripheralResourceName()
+	// We only want letters and numbers
+	projectID := alphaNumericRegExp.ReplaceAllString(p.Spec.ProjectID, "")
+
+	// Limit size
+	maxLen := 16
+	if len(projectID) > maxLen {
+		projectID = projectID[:maxLen]
+	}
+
+	// We only want letters and numbers
+	name := alphaNumericRegExp.ReplaceAllString(string(p.Name), "")
+
+	// Limit size
+	maxLen = 20
+	if len(name) > maxLen {
+		name = name[:maxLen]
+	}
+
+	return projectID + "-" + name
 }
 
 func (p *Postgres) ToPeripheralResourceLookupKey() types.NamespacedName {
