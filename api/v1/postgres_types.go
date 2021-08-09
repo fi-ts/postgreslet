@@ -407,24 +407,24 @@ func (p *Postgres) generateDatabaseName() string {
 
 func (p *Postgres) ToPeripheralResourceNamespace() string {
 	// We only want letters and numbers
-	generatedTeamID := alphaNumericRegExp.ReplaceAllString(p.Spec.ProjectID, "")
+	projectID := alphaNumericRegExp.ReplaceAllString(p.Spec.ProjectID, "")
 
 	// Limit size
 	maxLen := 16
-	if len(generatedTeamID) > maxLen {
-		generatedTeamID = generatedTeamID[:maxLen]
+	if len(projectID) > maxLen {
+		projectID = projectID[:maxLen]
 	}
 
 	// We only want letters and numbers
-	generatedDatabaseName := alphaNumericRegExp.ReplaceAllString(string(p.Name), "")
+	name := alphaNumericRegExp.ReplaceAllString(string(p.Name), "")
 
 	// Limit size
 	maxLen = 20
-	if len(generatedDatabaseName) > maxLen {
-		generatedDatabaseName = generatedDatabaseName[:maxLen]
+	if len(name) > maxLen {
+		name = name[:maxLen]
 	}
 
-	return generatedTeamID + "-" + generatedDatabaseName
+	return projectID + "-" + name
 }
 
 func (p *Postgres) ToPeripheralResourceLookupKey() types.NamespacedName {
