@@ -363,7 +363,8 @@ func (p *Postgres) generateTeamID() string {
 	// We only want letters and numbers
 	generatedTeamID := alphaNumericRegExp.ReplaceAllString(p.Spec.Tenant, "")
 
-	// Prefix `db` to make sure the string is a valid dns entry (aka does not start with a number)
+	// Add prefix to make sure the string is a valid dns entry (aka does not start with a number).
+	// Also acts as minimal teamID in case the Tenant does not contain any alphanumeric characters.
 	generatedTeamID = teamIDPrefix + generatedTeamID
 
 	// and only lower case
