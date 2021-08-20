@@ -150,6 +150,9 @@ type PostgresSpec struct {
 
 	// BackupSecretRef reference to the secret where the backup credentials are stored
 	BackupSecretRef string `json:"backupSecretRef,omitempty"`
+
+	// Clone defines the location of a database backup to clone
+	Clone *Clone `json:"clone,omitempty"`
 }
 
 // AccessList defines the type of restrictions to access the database
@@ -174,6 +177,16 @@ type Size struct {
 	StorageSize string `json:"storageSize,omitempty"`
 }
 
+type Clone struct {
+	UID               string `json:"uid,omitempty"`
+	ClusterName       string `json:"cluster,omitempty"`
+	Timestamp         string `json:"timestamp,omitempty"`
+	S3Endpoint        string `json:"s3Endpoint,omitempty"`
+	S3AccessKeyId     string `json:"s3AccessKeyId,omitempty"`
+	S3SecretAccessKey string `json:"s3SecretAccessKey,omitempty"`
+	S3ForcePathStyle  *bool  `json:"s3ForcePathStyle,omitempty" defaults:"false"`
+}
+
 // PostgresStatus defines the observed state of Postgres
 type PostgresStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
@@ -182,7 +195,8 @@ type PostgresStatus struct {
 
 	Socket Socket `json:"socket,omitempty"`
 
-	ChildName string `json:"childName,omitempty"`
+	ChildName       string `json:"childName,omitempty"`
+	ChildInternalID string `json:"childInternalID,omitempty"`
 }
 
 // Socket represents load-balancer socket of Postgres
@@ -468,6 +482,16 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 
 	if p.HasSourceRanges() {
 		z.Spec.AllowedSourceRanges = p.Spec.AccessList.SourceRanges
+	}
+
+	if p.Spec.Clone != nil {
+		z.Spec.Clone.UID = p.Spec.Clone.UID
+		z.Spec.Clone.ClusterName = p.Spec.Clone.ClusterName
+		z.Spec.Clone.EndTimestamp = p.Spec.Clone.Timestamp
+		z.Spec.Clone.S3Endpoint = p.Spec.Clone.S3Endpoint
+		z.Spec.Clone.S3AccessKeyId = p.Spec.Clone.S3AccessKeyId
+		z.Spec.Clone.S3SecretAccessKey = p.Spec.Clone.S3SecretAccessKey
+		z.Spec.Clone.S3ForcePathStyle = p.Spec.Clone.S3ForcePathStyle
 	}
 
 	jsonZ, err := runtime.DefaultUnstructuredConverter.ToUnstructured(z)
