@@ -4,7 +4,7 @@ go 1.16
 
 require (
 	github.com/go-logr/logr v0.4.0
-	github.com/google/uuid v1.2.0 // indirect
+	github.com/google/uuid v1.2.0
 	github.com/metal-stack/firewall-controller v1.0.9
 	github.com/metal-stack/v v1.0.3
 	github.com/onsi/ginkgo v1.16.4
@@ -15,7 +15,7 @@ require (
 	inet.af/netaddr v0.0.0-20210718074554-06ca8145d722
 	k8s.io/api v0.21.3
 	k8s.io/apiextensions-apiserver v0.21.3
-	k8s.io/apimachinery v0.21.3
+	k8s.io/apimachinery v0.22.2
 	k8s.io/client-go v0.21.3
 	sigs.k8s.io/controller-runtime v0.9.2
 )
