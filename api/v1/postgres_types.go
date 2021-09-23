@@ -460,6 +460,25 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 	z.Spec.Patroni.SynchronousMode = true
 	z.Spec.Patroni.SynchronousModeStrict = false
 
+	instanceName := p.generateDatabaseName()
+	databaseName := instanceName + "db01"
+	ownerName := instanceName + "dbo"
+
+	z.Spec.Users = make(map[string]zalando.UserFlags)
+	z.Spec.Users[ownerName] = zalando.UserFlags{"superuser", "createdb"}
+
+	z.Spec.Databases = make(map[string]string)
+	z.Spec.Databases[databaseName] = ownerName
+
+	z.Spec.PreparedDatabases = make(map[string]zalando.PreparedDatabase)
+	z.Spec.PreparedDatabases[databaseName] = zalando.PreparedDatabase{
+		DefaultUsers: true,
+		Extensions: map[string]string{
+			"pg_partman": "public",
+			"pgcrypto":   "public",
+		},
+	}
+
 	// skip if the configmap does not exist
 	if c != nil {
 		z.Spec.AdditionalVolumes = p.buildAdditionalVolumes(c)
