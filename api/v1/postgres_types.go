@@ -460,10 +460,11 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 	z.Spec.Patroni.SynchronousMode = true
 	z.Spec.Patroni.SynchronousModeStrict = false
 
-	instanceName := p.Spec.Tenant // TODO filter out unwanted chars
-	databaseName := instanceName + "db01"
-	prepDbName := instanceName + "prepdb01"
-	ownerName := instanceName + "dbo"
+	prefix := alphaNumericRegExp.ReplaceAllString(string(p.Spec.Tenant), "")
+	prefix = strings.ToLower(prefix)
+	databaseName := prefix + "db01"
+	prepDbName := prefix + "prepdb01"
+	ownerName := prefix + "dbo"
 
 	z.Spec.Users = make(map[string]zalando.UserFlags)
 	z.Spec.Users[ownerName] = zalando.UserFlags{"superuser", "createdb"}
