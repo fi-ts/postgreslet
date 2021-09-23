@@ -462,6 +462,7 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 
 	instanceName := p.generateDatabaseName()
 	databaseName := instanceName + "db01"
+	prepDbName := instanceName + "prepdb01"
 	ownerName := instanceName + "dbo"
 
 	z.Spec.Users = make(map[string]zalando.UserFlags)
@@ -471,7 +472,7 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 	z.Spec.Databases[databaseName] = ownerName
 
 	z.Spec.PreparedDatabases = make(map[string]zalando.PreparedDatabase)
-	z.Spec.PreparedDatabases[databaseName] = zalando.PreparedDatabase{
+	z.Spec.PreparedDatabases[prepDbName] = zalando.PreparedDatabase{
 		DefaultUsers: true,
 		Extensions: map[string]string{
 			"pg_partman": "public",
