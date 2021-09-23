@@ -477,6 +477,10 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 			"pg_partman": "public",
 			"pgcrypto":   "public",
 		},
+		PreparedSchemas: map[string]zalando.PreparedSchema{
+			"data":    zalando.PreparedSchema{},
+			"history": zalando.PreparedSchema{},
+		},
 	}
 
 	// skip if the configmap does not exist
