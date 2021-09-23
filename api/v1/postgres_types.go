@@ -466,12 +466,15 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 	prepDbName := prefix + "prepdb01"
 	ownerName := prefix + "dbo"
 
+	// Create database owner
 	z.Spec.Users = make(map[string]zalando.UserFlags)
 	z.Spec.Users[ownerName] = zalando.UserFlags{"superuser", "createdb"}
 
+	// Create default database
 	z.Spec.Databases = make(map[string]string)
 	z.Spec.Databases[databaseName] = ownerName
 
+	// Create prepared database
 	z.Spec.PreparedDatabases = make(map[string]zalando.PreparedDatabase)
 	z.Spec.PreparedDatabases[prepDbName] = zalando.PreparedDatabase{
 		DefaultUsers: true,
