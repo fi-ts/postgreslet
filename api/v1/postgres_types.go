@@ -460,7 +460,7 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 	z.Spec.Patroni.SynchronousMode = true
 	z.Spec.Patroni.SynchronousModeStrict = false
 
-	instanceName := p.generateDatabaseName()
+	instanceName := p.Spec.Tenant // TODO filter out unwanted chars
 	databaseName := instanceName + "db01"
 	prepDbName := instanceName + "prepdb01"
 	ownerName := instanceName + "dbo"
