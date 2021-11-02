@@ -225,6 +225,10 @@ two-kind-clusters:
 	helm repo add metal-stack-30 https://helm.metal-stack.io/pull_requests/custom-operator-image # PR repo
 	helm upgrade --install postgreslet metal-stack-30/postgreslet --namespace postgreslet-system --values svc-cluster-values.yaml --set-file controlplaneKubeconfig=kubeconfig 
 
+destroy-two-kind-clusters:
+	kind delete cluster --name ctrl
+	kind delete cluster --name kind
+
 install-crd-servicemonitor:
 	kubectl apply -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/v0.45.0/example/prometheus-operator-crd/monitoring.coreos.com_servicemonitors.yaml
 
