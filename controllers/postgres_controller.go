@@ -152,6 +152,59 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, fmt.Errorf("error while ensuring Zalando dependencies: %w", err)
 	}
 
+	if instance.Spec.IsPostgresReplicationPrimary != nil && !*instance.Spec.IsPostgresReplicationPrimary {
+		//  TODO check if instance.Spec.PostgresConnectionInfo.ConnectionSecretName is defined
+
+		// Check if secrets exist local in SERVICE Cluster
+		localStandbySecretName := "standby." + instance.ToPeripheralResourceName() + ".credentials"
+		localStandbySecretNamespace := instance.ToPeripheralResourceNamespace()
+		localStandbySecret := &corev1.Secret{}
+		log.Info("checking for local standby secret", "namespace", localStandbySecretNamespace, "name", localStandbySecretName)
+		if err := r.SvcClient.Get(ctx, types.NamespacedName{Namespace: localStandbySecretNamespace, Name: localStandbySecretName}, localStandbySecret); err != nil {
+			// we got an error other than not found, so we cannot continue!
+			if !errors.IsNotFound(err) {
+				return ctrl.Result{}, fmt.Errorf("error while fetching local stadnby secret from service cluster: %w", err)
+			}
+
+			log.Info("no local standby secret found, continuing to create one")
+
+			// Check if secrets exist in remote CONTROL Cluster
+			remoteSecretName := instance.Spec.PostgresConnectionInfo.ConnectionSecretName
+			remoteSecretNamespace := instance.ObjectMeta.Namespace
+			remoteSecret := &corev1.Secret{}
+			log.Info("fetching remote standby secret", "namespace", remoteSecretNamespace, "name", remoteSecretName)
+			if err := r.CtrlClient.Get(ctx, types.NamespacedName{Namespace: remoteSecretNamespace, Name: remoteSecretName}, remoteSecret); err != nil {
+				// we cannot read the secret given in the configuration, so we cannot continue!
+				return ctrl.Result{}, fmt.Errorf("error while fetching remote standby secret from control plane: %w", err)
+			}
+
+			log.Info("creating local standby secret")
+
+			standbySecret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      localStandbySecretName,
+					Namespace: localStandbySecretNamespace,
+					Labels:    map[string]string(instance.ToZalandoPostgresqlMatchingLabels()),
+				},
+				Data: map[string][]byte{
+					"username": []byte("standby"),
+					"password": remoteSecret.Data["standby"],
+				},
+			}
+
+			if err := r.SvcClient.Create(ctx, standbySecret); err != nil {
+				return ctrl.Result{}, fmt.Errorf("error while creating local secrets in service cluster: %w", err)
+			}
+			log.Info("created local standby secret", "secret", standbySecret)
+
+			// TODO postgres secret as well
+			// postgresPassword := s.Data["postgres"]
+
+		} else {
+			log.Info("local standby secret found, no action needed")
+		}
+	}
+
 	if err := r.createOrUpdateZalandoPostgresql(ctx, instance, log); err != nil {
 		r.recorder.Eventf(instance, "Warning", "Error", "failed to create Zalando resource: %v", err)
 		return ctrl.Result{}, fmt.Errorf("failed to create or update zalando postgresql: %w", err)

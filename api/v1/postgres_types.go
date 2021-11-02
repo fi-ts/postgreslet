@@ -55,6 +55,8 @@ const (
 	BackupConfigKey = "config"
 	// SharedBufferParameterKey defines the key under which the shared buffer size is stored in the parameters map. Defined by the postgres-operator/patroni
 	SharedBufferParameterKey = "shared_buffers"
+	// StandbyKey defines the key under which the standby configuration is stored in the CR.  Defined by the postgres-operator/patroni
+	StandbyKey = "standby"
 
 	teamIDPrefix = "pg"
 )
@@ -150,6 +152,12 @@ type PostgresSpec struct {
 
 	// BackupSecretRef reference to the secret where the backup credentials are stored
 	BackupSecretRef string `json:"backupSecretRef,omitempty"`
+
+	// IsPostgresReplicationPrimary determines if this is the leader or the standby side
+	IsPostgresReplicationPrimary *bool `json:"isReplicationPrimary,omitempty"`
+
+	// PostgresConnectionInfo Connection info of a streaming host, independant of the current role (leader or standby)
+	PostgresConnectionInfo PostgresConnectionInfo `json:"connectionInfo,omitempty"`
 }
 
 // AccessList defines the type of restrictions to access the database
@@ -198,6 +206,16 @@ type PostgresList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []Postgres `json:"items"`
+}
+
+// PostgresConnectionInfo A remote postgres instance this one is linked to, e.g. for standby purpouses.
+type PostgresConnectionInfo struct {
+	ConnectionMethod     string `json:"method,omitempty"`
+	ConnectionSecretName string `json:"secretName,omitempty"`
+
+	ConnectedPostgresID string `json:"connectedPostgresID,omitempty"`
+	ConnectionHost      string `json:"host,omitempty"`
+	ConnectionPort      string `json:"port,omitempty"`
 }
 
 var SvcLoadBalancerLabel = map[string]string{
@@ -496,6 +514,21 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 
 	if p.HasSourceRanges() {
 		z.Spec.AllowedSourceRanges = p.Spec.AccessList.SourceRanges
+	}
+
+	// Enable replication (using unstructured json)
+	if p.Spec.IsPostgresReplicationPrimary == nil || *p.Spec.IsPostgresReplicationPrimary {
+		// delete field
+		z.Spec.StandbyCluster = nil
+	} else {
+		// overwrite connection info
+		z.Spec.StandbyCluster = &zalando.StandbyDescription{
+			StandbyMethod:     p.Spec.PostgresConnectionInfo.ConnectionMethod,
+			StandbyHost:       p.Spec.PostgresConnectionInfo.ConnectionHost,
+			StandbyPort:       p.Spec.PostgresConnectionInfo.ConnectionPort,
+			StandbySecretName: "standby." + p.ToPeripheralResourceName() + ".credentials",
+			S3WalPath:         "",
+		}
 	}
 
 	jsonZ, err := runtime.DefaultUnstructuredConverter.ToUnstructured(z)
