@@ -24,6 +24,10 @@ POSTGRES_OPERATOR_VERSION ?= v1.6.0
 POSTGRES_OPERATOR_URL ?= https://raw.githubusercontent.com/zalando/postgres-operator/$(POSTGRES_OPERATOR_VERSION)/manifests
 POSTGRES_CRD_URL ?= https://raw.githubusercontent.com/zalando/postgres-operator/$(POSTGRES_OPERATOR_VERSION)/charts/postgres-operator/crds/postgresqls.yaml
 
+# Object cache variables
+CACHEOBJ_IMG ?= local/postgreslet-builder-cacheobjs
+CACHEOBJ_VERSION ?= previous
+
 all: manager
 
 # Run tests
@@ -90,11 +94,23 @@ generate: controller-gen
 docker-build:
 	docker build . -t ${IMG}:${VERSION}
 
+
+cacheobjs-daily-base:
+	if [ "$(shell docker images ${CACHEOBJ_IMG}:${CACHEOBJ_VERSION} -q)" = "" ]; then \
+		docker build -t ${CACHEOBJ_IMG}:${CACHEOBJ_VERSION} -f Dockerfile --target=obj-cache .; \
+	fi;
+
+cacheobjs: cacheobjs-daily-base
+	$(call inject-nonce)
+	docker build --build-arg baseImage=${CACHEOBJ_IMG}:${CACHEOBJ_VERSION} \
+               -t ${IMG}:${VERSION} \
+               -f Dockerfile .
+
 # Push the docker image
 docker-push:
 	docker push ${IMG}:${VERSION}
 
-kind-load-image: docker-build
+kind-load-image: cacheobjs
 	kind load docker-image ${IMG}:${VERSION} -v 1
 
 # find or download controller-gen
@@ -219,6 +235,10 @@ two-kind-clusters:
 	make install-crd-cwnp
 	make install-crd-servicemonitor
 	helm upgrade --install postgreslet postgreslet-0.1.0.tgz --namespace postgreslet-system --set-file controlplaneKubeconfig=kubeconfig  --set image.tag=latest
+
+destroy-two-kind-clusters:
+	kind delete cluster --name ctrl
+	kind delete cluster --name kind
 
 install-crd-servicemonitor:
 	kubectl apply -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/v0.45.0/example/prometheus-operator-crd/monitoring.coreos.com_servicemonitors.yaml
