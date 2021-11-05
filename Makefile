@@ -253,3 +253,6 @@ reinstall-postgreslet: kind-load-image
 	# helm upgrade --install postgreslet metal-stack/postgreslet --namespace postgreslet-system --values svc-cluster-values.yaml --set-file controlplaneKubeconfig=kubeconfig 
 	helm repo add metal-stack-30 https://helm.metal-stack.io/pull_requests/custom-operator-image # PR repo
 	helm upgrade --install postgreslet metal-stack-30/postgreslet --namespace postgreslet-system --values svc-cluster-values.yaml --set-file controlplaneKubeconfig=kubeconfig 
+
+lint:
+	golangci-lint run -p bugs -p unused --timeout=5m
