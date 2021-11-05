@@ -113,6 +113,8 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		log.Info("unable to fetch the corresponding Service of type LoadBalancer")
 	}
 
+	// TODO also update the port/ip of databases mentioned in owner.Spec.PostgresConnectionInfo so that e.g. CWNP are always up to date
+
 	// Fetch the list of operator-generated secrets
 	secrets := &corev1.SecretList{}
 	if err := r.SvcClient.List(ctx, secrets, owner.ToUserPasswordsSecretListOption()...); err != nil {
