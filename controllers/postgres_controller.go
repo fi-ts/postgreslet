@@ -7,22 +7,29 @@
 package controllers
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	goerrors "errors"
 	"fmt"
+	"net/http"
 	"net/url"
+	"strings"
 
 	"github.com/go-logr/logr"
 	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
+	"inet.af/netaddr"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/tools/record"
 
 	firewall "github.com/metal-stack/firewall-controller/api/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -152,57 +159,20 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, fmt.Errorf("error while ensuring Zalando dependencies: %w", err)
 	}
 
-	if instance.Spec.IsPostgresReplicationPrimary != nil && !*instance.Spec.IsPostgresReplicationPrimary {
-		//  TODO check if instance.Spec.PostgresConnectionInfo.ConnectionSecretName is defined
+	// Make sure the standby secrets exist, if neccessary
+	if err := r.ensureStandbySecrets(ctx, instance); err != nil {
+		r.recorder.Eventf(instance, "Warning", "Error", "failed to create standby secrets: %v", err)
+		return ctrl.Result{}, fmt.Errorf("error while creating standby secrets: %w", err)
+	}
 
-		// Check if secrets exist local in SERVICE Cluster
-		localStandbySecretName := "standby." + instance.ToPeripheralResourceName() + ".credentials"
-		localStandbySecretNamespace := instance.ToPeripheralResourceNamespace()
-		localStandbySecret := &corev1.Secret{}
-		log.Info("checking for local standby secret", "namespace", localStandbySecretNamespace, "name", localStandbySecretName)
-		if err := r.SvcClient.Get(ctx, types.NamespacedName{Namespace: localStandbySecretNamespace, Name: localStandbySecretName}, localStandbySecret); err != nil {
-			// we got an error other than not found, so we cannot continue!
-			if !errors.IsNotFound(err) {
-				return ctrl.Result{}, fmt.Errorf("error while fetching local stadnby secret from service cluster: %w", err)
-			}
-
-			log.Info("no local standby secret found, continuing to create one")
-
-			// Check if secrets exist in remote CONTROL Cluster
-			remoteSecretName := instance.Spec.PostgresConnectionInfo.ConnectionSecretName
-			remoteSecretNamespace := instance.ObjectMeta.Namespace
-			remoteSecret := &corev1.Secret{}
-			log.Info("fetching remote standby secret", "namespace", remoteSecretNamespace, "name", remoteSecretName)
-			if err := r.CtrlClient.Get(ctx, types.NamespacedName{Namespace: remoteSecretNamespace, Name: remoteSecretName}, remoteSecret); err != nil {
-				// we cannot read the secret given in the configuration, so we cannot continue!
-				return ctrl.Result{}, fmt.Errorf("error while fetching remote standby secret from control plane: %w", err)
-			}
-
-			log.Info("creating local standby secret")
-
-			standbySecret := &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      localStandbySecretName,
-					Namespace: localStandbySecretNamespace,
-					Labels:    map[string]string(instance.ToZalandoPostgresqlMatchingLabels()),
-				},
-				Data: map[string][]byte{
-					"username": []byte("standby"),
-					"password": remoteSecret.Data["standby"],
-				},
-			}
-
-			if err := r.SvcClient.Create(ctx, standbySecret); err != nil {
-				return ctrl.Result{}, fmt.Errorf("error while creating local secrets in service cluster: %w", err)
-			}
-			log.Info("created local standby secret", "secret", standbySecret)
-
-			// TODO postgres secret as well
-			// postgresPassword := s.Data["postgres"]
-
-		} else {
-			log.Info("local standby secret found, no action needed")
-		}
+	if instance.Spec.IsPostgresReplicationPrimary != nil && *instance.Spec.IsPostgresReplicationPrimary {
+		// the field is not empty, which means we were either a regular, standalone database that was promoted to leader
+		//  (meaning we are already running) or we are a standby which was promoted to leader (also meaning we are
+		// already running)
+		// That means we should be able to call the patroni api already. this is required, as updating the custom
+		// ressource of a standby db seems to fail (maybe because of the users/databases?)...
+		// anyway, let's get on with it
+		r.updatePatroniConfig(ctx, instance)
 	}
 
 	if err := r.createOrUpdateZalandoPostgresql(ctx, instance, log); err != nil {
@@ -227,6 +197,11 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	if err := r.createOrUpdateCWNP(ctx, instance, int(port)); err != nil {
 		r.recorder.Event(instance, "Warning", "Error", "failed to create or update ClusterwideNetworkPolicy")
 		return ctrl.Result{}, fmt.Errorf("unable to create or update corresponding CRD ClusterwideNetworkPolicy: %w", err)
+	}
+
+	// this is the call for standbys
+	if err := r.updatePatroniConfig(ctx, instance); err != nil {
+		return requeue, fmt.Errorf("unable to update patroni config: %w", err)
 	}
 
 	r.recorder.Event(instance, "Normal", "Reconciled", "postgres up to date")
@@ -468,6 +443,69 @@ func (r *PostgresReconciler) createOrUpdateCWNP(ctx context.Context, in *pg.Post
 	}
 	r.Log.WithValues("postgres", in.ToKey()).Info("clusterwidenetworkpolicy created or updated")
 
+	// Create CWNP if standby is configured (independant of the current role)
+	if in.Spec.PostgresConnectionInfo != nil {
+		standbyIngressCWNPName := in.ToPeripheralResourceName() + "-standby-ingress"
+		standbyIngressCWNP := &firewall.ClusterwideNetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: standbyIngressCWNPName, Namespace: policy.Namespace}}
+
+		//
+		// Create ingress rule from pre-configured CIDR to this DBs port
+		//
+		standbyClusterIPBlocks := []networkingv1.IPBlock{}
+		// TODO: Take source range from config, not this IP!!! And remove that hacky /32 CIDR!
+		remoteServiceClusterCIDR, err := netaddr.ParseIPPrefix(in.Spec.PostgresConnectionInfo.ConnectionIP + "/32")
+		if err != nil {
+			return fmt.Errorf("unable to parse standby host ip %s: %w", in.Spec.PostgresConnectionInfo.ConnectionIP, err)
+		}
+		standbyClusterIPs := networkingv1.IPBlock{
+			CIDR: remoteServiceClusterCIDR.String(),
+		}
+		standbyClusterIPBlocks = append(standbyClusterIPBlocks, standbyClusterIPs)
+
+		// Add Port to CWNP (if known)
+		tcp := corev1.ProtocolTCP
+		ingressTargetPorts := []networkingv1.NetworkPolicyPort{}
+		if in.Status.Socket.Port != 0 {
+			portObj := intstr.FromInt(int(in.Status.Socket.Port))
+			ingressTargetPorts = append(ingressTargetPorts, networkingv1.NetworkPolicyPort{Port: &portObj, Protocol: &tcp})
+		}
+		standbyIngressCWNP.Spec.Ingress = []firewall.IngressRule{
+			{Ports: ingressTargetPorts, From: standbyClusterIPBlocks},
+		}
+
+		key2 := &firewall.ClusterwideNetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: standbyIngressCWNPName, Namespace: policy.Namespace}}
+		if _, err := controllerutil.CreateOrUpdate(ctx, r.SvcClient, standbyIngressCWNP, func() error {
+			key2.Spec.Ingress = standbyIngressCWNP.Spec.Ingress
+			return nil
+		}); err != nil {
+			return fmt.Errorf("unable to deploy standby ingress ClusterwideNetworkPolicy: %w", err)
+		}
+
+		//
+		// Create egress rule to StandbyCluster CIDR and ConnectionPort
+		//
+		standbyEgressCWNPName := in.ToPeripheralResourceName() + "-standby-egress"
+		standbyEgressCWNP := &firewall.ClusterwideNetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: standbyEgressCWNPName, Namespace: policy.Namespace}}
+		// Add Port to CWNP
+		egressTargetPorts := []networkingv1.NetworkPolicyPort{}
+		if in.Spec.PostgresConnectionInfo.ConnectionPort != 0 {
+			portObj := intstr.FromInt(int(in.Spec.PostgresConnectionInfo.ConnectionPort))
+			egressTargetPorts = append(egressTargetPorts, networkingv1.NetworkPolicyPort{Port: &portObj, Protocol: &tcp})
+		}
+		standbyEgressCWNP.Spec.Egress = []firewall.EgressRule{
+			{Ports: egressTargetPorts, To: standbyClusterIPBlocks},
+		}
+
+		key3 := &firewall.ClusterwideNetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: standbyEgressCWNPName, Namespace: policy.Namespace}}
+		if _, err := controllerutil.CreateOrUpdate(ctx, r.SvcClient, standbyEgressCWNP, func() error {
+			key3.Spec.Egress = standbyEgressCWNP.Spec.Egress
+			return nil
+		}); err != nil {
+			return fmt.Errorf("unable to deploy standby egress ClusterwideNetworkPolicy: %w", err)
+		}
+
+	}
+
 	return nil
 }
 
@@ -513,4 +551,140 @@ func (r *PostgresReconciler) getZPostgresqlByLabels(ctx context.Context, matchin
 	}
 
 	return zpl.Items, nil
+}
+
+func (r *PostgresReconciler) ensureStandbySecrets(ctx context.Context, instance *pg.Postgres) error {
+	if instance.IsPrimaryLeader() {
+		// nothing is configured, or we are the leader. nothing to do.
+		return nil
+	}
+
+	//  TODO check if instance.Spec.PostgresConnectionInfo.ConnectionSecretName is defined
+
+	// Check if secrets exist local in SERVICE Cluster
+	localStandbySecretName := "standby." + instance.ToPeripheralResourceName() + ".credentials"
+	localSecretNamespace := instance.ToPeripheralResourceNamespace()
+	localStandbySecret := &corev1.Secret{}
+	r.Log.Info("checking for local standby secret", "namespace", localSecretNamespace, "name", localStandbySecretName)
+	if err := r.SvcClient.Get(ctx, types.NamespacedName{Namespace: localSecretNamespace, Name: localStandbySecretName}, localStandbySecret); err != nil {
+		// we got an error other than not found, so we cannot continue!
+		if !errors.IsNotFound(err) {
+			return fmt.Errorf("error while fetching local stadnby secret from service cluster: %w", err)
+		}
+
+		r.Log.Info("no local standby secret found, continuing to create one")
+
+		// Check if secrets exist in remote CONTROL Cluster
+		remoteSecretName := instance.Spec.PostgresConnectionInfo.ConnectionSecretName
+		remoteSecretNamespace := instance.ObjectMeta.Namespace
+		remoteSecret := &corev1.Secret{}
+		r.Log.Info("fetching remote standby secret", "namespace", remoteSecretNamespace, "name", remoteSecretName)
+		if err := r.CtrlClient.Get(ctx, types.NamespacedName{Namespace: remoteSecretNamespace, Name: remoteSecretName}, remoteSecret); err != nil {
+			// we cannot read the secret given in the configuration, so we cannot continue!
+			return fmt.Errorf("error while fetching remote standby secret from control plane: %w", err)
+		}
+
+		// copy ALL secrets...
+		for username := range remoteSecret.Data {
+			r.Log.Info("creating local secret", "username", username)
+
+			currentSecretName := strings.ReplaceAll(username, "_", "-") + "." + instance.ToPeripheralResourceName() + ".credentials"
+			postgresSecret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      currentSecretName,
+					Namespace: localSecretNamespace,
+					Labels:    map[string]string(instance.ToZalandoPostgresqlMatchingLabels()),
+				},
+				Data: map[string][]byte{
+					"username": []byte(username),
+					"password": remoteSecret.Data[username],
+				},
+			}
+
+			if err := r.SvcClient.Create(ctx, postgresSecret); err != nil {
+				return fmt.Errorf("error while creating local secrets in service cluster: %w", err)
+			}
+			r.Log.Info("created local secret", "secret", postgresSecret)
+		}
+
+	} else {
+		r.Log.Info("local standby secret found, no action needed")
+	}
+
+	return nil
+
+}
+
+func (r *PostgresReconciler) updatePatroniConfig(ctx context.Context, instance *pg.Postgres) error {
+	// Finally, send a POST to to the database with the correct config
+	if instance.Spec.PostgresConnectionInfo == nil {
+		return nil
+	}
+
+	r.Log.Info("Sending REST call to Patroni API")
+	pods := &corev1.PodList{}
+	opts := []client.ListOption{
+		client.InNamespace(instance.ToPeripheralResourceNamespace()),
+		client.MatchingLabels{"spilo-role": "master"},
+	}
+	if err := r.SvcClient.List(ctx, pods, opts...); err != nil {
+		r.Log.Info("could not query pods, requeuing")
+		return err
+	}
+	if len(pods.Items) == 0 {
+		r.Log.Info("no master pod ready, requeuing")
+		// TODO return proper error
+		return goerrors.New("no master pods found")
+	}
+	podIP := pods.Items[0].Status.PodIP
+	podPort := "8008"
+	path := "config"
+
+	type PatroniStandbyCluster struct {
+		CreateReplicaMethods []string `json:"create_replica_methods"`
+		Host                 string   `json:"host"`
+		Port                 int      `json:"port"`
+	}
+	type PatroniConfigRequest struct {
+		StandbyCluster *PatroniStandbyCluster `json:"standby_cluster"`
+	}
+
+	r.Log.Info("Preparing request")
+	var request PatroniConfigRequest
+	if instance.IsPrimaryLeader() {
+		request = PatroniConfigRequest{
+			StandbyCluster: nil,
+		}
+	} else {
+		// TODO check values first
+		request = PatroniConfigRequest{
+			StandbyCluster: &PatroniStandbyCluster{
+				CreateReplicaMethods: []string{"basebackup_fast_xlog"},
+				Host:                 instance.Spec.PostgresConnectionInfo.ConnectionIP,
+				Port:                 int(instance.Spec.PostgresConnectionInfo.ConnectionPort),
+			},
+		}
+	}
+	r.Log.Info("Prepared request", "request", request)
+	jsonReq, err := json.Marshal(request)
+	if err != nil {
+		r.Log.Info("could not create config")
+		return err
+	}
+
+	httpClient := &http.Client{}
+	url := "http://" + podIP + ":" + podPort + "/" + path
+
+	req, err := http.NewRequest(http.MethodPatch, url, bytes.NewBuffer(jsonReq))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	_, err = httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

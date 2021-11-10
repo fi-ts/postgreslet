@@ -157,7 +157,7 @@ type PostgresSpec struct {
 	IsPostgresReplicationPrimary *bool `json:"isReplicationPrimary,omitempty"`
 
 	// PostgresConnectionInfo Connection info of a streaming host, independant of the current role (leader or standby)
-	PostgresConnectionInfo PostgresConnectionInfo `json:"connectionInfo,omitempty"`
+	PostgresConnectionInfo *PostgresConnectionInfo `json:"connectionInfo,omitempty"`
 }
 
 // AccessList defines the type of restrictions to access the database
@@ -214,8 +214,8 @@ type PostgresConnectionInfo struct {
 	ConnectionSecretName string `json:"secretName,omitempty"`
 
 	ConnectedPostgresID string `json:"connectedPostgresID,omitempty"`
-	ConnectionHost      string `json:"host,omitempty"`
-	ConnectionPort      string `json:"port,omitempty"`
+	ConnectionIP        string `json:"ip,omitempty"`
+	ConnectionPort      int32  `json:"port,omitempty"`
 }
 
 var SvcLoadBalancerLabel = map[string]string{
@@ -524,8 +524,8 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 		// overwrite connection info
 		z.Spec.StandbyCluster = &zalando.StandbyDescription{
 			StandbyMethod:     p.Spec.PostgresConnectionInfo.ConnectionMethod,
-			StandbyHost:       p.Spec.PostgresConnectionInfo.ConnectionHost,
-			StandbyPort:       p.Spec.PostgresConnectionInfo.ConnectionPort,
+			StandbyHost:       p.Spec.PostgresConnectionInfo.ConnectionIP,
+			StandbyPort:       strconv.FormatInt(int64(p.Spec.PostgresConnectionInfo.ConnectionPort), 10),
 			StandbySecretName: "standby." + p.ToPeripheralResourceName() + ".credentials",
 			S3WalPath:         "",
 		}
@@ -666,4 +666,12 @@ func setSharedBufferSize(parameters map[string]string, shmSize string) {
 			parameters[SharedBufferParameterKey] = strconv.FormatInt(sizeInMB, 10) + "MB"
 		}
 	}
+}
+
+func (p *Postgres) IsPrimaryLeader() bool {
+	if p.Spec.IsPostgresReplicationPrimary == nil || *p.Spec.IsPostgresReplicationPrimary {
+		// nothing is configured, or we are the leader. nothing to do.
+		return true
+	}
+	return false
 }
