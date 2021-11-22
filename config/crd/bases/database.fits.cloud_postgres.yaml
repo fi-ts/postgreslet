@@ -4,7 +4,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.5.0
+    controller-gen.kubebuilder.io/version: v0.6.1
   creationTimestamp: null
   name: postgres.database.fits.cloud
 spec:
@@ -69,9 +69,29 @@ spec:
                 description: BackupSecretRef reference to the secret where the backup
                   credentials are stored
                 type: string
+              connectionInfo:
+                description: PostgresConnectionInfo Connection info of a streaming
+                  host, independant of the current role (leader or standby)
+                properties:
+                  connectedPostgresID:
+                    type: string
+                  ip:
+                    type: string
+                  method:
+                    type: string
+                  port:
+                    format: int32
+                    type: integer
+                  secretName:
+                    type: string
+                type: object
               description:
                 description: Description
                 type: string
+              isReplicationPrimary:
+                description: IsPostgresReplicationPrimary determines if this is the
+                  leader or the standby side
+                type: boolean
               maintenance:
                 description: 'todo: add default Maintenance defines automatic maintenance
                   of the database'
