@@ -24,6 +24,10 @@ POSTGRES_OPERATOR_VERSION ?= v1.6.0
 POSTGRES_OPERATOR_URL ?= https://raw.githubusercontent.com/zalando/postgres-operator/$(POSTGRES_OPERATOR_VERSION)/manifests
 POSTGRES_CRD_URL ?= https://raw.githubusercontent.com/zalando/postgres-operator/$(POSTGRES_OPERATOR_VERSION)/charts/postgres-operator/crds/postgresqls.yaml
 
+# Object cache variables
+CACHEOBJ_IMG ?= local/postgreslet-builder-cacheobjs
+CACHEOBJ_VERSION ?= previous
+
 all: manager
 
 # Run tests
@@ -90,11 +94,23 @@ generate: controller-gen
 docker-build:
 	docker build . -t ${IMG}:${VERSION}
 
+
+cacheobjs-daily-base:
+	if [ "$(shell docker images ${CACHEOBJ_IMG}:${CACHEOBJ_VERSION} -q)" = "" ]; then \
+		docker build -t ${CACHEOBJ_IMG}:${CACHEOBJ_VERSION} -f Dockerfile --target=obj-cache .; \
+	fi;
+
+cacheobjs: cacheobjs-daily-base
+	$(call inject-nonce)
+	docker build --build-arg baseImage=${CACHEOBJ_IMG}:${CACHEOBJ_VERSION} \
+               -t ${IMG}:${VERSION} \
+               -f Dockerfile .
+
 # Push the docker image
 docker-push:
 	docker push ${IMG}:${VERSION}
 
-kind-load-image: docker-build
+kind-load-image: cacheobjs
 	kind load docker-image ${IMG}:${VERSION} -v 1
 
 # find or download controller-gen
@@ -237,3 +253,6 @@ reinstall-postgreslet: kind-load-image
 	# helm upgrade --install postgreslet metal-stack/postgreslet --namespace postgreslet-system --values svc-cluster-values.yaml --set-file controlplaneKubeconfig=kubeconfig 
 	helm repo add metal-stack-30 https://helm.metal-stack.io/pull_requests/custom-operator-image # PR repo
 	helm upgrade --install postgreslet metal-stack-30/postgreslet --namespace postgreslet-system --values svc-cluster-values.yaml --set-file controlplaneKubeconfig=kubeconfig 
+
+lint:
+	golangci-lint run -p bugs -p unused --timeout=5m
