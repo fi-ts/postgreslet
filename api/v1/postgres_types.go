@@ -151,6 +151,8 @@ type PostgresSpec struct {
 
 	// BackupSecretRef reference to the secret where the backup credentials are stored
 	BackupSecretRef string `json:"backupSecretRef,omitempty"`
+
+	AuditLogs *bool `json:"auditLogs,omitempty"`
 }
 
 // AccessList defines the type of restrictions to access the database
@@ -447,6 +449,9 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 	z.Spec.NumberOfInstances = p.Spec.NumberOfInstances
 	z.Spec.PostgresqlParam.PgVersion = p.Spec.Version
 	z.Spec.PostgresqlParam.Parameters = map[string]string{}
+	if p.Spec.AuditLogs == nil || *p.Spec.AuditLogs {
+		enableAuditLogs(z.Spec.PostgresqlParam.Parameters)
+	}
 	setSharedBufferSize(z.Spec.PostgresqlParam.Parameters, p.Spec.Size.SharedBuffer)
 	z.Spec.Resources.ResourceRequests.CPU = p.Spec.Size.CPU
 	z.Spec.Resources.ResourceRequests.Memory = p.Spec.Size.Memory
@@ -638,4 +643,13 @@ func setSharedBufferSize(parameters map[string]string, shmSize string) {
 			parameters[SharedBufferParameterKey] = strconv.FormatInt(sizeInMB, 10) + "MB"
 		}
 	}
+}
+
+// enableAuditLogs configures this postgres instances audit logging
+func enableAuditLogs(parameters map[string]string) {
+	parameters["shared_preload_libraries"] = "pgaudit"
+	parameters["pgaudit.log_catalog"] = "off"
+	parameters["pgaudit.log"] = "ddl"
+	parameters["pgaudit.log_relation"] = "on"
+	parameters["pgaudit.log_parameter"] = "on"
 }
