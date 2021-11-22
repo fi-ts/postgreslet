@@ -24,6 +24,10 @@ POSTGRES_OPERATOR_VERSION ?= v1.6.0
 POSTGRES_OPERATOR_URL ?= https://raw.githubusercontent.com/zalando/postgres-operator/$(POSTGRES_OPERATOR_VERSION)/manifests
 POSTGRES_CRD_URL ?= https://raw.githubusercontent.com/zalando/postgres-operator/$(POSTGRES_OPERATOR_VERSION)/charts/postgres-operator/crds/postgresqls.yaml
 
+# Object cache variables
+CACHEOBJ_IMG ?= local/postgreslet-builder-cacheobjs
+CACHEOBJ_VERSION ?= previous
+
 all: manager
 
 # Run tests
@@ -90,11 +94,23 @@ generate: controller-gen
 docker-build:
 	docker build . -t ${IMG}:${VERSION}
 
+
+cacheobjs-daily-base:
+	if [ "$(shell docker images ${CACHEOBJ_IMG}:${CACHEOBJ_VERSION} -q)" = "" ]; then \
+		docker build -t ${CACHEOBJ_IMG}:${CACHEOBJ_VERSION} -f Dockerfile --target=obj-cache .; \
+	fi;
+
+cacheobjs: cacheobjs-daily-base
+	$(call inject-nonce)
+	docker build --build-arg baseImage=${CACHEOBJ_IMG}:${CACHEOBJ_VERSION} \
+               -t ${IMG}:${VERSION} \
+               -f Dockerfile .
+
 # Push the docker image
 docker-push:
 	docker push ${IMG}:${VERSION}
 
-kind-load-image: docker-build
+kind-load-image: cacheobjs
 	kind load docker-image ${IMG}:${VERSION} -v 1
 
 # find or download controller-gen
@@ -202,15 +218,17 @@ kubebuilder-version-ci:
 	@echo ${KUBEBUILDER_VERSION}
 
 two-kind-clusters:
-	# control-plane-cluster
+	#
+	## control-plane-cluster
+	########################
 	kind create cluster --name ctrl --kubeconfig ./kubeconfig
 	container_ip=$$(docker inspect --format='{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' 'ctrl-control-plane') ;\
 	kubectl --kubeconfig=kubeconfig config set-cluster 'kind-ctrl' --server="https://$${container_ip}:6443"
 	make install
 	make create-postgres
-	# service-clsuter
-	make helm-clean
-	make helm
+	#
+	## service-cluster
+	########################
 	kind create cluster
 	sed 's/z.Spec.Volume.StorageClass/\/\/z.Spec.Volume.StorageClass/' -i api/v1/postgres_types.go
 	make kind-load-image
@@ -218,7 +236,23 @@ two-kind-clusters:
 	kubectl create ns postgreslet-system --dry-run=client --save-config -o yaml | kubectl apply -f -
 	make install-crd-cwnp
 	make install-crd-servicemonitor
-	helm upgrade --install postgreslet postgreslet-0.1.0.tgz --namespace postgreslet-system --set-file controlplaneKubeconfig=kubeconfig  --set image.tag=latest
+	# helm repo add metal-stack https://helm.metal-stack.io # stable repo
+	# helm upgrade --install postgreslet metal-stack/postgreslet --namespace postgreslet-system --values svc-cluster-values.yaml --set-file controlplaneKubeconfig=kubeconfig 
+	helm repo add metal-stack-30 https://helm.metal-stack.io/pull_requests/custom-operator-image # PR repo
+	helm upgrade --install postgreslet metal-stack-30/postgreslet --namespace postgreslet-system --values svc-cluster-values.yaml --set-file controlplaneKubeconfig=kubeconfig 
+
+destroy-two-kind-clusters:
+	kind delete cluster --name ctrl
+	kind delete cluster --name kind
 
 install-crd-servicemonitor:
 	kubectl apply -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/v0.45.0/example/prometheus-operator-crd/monitoring.coreos.com_servicemonitors.yaml
+
+reinstall-postgreslet: kind-load-image
+	# helm repo add metal-stack https://helm.metal-stack.io # stable repo
+	# helm upgrade --install postgreslet metal-stack/postgreslet --namespace postgreslet-system --values svc-cluster-values.yaml --set-file controlplaneKubeconfig=kubeconfig 
+	helm repo add metal-stack-30 https://helm.metal-stack.io/pull_requests/custom-operator-image # PR repo
+	helm upgrade --install postgreslet metal-stack-30/postgreslet --namespace postgreslet-system --values svc-cluster-values.yaml --set-file controlplaneKubeconfig=kubeconfig 
+
+lint:
+	golangci-lint run -p bugs -p unused --timeout=5m
