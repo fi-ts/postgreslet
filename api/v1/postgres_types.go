@@ -441,7 +441,7 @@ func (p *Postgres) ToPeripheralResourceLookupKey() types.NamespacedName {
 	}
 }
 
-func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *corev1.ConfigMap, sc string) (*unstructured.Unstructured, error) {
+func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *corev1.ConfigMap, sc string, pgParamBlockList map[string]bool) (*unstructured.Unstructured, error) {
 	if z == nil {
 		z = &zalando.Postgresql{}
 	}
@@ -460,7 +460,7 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 		enableAuditLogs(z.Spec.PostgresqlParam.Parameters)
 	}
 	// now set the given generic parameters (and potentially allow overwriting of e.g. audit log params)
-	setPostgresParams(z.Spec.PostgresqlParam.Parameters, p.Spec.PostgresParams)
+	setPostgresParams(z.Spec.PostgresqlParam.Parameters, p.Spec.PostgresParams, pgParamBlockList)
 	// finally, overwrite the (special to us) shared buffer parameter
 	setSharedBufferSize(z.Spec.PostgresqlParam.Parameters, p.Spec.Size.SharedBuffer)
 
@@ -666,8 +666,12 @@ func enableAuditLogs(parameters map[string]string) {
 }
 
 // setPostgresParams add the provided params to the parameter map
-func setPostgresParams(parameters map[string]string, providedParams map[string]string) {
+func setPostgresParams(parameters map[string]string, providedParams map[string]string, blockList map[string]bool) {
 	for k, v := range providedParams {
+		if _, isBlocked := blockList[k]; isBlocked {
+			// k is on the blockList, ignore that param
+			continue
+		}
 		parameters[k] = v
 	}
 }

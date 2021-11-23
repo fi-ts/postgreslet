@@ -50,6 +50,7 @@ const (
 	etcdHostFlg             = "etcd-host"
 	crdValidationFlg        = "enable-crd-validation"
 	operatorImageFlg        = "operator-image"
+	pgParamBlockListFlg     = "postgres-param-blocklist"
 )
 
 var (
@@ -71,6 +72,7 @@ func main() {
 	var metricsAddrCtrlMgr, metricsAddrSvcMgr, partitionID, tenant, ctrlClusterKubeconfig, pspName, lbIP, storageClass, postgresImage, etcdHost, operatorImage string
 	var enableLeaderElection, enableCRDValidation bool
 	var portRangeStart, portRangeSize int
+	var pgParamBlockList map[string]bool
 
 	// TODO enable Prefix and update helm chart
 	// viper.SetEnvPrefix(envPrefix)
@@ -123,6 +125,14 @@ func main() {
 	viper.SetDefault(crdValidationFlg, true)
 	enableCRDValidation = viper.GetBool(crdValidationFlg)
 
+	pgParamBlockList = make(map[string]bool)
+	blockedPgParams := viper.GetStringSlice(pgParamBlockListFlg)
+	ctrl.Log.Info("Got parameter slice ", "slice", blockedPgParams)
+	for _, blockedParam := range blockedPgParams {
+		pgParamBlockList[blockedParam] = true
+	}
+	ctrl.Log.Info("Got parameter map ", "map", pgParamBlockList)
+
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 
 	ctrl.Log.Info("flag",
@@ -141,6 +151,7 @@ func main() {
 		postgresImageFlg, postgresImage,
 		etcdHostFlg, etcdHost,
 		crdValidationFlg, enableCRDValidation,
+		pgParamBlockListFlg, pgParamBlockList,
 	)
 
 	svcClusterConf := ctrl.GetConfigOrDie()
@@ -192,15 +203,16 @@ func main() {
 		PortRangeSize:  int32(portRangeSize),
 	}
 	if err = (&controllers.PostgresReconciler{
-		CtrlClient:      ctrlPlaneClusterMgr.GetClient(),
-		SvcClient:       svcClusterMgr.GetClient(),
-		Log:             ctrl.Log.WithName("controllers").WithName("Postgres"),
-		Scheme:          ctrlPlaneClusterMgr.GetScheme(),
-		PartitionID:     partitionID,
-		Tenant:          tenant,
-		StorageClass:    storageClass,
-		OperatorManager: opMgr,
-		LBManager:       lbmanager.New(svcClusterMgr.GetClient(), lbMgrOpts),
+		CtrlClient:       ctrlPlaneClusterMgr.GetClient(),
+		SvcClient:        svcClusterMgr.GetClient(),
+		Log:              ctrl.Log.WithName("controllers").WithName("Postgres"),
+		Scheme:           ctrlPlaneClusterMgr.GetScheme(),
+		PartitionID:      partitionID,
+		Tenant:           tenant,
+		StorageClass:     storageClass,
+		OperatorManager:  opMgr,
+		LBManager:        lbmanager.New(svcClusterMgr.GetClient(), lbMgrOpts),
+		PgParamBlockList: pgParamBlockList,
 	}).SetupWithManager(ctrlPlaneClusterMgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Postgres")
 		os.Exit(1)
