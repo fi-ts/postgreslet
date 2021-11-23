@@ -26,6 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/yaml"
+	"k8s.io/utils/pointer"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -158,6 +159,8 @@ type PostgresSpec struct {
 
 	// PostgresConnectionInfo Connection info of a streaming host, independant of the current role (leader or standby)
 	PostgresConnectionInfo *PostgresConnectionInfo `json:"connectionInfo,omitempty"`
+
+	AuditLogs *bool `json:"auditLogs,omitempty"`
 }
 
 // AccessList defines the type of restrictions to access the database
@@ -464,6 +467,9 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 	z.Spec.NumberOfInstances = p.Spec.NumberOfInstances
 	z.Spec.PostgresqlParam.PgVersion = p.Spec.Version
 	z.Spec.PostgresqlParam.Parameters = map[string]string{}
+	if p.Spec.AuditLogs == nil || *p.Spec.AuditLogs {
+		enableAuditLogs(z.Spec.PostgresqlParam.Parameters)
+	}
 	setSharedBufferSize(z.Spec.PostgresqlParam.Parameters, p.Spec.Size.SharedBuffer)
 	z.Spec.Resources.ResourceRequests.CPU = p.Spec.Size.CPU
 	z.Spec.Resources.ResourceRequests.Memory = p.Spec.Size.Memory
@@ -477,6 +483,10 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 	z.Spec.Patroni.TTL = 130
 	z.Spec.Patroni.SynchronousMode = true
 	z.Spec.Patroni.SynchronousModeStrict = false
+
+	// required with image ermajn/postgres-operator:v1.6.0-20-g1cc71663-dirty
+	// see https://github.com/fi-ts/postgreslet/issues/293
+	z.Spec.EnableConnectionPooler = pointer.Bool(false)
 
 	prefix := alphaNumericRegExp.ReplaceAllString(string(p.Spec.Tenant), "")
 	prefix = strings.ToLower(prefix)
@@ -674,4 +684,13 @@ func (p *Postgres) IsPrimaryLeader() bool {
 		return true
 	}
 	return false
+}
+
+// enableAuditLogs configures this postgres instances audit logging
+func enableAuditLogs(parameters map[string]string) {
+	parameters["shared_preload_libraries"] = "pgaudit"
+	parameters["pgaudit.log_catalog"] = "off"
+	parameters["pgaudit.log"] = "ddl"
+	parameters["pgaudit.log_relation"] = "on"
+	parameters["pgaudit.log_parameter"] = "on"
 }
