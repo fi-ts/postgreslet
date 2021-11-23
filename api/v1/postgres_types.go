@@ -152,6 +152,9 @@ type PostgresSpec struct {
 	// BackupSecretRef reference to the secret where the backup credentials are stored
 	BackupSecretRef string `json:"backupSecretRef,omitempty"`
 
+	// AuditLogs enable or disable default audit logs
+	AuditLogs *bool `json:"auditLogs,omitempty"`
+
 	// PostgresParams additional parameters that are passed along to the postgres config
 	PostgresParams map[string]string `json:"postgresParams,omitempty"`
 }
@@ -452,7 +455,11 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 
 	// initialize the parameters
 	z.Spec.PostgresqlParam.Parameters = map[string]string{}
-	// now set the given generic parameters
+	// enable default audit logs if neccessary
+	if p.Spec.AuditLogs == nil || *p.Spec.AuditLogs {
+		enableAuditLogs(z.Spec.PostgresqlParam.Parameters)
+	}
+	// now set the given generic parameters (and potentially allow overwriting of e.g. audit log params)
 	setPostgresParams(z.Spec.PostgresqlParam.Parameters, p.Spec.PostgresParams)
 	// finally, overwrite the (special to us) shared buffer parameter
 	setSharedBufferSize(z.Spec.PostgresqlParam.Parameters, p.Spec.Size.SharedBuffer)
@@ -647,6 +654,15 @@ func setSharedBufferSize(parameters map[string]string, shmSize string) {
 			parameters[SharedBufferParameterKey] = strconv.FormatInt(sizeInMB, 10) + "MB"
 		}
 	}
+}
+
+// enableAuditLogs configures this postgres instances audit logging
+func enableAuditLogs(parameters map[string]string) {
+	parameters["shared_preload_libraries"] = "pgaudit"
+	parameters["pgaudit.log_catalog"] = "off"
+	parameters["pgaudit.log"] = "ddl"
+	parameters["pgaudit.log_relation"] = "on"
+	parameters["pgaudit.log_parameter"] = "on"
 }
 
 // setPostgresParams add the provided params to the parameter map

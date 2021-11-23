@@ -132,6 +132,11 @@ func (in *PostgresSpec) DeepCopyInto(out *PostgresSpec) {
 		*out = new(AccessList)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.AuditLogs != nil {
+		in, out := &in.AuditLogs, &out.AuditLogs
+		*out = new(bool)
+		**out = **in
+	}
 	if in.PostgresParams != nil {
 		in, out := &in.PostgresParams, &out.PostgresParams
 		*out = make(map[string]string, len(*in))

@@ -65,6 +65,9 @@ spec:
                       type: string
                     type: array
                 type: object
+              auditLogs:
+                description: AuditLogs enable or disable default audit logs
+                type: boolean
               backupSecretRef:
                 description: BackupSecretRef reference to the secret where the backup
                   credentials are stored
