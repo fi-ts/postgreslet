@@ -455,7 +455,7 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 
 	// initialize the parameters
 	z.Spec.PostgresqlParam.Parameters = map[string]string{}
-	// enable default audit logs if neccessary
+	// enable default audit logs (if not configured otherwise)
 	if p.Spec.AuditLogs == nil || *p.Spec.AuditLogs {
 		enableAuditLogs(z.Spec.PostgresqlParam.Parameters)
 	}
