@@ -46,7 +46,8 @@ type PostgresReconciler struct {
 	PartitionID, Tenant, StorageClass string
 	*operatormanager.OperatorManager
 	*lbmanager.LBManager
-	recorder record.EventRecorder
+	recorder         record.EventRecorder
+	PgParamBlockList map[string]bool
 }
 
 // Reconcile is the entry point for postgres reconciliation.
@@ -211,7 +212,7 @@ func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context
 			return fmt.Errorf("failed to fetch zalando postgresql: %w", err)
 		}
 
-		u, err := instance.ToUnstructuredZalandoPostgresql(nil, c, r.StorageClass)
+		u, err := instance.ToUnstructuredZalandoPostgresql(nil, c, r.StorageClass, r.PgParamBlockList)
 		if err != nil {
 			return fmt.Errorf("failed to convert to unstructured zalando postgresql: %w", err)
 		}
@@ -227,7 +228,7 @@ func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context
 	// Update zalando postgresql
 	mergeFrom := client.MergeFrom(rawZ.DeepCopy())
 
-	u, err := instance.ToUnstructuredZalandoPostgresql(rawZ, c, r.StorageClass)
+	u, err := instance.ToUnstructuredZalandoPostgresql(rawZ, c, r.StorageClass, r.PgParamBlockList)
 	if err != nil {
 		return fmt.Errorf("failed to convert to unstructured zalando postgresql: %w", err)
 	}

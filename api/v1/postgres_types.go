@@ -152,7 +152,11 @@ type PostgresSpec struct {
 	// BackupSecretRef reference to the secret where the backup credentials are stored
 	BackupSecretRef string `json:"backupSecretRef,omitempty"`
 
+	// AuditLogs enable or disable default audit logs
 	AuditLogs *bool `json:"auditLogs,omitempty"`
+
+	// PostgresParams additional parameters that are passed along to the postgres config
+	PostgresParams map[string]string `json:"postgresParams,omitempty"`
 }
 
 // AccessList defines the type of restrictions to access the database
@@ -437,7 +441,7 @@ func (p *Postgres) ToPeripheralResourceLookupKey() types.NamespacedName {
 	}
 }
 
-func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *corev1.ConfigMap, sc string) (*unstructured.Unstructured, error) {
+func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *corev1.ConfigMap, sc string, pgParamBlockList map[string]bool) (*unstructured.Unstructured, error) {
 	if z == nil {
 		z = &zalando.Postgresql{}
 	}
@@ -448,11 +452,18 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 
 	z.Spec.NumberOfInstances = p.Spec.NumberOfInstances
 	z.Spec.PostgresqlParam.PgVersion = p.Spec.Version
+
+	// initialize the parameters
 	z.Spec.PostgresqlParam.Parameters = map[string]string{}
+	// enable default audit logs (if not configured otherwise)
 	if p.Spec.AuditLogs == nil || *p.Spec.AuditLogs {
 		enableAuditLogs(z.Spec.PostgresqlParam.Parameters)
 	}
+	// now set the given generic parameters (and potentially allow overwriting of e.g. audit log params)
+	setPostgresParams(z.Spec.PostgresqlParam.Parameters, p.Spec.PostgresParams, pgParamBlockList)
+	// finally, overwrite the (special to us) shared buffer parameter
 	setSharedBufferSize(z.Spec.PostgresqlParam.Parameters, p.Spec.Size.SharedBuffer)
+
 	z.Spec.Resources.ResourceRequests.CPU = p.Spec.Size.CPU
 	z.Spec.Resources.ResourceRequests.Memory = p.Spec.Size.Memory
 	z.Spec.Resources.ResourceLimits.CPU = p.Spec.Size.CPU
@@ -652,4 +663,15 @@ func enableAuditLogs(parameters map[string]string) {
 	parameters["pgaudit.log"] = "ddl"
 	parameters["pgaudit.log_relation"] = "on"
 	parameters["pgaudit.log_parameter"] = "on"
+}
+
+// setPostgresParams add the provided params to the parameter map (but ignore params that are blocked)
+func setPostgresParams(parameters map[string]string, providedParams map[string]string, blockList map[string]bool) {
+	for k, v := range providedParams {
+		if _, isBlocked := blockList[k]; isBlocked {
+			// k is on the blockList, ignore that param
+			continue
+		}
+		parameters[k] = v
+	}
 }

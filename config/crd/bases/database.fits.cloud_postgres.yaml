@@ -66,6 +66,7 @@ spec:
                     type: array
                 type: object
               auditLogs:
+                description: AuditLogs enable or disable default audit logs
                 type: boolean
               backupSecretRef:
                 description: BackupSecretRef reference to the secret where the backup
@@ -89,6 +90,12 @@ spec:
               partitionID:
                 description: PartitionID the partition where the database is created
                 type: string
+              postgresParams:
+                additionalProperties:
+                  type: string
+                description: PostgresParams additional parameters that are passed
+                  along to the postgres config
+                type: object
               projectID:
                 description: ProjectID metal project ID
                 type: string
