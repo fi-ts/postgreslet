@@ -125,13 +125,13 @@ func main() {
 	viper.SetDefault(crdValidationFlg, true)
 	enableCRDValidation = viper.GetBool(crdValidationFlg)
 
-	pgParamBlockList = make(map[string]bool)
+	// read the (space-separated) list of configured blocked params
 	blockedPgParams := viper.GetStringSlice(pgParamBlockListFlg)
-	ctrl.Log.Info("Got parameter slice ", "slice", blockedPgParams)
+	// and copy them in a map for easier access
+	pgParamBlockList = make(map[string]bool)
 	for _, blockedParam := range blockedPgParams {
 		pgParamBlockList[blockedParam] = true
 	}
-	ctrl.Log.Info("Got parameter map ", "map", pgParamBlockList)
 
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 

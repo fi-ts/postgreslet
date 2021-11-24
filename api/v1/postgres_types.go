@@ -665,7 +665,7 @@ func enableAuditLogs(parameters map[string]string) {
 	parameters["pgaudit.log_parameter"] = "on"
 }
 
-// setPostgresParams add the provided params to the parameter map
+// setPostgresParams add the provided params to the parameter map (but ignore params that are blocked)
 func setPostgresParams(parameters map[string]string, providedParams map[string]string, blockList map[string]bool) {
 	for k, v := range providedParams {
 		if _, isBlocked := blockList[k]; isBlocked {
