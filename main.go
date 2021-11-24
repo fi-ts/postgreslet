@@ -128,7 +128,7 @@ func main() {
 	// read the (space-separated) list of configured blocked params
 	blockedPgParams := viper.GetStringSlice(pgParamBlockListFlg)
 	// and copy them in a map for easier access
-	pgParamBlockList = make(map[string]bool)
+	pgParamBlockList = make(map[string]bool, len(blockedPgParams))
 	for _, blockedParam := range blockedPgParams {
 		pgParamBlockList[blockedParam] = true
 	}
