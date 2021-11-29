@@ -217,12 +217,13 @@ type PostgresList struct {
 
 // PostgresConnectionInfo A remote postgres instance this one is linked to, e.g. for standby purpouses.
 type PostgresConnectionInfo struct {
-	ConnectionMethod     string `json:"method,omitempty"`
+	ConnectedPostgresID  string `json:"connectedPostgresID,omitempty"`
 	ConnectionSecretName string `json:"secretName,omitempty"`
 
-	ConnectedPostgresID string `json:"connectedPostgresID,omitempty"`
-	ConnectionIP        string `json:"ip,omitempty"`
-	ConnectionPort      int32  `json:"port,omitempty"`
+	ConnectionMethod       string `json:"method,omitempty"`
+	ConnectionIP           string `json:"ip,omitempty"`
+	ConnectionPort         int32  `json:"port,omitempty"`
+	SynchronousReplication bool   `json:"synchronous,omitempty"`
 }
 
 var SvcLoadBalancerLabel = map[string]string{

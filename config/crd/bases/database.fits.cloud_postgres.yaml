@@ -87,6 +87,8 @@ spec:
                     type: integer
                   secretName:
                     type: string
+                  synchronous:
+                    type: boolean
                 type: object
               description:
                 description: Description
