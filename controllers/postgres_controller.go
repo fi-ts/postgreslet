@@ -173,7 +173,10 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		// That means we should be able to call the patroni api already. this is required, as updating the custom
 		// ressource of a standby db seems to fail (maybe because of the users/databases?)...
 		// anyway, let's get on with it
-		r.updatePatroniConfig(ctx, instance)
+		if err := r.updatePatroniConfig(ctx, instance); err != nil {
+			// TODO what to do here? reschedule or ignore?
+			log.Error(err, "failed to update patroni config via REST call")
+		}
 	}
 
 	if err := r.createOrUpdateZalandoPostgresql(ctx, instance, log); err != nil {
@@ -676,16 +679,17 @@ func (r *PostgresReconciler) updatePatroniConfig(ctx context.Context, instance *
 	httpClient := &http.Client{}
 	url := "http://" + podIP + ":" + podPort + "/" + path
 
-	req, err := http.NewRequest(http.MethodPatch, url, bytes.NewBuffer(jsonReq))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPatch, url, bytes.NewBuffer(jsonReq))
 	if err != nil {
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	_, err = httpClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return err
 	}
+	defer resp.Body.Close()
 
 	return nil
 }
