@@ -80,6 +80,10 @@ spec:
                     type: string
                   ip:
                     type: string
+                  isReplicationPrimary:
+                    description: IsPostgresReplicationPrimary determines if this is
+                      the leader or the standby side
+                    type: boolean
                   method:
                     type: string
                   port:
@@ -93,10 +97,6 @@ spec:
               description:
                 description: Description
                 type: string
-              isReplicationPrimary:
-                description: IsPostgresReplicationPrimary determines if this is the
-                  leader or the standby side
-                type: boolean
               maintenance:
                 description: 'todo: add default Maintenance defines automatic maintenance
                   of the database'

@@ -147,11 +147,6 @@ func (in *PostgresSpec) DeepCopyInto(out *PostgresSpec) {
 		*out = new(AccessList)
 		(*in).DeepCopyInto(*out)
 	}
-	if in.IsPostgresReplicationPrimary != nil {
-		in, out := &in.IsPostgresReplicationPrimary, &out.IsPostgresReplicationPrimary
-		*out = new(bool)
-		**out = **in
-	}
 	if in.PostgresConnectionInfo != nil {
 		in, out := &in.PostgresConnectionInfo, &out.PostgresConnectionInfo
 		*out = new(PostgresConnectionInfo)

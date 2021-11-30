@@ -154,9 +154,6 @@ type PostgresSpec struct {
 	// BackupSecretRef reference to the secret where the backup credentials are stored
 	BackupSecretRef string `json:"backupSecretRef,omitempty"`
 
-	// IsPostgresReplicationPrimary determines if this is the leader or the standby side
-	IsPostgresReplicationPrimary *bool `json:"isReplicationPrimary,omitempty"`
-
 	// PostgresConnectionInfo Connection info of a streaming host, independant of the current role (leader or standby)
 	PostgresConnectionInfo *PostgresConnectionInfo `json:"connectionInfo,omitempty"`
 
@@ -224,6 +221,9 @@ type PostgresConnectionInfo struct {
 	ConnectionIP           string `json:"ip,omitempty"`
 	ConnectionPort         int32  `json:"port,omitempty"`
 	SynchronousReplication bool   `json:"synchronous,omitempty"`
+
+	// IsPostgresReplicationPrimary determines if this is the leader or the standby side
+	IsPostgresReplicationPrimary bool `json:"isReplicationPrimary,omitempty"`
 }
 
 var SvcLoadBalancerLabel = map[string]string{
@@ -539,7 +539,7 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 	}
 
 	// Enable replication (using unstructured json)
-	if p.Spec.IsPostgresReplicationPrimary == nil || *p.Spec.IsPostgresReplicationPrimary {
+	if p.IsPrimaryLeader() {
 		// delete field
 		z.Spec.StandbyCluster = nil
 	} else {
@@ -691,7 +691,7 @@ func setSharedBufferSize(parameters map[string]string, shmSize string) {
 }
 
 func (p *Postgres) IsPrimaryLeader() bool {
-	if p.Spec.IsPostgresReplicationPrimary == nil || *p.Spec.IsPostgresReplicationPrimary {
+	if p.Spec.PostgresConnectionInfo == nil || p.Spec.PostgresConnectionInfo.IsPostgresReplicationPrimary {
 		// nothing is configured, or we are the leader. nothing to do.
 		return true
 	}

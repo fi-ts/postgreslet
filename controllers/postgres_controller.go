@@ -166,7 +166,7 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, fmt.Errorf("error while creating standby secrets: %w", err)
 	}
 
-	if instance.Spec.IsPostgresReplicationPrimary != nil && *instance.Spec.IsPostgresReplicationPrimary {
+	if instance.IsPrimaryLeader() {
 		// the field is not empty, which means we were either a regular, standalone database that was promoted to leader
 		//  (meaning we are already running) or we are a standby which was promoted to leader (also meaning we are
 		// already running)
