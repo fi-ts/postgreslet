@@ -447,67 +447,68 @@ func (r *PostgresReconciler) createOrUpdateCWNP(ctx context.Context, in *pg.Post
 	}
 	r.Log.WithValues("postgres", in.ToKey()).Info("clusterwidenetworkpolicy created or updated")
 
+	if in.Spec.PostgresConnectionInfo == nil {
+		return nil
+	}
+
 	// Create CWNP if standby is configured (independant of the current role)
-	if in.Spec.PostgresConnectionInfo != nil {
-		standbyIngressCWNPName := in.ToPeripheralResourceName() + "-standby-ingress"
-		standbyIngressCWNP := &firewall.ClusterwideNetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: standbyIngressCWNPName, Namespace: policy.Namespace}}
+	standbyIngressCWNPName := in.ToPeripheralResourceName() + "-standby-ingress"
+	standbyIngressCWNP := &firewall.ClusterwideNetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: standbyIngressCWNPName, Namespace: policy.Namespace}}
 
-		//
-		// Create ingress rule from pre-configured CIDR to this DBs port
-		//
-		standbyClusterIPBlocks := []networkingv1.IPBlock{}
-		// TODO: Take source range from config, not this IP!!! And remove that hacky /32 CIDR!
-		remoteServiceClusterCIDR, err := netaddr.ParseIPPrefix(in.Spec.PostgresConnectionInfo.ConnectionIP + "/32")
-		if err != nil {
-			return fmt.Errorf("unable to parse standby host ip %s: %w", in.Spec.PostgresConnectionInfo.ConnectionIP, err)
-		}
-		standbyClusterIPs := networkingv1.IPBlock{
-			CIDR: remoteServiceClusterCIDR.String(),
-		}
-		standbyClusterIPBlocks = append(standbyClusterIPBlocks, standbyClusterIPs)
+	//
+	// Create ingress rule from pre-configured CIDR to this DBs port
+	//
+	standbyClusterIPBlocks := []networkingv1.IPBlock{}
+	// TODO: Take source range from config, not this IP!!! And remove that hacky /32 CIDR!
+	remoteServiceClusterCIDR, err := netaddr.ParseIPPrefix(in.Spec.PostgresConnectionInfo.ConnectionIP + "/32")
+	if err != nil {
+		return fmt.Errorf("unable to parse standby host ip %s: %w", in.Spec.PostgresConnectionInfo.ConnectionIP, err)
+	}
+	standbyClusterIPs := networkingv1.IPBlock{
+		CIDR: remoteServiceClusterCIDR.String(),
+	}
+	standbyClusterIPBlocks = append(standbyClusterIPBlocks, standbyClusterIPs)
 
-		// Add Port to CWNP (if known)
-		tcp := corev1.ProtocolTCP
-		ingressTargetPorts := []networkingv1.NetworkPolicyPort{}
-		if in.Status.Socket.Port != 0 {
-			portObj := intstr.FromInt(int(in.Status.Socket.Port))
-			ingressTargetPorts = append(ingressTargetPorts, networkingv1.NetworkPolicyPort{Port: &portObj, Protocol: &tcp})
-		}
-		standbyIngressCWNP.Spec.Ingress = []firewall.IngressRule{
-			{Ports: ingressTargetPorts, From: standbyClusterIPBlocks},
-		}
+	// Add Port to CWNP (if known)
+	tcp := corev1.ProtocolTCP
+	ingressTargetPorts := []networkingv1.NetworkPolicyPort{}
+	if in.Status.Socket.Port != 0 {
+		portObj := intstr.FromInt(int(in.Status.Socket.Port))
+		ingressTargetPorts = append(ingressTargetPorts, networkingv1.NetworkPolicyPort{Port: &portObj, Protocol: &tcp})
+	}
+	standbyIngressCWNP.Spec.Ingress = []firewall.IngressRule{
+		{Ports: ingressTargetPorts, From: standbyClusterIPBlocks},
+	}
 
-		key2 := &firewall.ClusterwideNetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: standbyIngressCWNPName, Namespace: policy.Namespace}}
-		if _, err := controllerutil.CreateOrUpdate(ctx, r.SvcClient, standbyIngressCWNP, func() error {
-			key2.Spec.Ingress = standbyIngressCWNP.Spec.Ingress
-			return nil
-		}); err != nil {
-			return fmt.Errorf("unable to deploy standby ingress ClusterwideNetworkPolicy: %w", err)
-		}
+	key2 := &firewall.ClusterwideNetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: standbyIngressCWNPName, Namespace: policy.Namespace}}
+	if _, err := controllerutil.CreateOrUpdate(ctx, r.SvcClient, standbyIngressCWNP, func() error {
+		key2.Spec.Ingress = standbyIngressCWNP.Spec.Ingress
+		return nil
+	}); err != nil {
+		return fmt.Errorf("unable to deploy standby ingress ClusterwideNetworkPolicy: %w", err)
+	}
 
-		//
-		// Create egress rule to StandbyCluster CIDR and ConnectionPort
-		//
-		standbyEgressCWNPName := in.ToPeripheralResourceName() + "-standby-egress"
-		standbyEgressCWNP := &firewall.ClusterwideNetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: standbyEgressCWNPName, Namespace: policy.Namespace}}
-		// Add Port to CWNP
-		egressTargetPorts := []networkingv1.NetworkPolicyPort{}
-		if in.Spec.PostgresConnectionInfo.ConnectionPort != 0 {
-			portObj := intstr.FromInt(int(in.Spec.PostgresConnectionInfo.ConnectionPort))
-			egressTargetPorts = append(egressTargetPorts, networkingv1.NetworkPolicyPort{Port: &portObj, Protocol: &tcp})
-		}
-		standbyEgressCWNP.Spec.Egress = []firewall.EgressRule{
-			{Ports: egressTargetPorts, To: standbyClusterIPBlocks},
-		}
+	//
+	// Create egress rule to StandbyCluster CIDR and ConnectionPort
+	//
+	standbyEgressCWNPName := in.ToPeripheralResourceName() + "-standby-egress"
+	standbyEgressCWNP := &firewall.ClusterwideNetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: standbyEgressCWNPName, Namespace: policy.Namespace}}
+	// Add Port to CWNP
+	egressTargetPorts := []networkingv1.NetworkPolicyPort{}
+	if in.Spec.PostgresConnectionInfo.ConnectionPort != 0 {
+		portObj := intstr.FromInt(int(in.Spec.PostgresConnectionInfo.ConnectionPort))
+		egressTargetPorts = append(egressTargetPorts, networkingv1.NetworkPolicyPort{Port: &portObj, Protocol: &tcp})
+	}
+	standbyEgressCWNP.Spec.Egress = []firewall.EgressRule{
+		{Ports: egressTargetPorts, To: standbyClusterIPBlocks},
+	}
 
-		key3 := &firewall.ClusterwideNetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: standbyEgressCWNPName, Namespace: policy.Namespace}}
-		if _, err := controllerutil.CreateOrUpdate(ctx, r.SvcClient, standbyEgressCWNP, func() error {
-			key3.Spec.Egress = standbyEgressCWNP.Spec.Egress
-			return nil
-		}); err != nil {
-			return fmt.Errorf("unable to deploy standby egress ClusterwideNetworkPolicy: %w", err)
-		}
-
+	key3 := &firewall.ClusterwideNetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: standbyEgressCWNPName, Namespace: policy.Namespace}}
+	if _, err := controllerutil.CreateOrUpdate(ctx, r.SvcClient, standbyEgressCWNP, func() error {
+		key3.Spec.Egress = standbyEgressCWNP.Spec.Egress
+		return nil
+	}); err != nil {
+		return fmt.Errorf("unable to deploy standby egress ClusterwideNetworkPolicy: %w", err)
 	}
 
 	return nil
