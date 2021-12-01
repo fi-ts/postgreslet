@@ -60,11 +60,12 @@ var operatorPodMatchingLabels = client.MatchingLabels{operatorPodLabelName: oper
 
 // Options
 type Options struct {
-	PspName       string
-	OperatorImage string
-	DockerImage   string
-	EtcdHost      string
-	CRDValidation bool
+	PspName                 string
+	OperatorImage           string
+	DockerImage             string
+	EtcdHost                string
+	CRDValidation           bool
+	MajorVersionUpgradeMode string
 }
 
 // OperatorManager manages the operator
@@ -415,6 +416,7 @@ func (m *OperatorManager) editConfigMap(cm *corev1.ConfigMap, namespace string, 
 	}
 
 	cm.Data["enable_crd_validation"] = strconv.FormatBool(options.CRDValidation)
+	cm.Data["major_version_upgrade_mode"] = options.MajorVersionUpgradeMode
 }
 
 // ensureCleanMetadata ensures obj has clean metadata

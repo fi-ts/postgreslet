@@ -35,22 +35,23 @@ import (
 
 const (
 	// envPrefix               = "pg"
-	metricsAddrSvcMgrFlg    = "metrics-addr-svc-mgr"
-	metricsAddrCtrlMgrFlg   = "metrics-addr-ctrl-mgr"
-	enableLeaderElectionFlg = "enable-leader-election"
-	partitionIDFlg          = "partition-id"
-	tenantFlg               = "tenant"
-	ctrlPlaneKubeConfifgFlg = "controlplane-kubeconfig"
-	loadBalancerIPFlg       = "load-balancer-ip"
-	portRangeStartFlg       = "port-range-start"
-	portRangeSizeFlg        = "port-range-size"
-	customPSPNameFlg        = "custom-psp-name"
-	storageClassFlg         = "storage-class"
-	postgresImageFlg        = "postgres-image"
-	etcdHostFlg             = "etcd-host"
-	crdValidationFlg        = "enable-crd-validation"
-	operatorImageFlg        = "operator-image"
-	pgParamBlockListFlg     = "postgres-param-blocklist"
+	metricsAddrSvcMgrFlg       = "metrics-addr-svc-mgr"
+	metricsAddrCtrlMgrFlg      = "metrics-addr-ctrl-mgr"
+	enableLeaderElectionFlg    = "enable-leader-election"
+	partitionIDFlg             = "partition-id"
+	tenantFlg                  = "tenant"
+	ctrlPlaneKubeConfifgFlg    = "controlplane-kubeconfig"
+	loadBalancerIPFlg          = "load-balancer-ip"
+	portRangeStartFlg          = "port-range-start"
+	portRangeSizeFlg           = "port-range-size"
+	customPSPNameFlg           = "custom-psp-name"
+	storageClassFlg            = "storage-class"
+	postgresImageFlg           = "postgres-image"
+	etcdHostFlg                = "etcd-host"
+	crdValidationFlg           = "enable-crd-validation"
+	operatorImageFlg           = "operator-image"
+	pgParamBlockListFlg        = "postgres-param-blocklist"
+	majorVersionUpgradeModeFlg = "major-version-upgrade-mode"
 )
 
 var (
@@ -69,7 +70,7 @@ func init() {
 }
 
 func main() {
-	var metricsAddrCtrlMgr, metricsAddrSvcMgr, partitionID, tenant, ctrlClusterKubeconfig, pspName, lbIP, storageClass, postgresImage, etcdHost, operatorImage string
+	var metricsAddrCtrlMgr, metricsAddrSvcMgr, partitionID, tenant, ctrlClusterKubeconfig, pspName, lbIP, storageClass, postgresImage, etcdHost, operatorImage, majorVersionUpgradeMode string
 	var enableLeaderElection, enableCRDValidation bool
 	var portRangeStart, portRangeSize int
 	var pgParamBlockList map[string]bool
@@ -133,6 +134,9 @@ func main() {
 		pgParamBlockList[blockedParam] = true
 	}
 
+	viper.SetDefault(majorVersionUpgradeModeFlg, "manual")
+	majorVersionUpgradeMode = viper.GetString(majorVersionUpgradeModeFlg)
+
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 
 	ctrl.Log.Info("flag",
@@ -152,6 +156,7 @@ func main() {
 		etcdHostFlg, etcdHost,
 		crdValidationFlg, enableCRDValidation,
 		pgParamBlockListFlg, pgParamBlockList,
+		majorVersionUpgradeModeFlg, majorVersionUpgradeMode,
 	)
 
 	svcClusterConf := ctrl.GetConfigOrDie()
@@ -185,11 +190,12 @@ func main() {
 	}
 
 	var opMgrOpts operatormanager.Options = operatormanager.Options{
-		PspName:       pspName,
-		OperatorImage: operatorImage,
-		DockerImage:   postgresImage,
-		EtcdHost:      etcdHost,
-		CRDValidation: enableCRDValidation,
+		PspName:                 pspName,
+		OperatorImage:           operatorImage,
+		DockerImage:             postgresImage,
+		EtcdHost:                etcdHost,
+		CRDValidation:           enableCRDValidation,
+		MajorVersionUpgradeMode: majorVersionUpgradeMode,
 	}
 	opMgr, err := operatormanager.New(svcClusterConf, "external/svc-postgres-operator.yaml", scheme, ctrl.Log.WithName("OperatorManager"), opMgrOpts)
 	if err != nil {

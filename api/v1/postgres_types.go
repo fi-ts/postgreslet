@@ -700,7 +700,8 @@ func (p *Postgres) IsPrimaryLeader() bool {
 
 // enableAuditLogs configures this postgres instances audit logging
 func enableAuditLogs(parameters map[string]string) {
-	parameters["shared_preload_libraries"] = "pgaudit"
+	// default values: bg_mon,pg_stat_statements,pgextwlist,pg_auth_mon,set_user,timescaledb,pg_cron,pg_stat_kcache
+	parameters["shared_preload_libraries"] = "bg_mon,pg_stat_statements,pgextwlist,pg_auth_mon,set_user,timescaledb,pg_cron,pg_stat_kcache,pgaudit"
 	parameters["pgaudit.log_catalog"] = "off"
 	parameters["pgaudit.log"] = "ddl"
 	parameters["pgaudit.log_relation"] = "on"
