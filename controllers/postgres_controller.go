@@ -665,7 +665,7 @@ func (r *PostgresReconciler) updatePatroniConfig(ctx context.Context, instance *
 		}
 		if instance.Spec.PostgresConnectionInfo.SynchronousReplication {
 			// enable sync replication
-			request.SynchronousNodesAdditional = pointer.String(instance.ToPeripheralResourceName())
+			request.SynchronousNodesAdditional = pointer.String(instance.Spec.PostgresConnectionInfo.ConnectedPostgresID)
 		} else {
 			// disable sync replication
 			request.SynchronousNodesAdditional = nil
@@ -677,7 +677,7 @@ func (r *PostgresReconciler) updatePatroniConfig(ctx context.Context, instance *
 				CreateReplicaMethods: []string{"basebackup_fast_xlog"},
 				Host:                 instance.Spec.PostgresConnectionInfo.ConnectionIP,
 				Port:                 int(instance.Spec.PostgresConnectionInfo.ConnectionPort),
-				ApplicationName:      instance.ToPeripheralResourceName(),
+				ApplicationName:      instance.ObjectMeta.Name,
 			},
 			SynchronousNodesAdditional: nil,
 		}
