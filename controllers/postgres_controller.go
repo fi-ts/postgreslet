@@ -54,8 +54,9 @@ type PostgresReconciler struct {
 	PartitionID, Tenant, StorageClass string
 	*operatormanager.OperatorManager
 	*lbmanager.LBManager
-	recorder         record.EventRecorder
-	PgParamBlockList map[string]bool
+	recorder                    record.EventRecorder
+	PgParamBlockList            map[string]bool
+	StandbyClustersSourceRanges []string
 }
 
 // Reconcile is the entry point for postgres reconciliation.
@@ -459,16 +460,17 @@ func (r *PostgresReconciler) createOrUpdateCWNP(ctx context.Context, in *pg.Post
 	//
 	// Create ingress rule from pre-configured CIDR to this DBs port
 	//
-	standbyClusterIPBlocks := []networkingv1.IPBlock{}
-	// TODO: Take source range from config, not this IP!!! And remove that hacky /32 CIDR!
-	remoteServiceClusterCIDR, err := netaddr.ParseIPPrefix(in.Spec.PostgresConnectionInfo.ConnectionIP + "/32")
-	if err != nil {
-		return fmt.Errorf("unable to parse standby host ip %s: %w", in.Spec.PostgresConnectionInfo.ConnectionIP, err)
+	standbyClusterIngressIPBlocks := []networkingv1.IPBlock{}
+	for _, cidr := range r.StandbyClustersSourceRanges {
+		remoteServiceClusterCIDR, err := netaddr.ParseIPPrefix(cidr)
+		if err != nil {
+			return fmt.Errorf("unable to parse standby host ip %s: %w", in.Spec.PostgresConnectionInfo.ConnectionIP, err)
+		}
+		standbyClusterIPs := networkingv1.IPBlock{
+			CIDR: remoteServiceClusterCIDR.String(),
+		}
+		standbyClusterIngressIPBlocks = append(standbyClusterIngressIPBlocks, standbyClusterIPs)
 	}
-	standbyClusterIPs := networkingv1.IPBlock{
-		CIDR: remoteServiceClusterCIDR.String(),
-	}
-	standbyClusterIPBlocks = append(standbyClusterIPBlocks, standbyClusterIPs)
 
 	// Add Port to CWNP (if known)
 	tcp := corev1.ProtocolTCP
@@ -478,7 +480,7 @@ func (r *PostgresReconciler) createOrUpdateCWNP(ctx context.Context, in *pg.Post
 		ingressTargetPorts = append(ingressTargetPorts, networkingv1.NetworkPolicyPort{Port: &portObj, Protocol: &tcp})
 	}
 	standbyIngressCWNP.Spec.Ingress = []firewall.IngressRule{
-		{Ports: ingressTargetPorts, From: standbyClusterIPBlocks},
+		{Ports: ingressTargetPorts, From: standbyClusterIngressIPBlocks},
 	}
 
 	key2 := &firewall.ClusterwideNetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: standbyIngressCWNPName, Namespace: policy.Namespace}}
@@ -492,6 +494,18 @@ func (r *PostgresReconciler) createOrUpdateCWNP(ctx context.Context, in *pg.Post
 	//
 	// Create egress rule to StandbyCluster CIDR and ConnectionPort
 	//
+	standbyClusterEgressIPBlocks := []networkingv1.IPBlock{}
+	if in.Spec.PostgresConnectionInfo.ConnectionIP != "" {
+		remoteServiceClusterCIDR, err := netaddr.ParseIPPrefix(in.Spec.PostgresConnectionInfo.ConnectionIP + "/32")
+		if err != nil {
+			return fmt.Errorf("unable to parse standby host ip %s: %w", in.Spec.PostgresConnectionInfo.ConnectionIP, err)
+		}
+		standbyClusterIPs := networkingv1.IPBlock{
+			CIDR: remoteServiceClusterCIDR.String(),
+		}
+		standbyClusterEgressIPBlocks = append(standbyClusterEgressIPBlocks, standbyClusterIPs)
+	}
+
 	standbyEgressCWNPName := in.ToPeripheralResourceName() + "-standby-egress"
 	standbyEgressCWNP := &firewall.ClusterwideNetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: standbyEgressCWNPName, Namespace: policy.Namespace}}
 	// Add Port to CWNP
@@ -501,7 +515,7 @@ func (r *PostgresReconciler) createOrUpdateCWNP(ctx context.Context, in *pg.Post
 		egressTargetPorts = append(egressTargetPorts, networkingv1.NetworkPolicyPort{Port: &portObj, Protocol: &tcp})
 	}
 	standbyEgressCWNP.Spec.Egress = []firewall.EgressRule{
-		{Ports: egressTargetPorts, To: standbyClusterIPBlocks},
+		{Ports: egressTargetPorts, To: standbyClusterEgressIPBlocks},
 	}
 
 	key3 := &firewall.ClusterwideNetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: standbyEgressCWNPName, Namespace: policy.Namespace}}

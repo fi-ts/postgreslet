@@ -35,23 +35,24 @@ import (
 
 const (
 	// envPrefix               = "pg"
-	metricsAddrSvcMgrFlg       = "metrics-addr-svc-mgr"
-	metricsAddrCtrlMgrFlg      = "metrics-addr-ctrl-mgr"
-	enableLeaderElectionFlg    = "enable-leader-election"
-	partitionIDFlg             = "partition-id"
-	tenantFlg                  = "tenant"
-	ctrlPlaneKubeConfifgFlg    = "controlplane-kubeconfig"
-	loadBalancerIPFlg          = "load-balancer-ip"
-	portRangeStartFlg          = "port-range-start"
-	portRangeSizeFlg           = "port-range-size"
-	customPSPNameFlg           = "custom-psp-name"
-	storageClassFlg            = "storage-class"
-	postgresImageFlg           = "postgres-image"
-	etcdHostFlg                = "etcd-host"
-	crdValidationFlg           = "enable-crd-validation"
-	operatorImageFlg           = "operator-image"
-	pgParamBlockListFlg        = "postgres-param-blocklist"
-	majorVersionUpgradeModeFlg = "major-version-upgrade-mode"
+	metricsAddrSvcMgrFlg           = "metrics-addr-svc-mgr"
+	metricsAddrCtrlMgrFlg          = "metrics-addr-ctrl-mgr"
+	enableLeaderElectionFlg        = "enable-leader-election"
+	partitionIDFlg                 = "partition-id"
+	tenantFlg                      = "tenant"
+	ctrlPlaneKubeConfifgFlg        = "controlplane-kubeconfig"
+	loadBalancerIPFlg              = "load-balancer-ip"
+	portRangeStartFlg              = "port-range-start"
+	portRangeSizeFlg               = "port-range-size"
+	customPSPNameFlg               = "custom-psp-name"
+	storageClassFlg                = "storage-class"
+	postgresImageFlg               = "postgres-image"
+	etcdHostFlg                    = "etcd-host"
+	crdValidationFlg               = "enable-crd-validation"
+	operatorImageFlg               = "operator-image"
+	pgParamBlockListFlg            = "postgres-param-blocklist"
+	majorVersionUpgradeModeFlg     = "major-version-upgrade-mode"
+	standbyClustersSourceRangesFlg = "standby-clusters-source-ranges"
 )
 
 var (
@@ -74,6 +75,7 @@ func main() {
 	var enableLeaderElection, enableCRDValidation bool
 	var portRangeStart, portRangeSize int
 	var pgParamBlockList map[string]bool
+	var standbyClusterSourceRanges []string
 
 	// TODO enable Prefix and update helm chart
 	// viper.SetEnvPrefix(envPrefix)
@@ -137,6 +139,10 @@ func main() {
 	viper.SetDefault(majorVersionUpgradeModeFlg, "manual")
 	majorVersionUpgradeMode = viper.GetString(majorVersionUpgradeModeFlg)
 
+	// read the (space-separated) list of configured blocked params
+	viper.SetDefault(standbyClustersSourceRangesFlg, "255.255.255.255/32")
+	standbyClusterSourceRanges = viper.GetStringSlice(standbyClustersSourceRangesFlg)
+
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 
 	ctrl.Log.Info("flag",
@@ -157,6 +163,7 @@ func main() {
 		crdValidationFlg, enableCRDValidation,
 		pgParamBlockListFlg, pgParamBlockList,
 		majorVersionUpgradeModeFlg, majorVersionUpgradeMode,
+		standbyClustersSourceRangesFlg, standbyClusterSourceRanges,
 	)
 
 	svcClusterConf := ctrl.GetConfigOrDie()
@@ -209,16 +216,17 @@ func main() {
 		PortRangeSize:  int32(portRangeSize),
 	}
 	if err = (&controllers.PostgresReconciler{
-		CtrlClient:       ctrlPlaneClusterMgr.GetClient(),
-		SvcClient:        svcClusterMgr.GetClient(),
-		Log:              ctrl.Log.WithName("controllers").WithName("Postgres"),
-		Scheme:           ctrlPlaneClusterMgr.GetScheme(),
-		PartitionID:      partitionID,
-		Tenant:           tenant,
-		StorageClass:     storageClass,
-		OperatorManager:  opMgr,
-		LBManager:        lbmanager.New(svcClusterMgr.GetClient(), lbMgrOpts),
-		PgParamBlockList: pgParamBlockList,
+		CtrlClient:                  ctrlPlaneClusterMgr.GetClient(),
+		SvcClient:                   svcClusterMgr.GetClient(),
+		Log:                         ctrl.Log.WithName("controllers").WithName("Postgres"),
+		Scheme:                      ctrlPlaneClusterMgr.GetScheme(),
+		PartitionID:                 partitionID,
+		Tenant:                      tenant,
+		StorageClass:                storageClass,
+		OperatorManager:             opMgr,
+		LBManager:                   lbmanager.New(svcClusterMgr.GetClient(), lbMgrOpts),
+		PgParamBlockList:            pgParamBlockList,
+		StandbyClustersSourceRanges: standbyClusterSourceRanges,
 	}).SetupWithManager(ctrlPlaneClusterMgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Postgres")
 		os.Exit(1)
