@@ -22,6 +22,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/utils/pointer"
 
 	firewall "github.com/metal-stack/firewall-controller/api/v1"
 	networkingv1 "k8s.io/api/networking/v1"
@@ -653,7 +654,7 @@ func (r *PostgresReconciler) updatePatroniConfig(ctx context.Context, instance *
 	}
 	type PatroniConfigRequest struct {
 		StandbyCluster             *PatroniStandbyCluster `json:"standby_cluster"`
-		SynchronousNodesAdditional string                 `json:"synchronous_nodes_additional"`
+		SynchronousNodesAdditional *string                `json:"synchronous_nodes_additional"`
 	}
 
 	r.Log.Info("Preparing request")
@@ -664,10 +665,10 @@ func (r *PostgresReconciler) updatePatroniConfig(ctx context.Context, instance *
 		}
 		if instance.Spec.PostgresConnectionInfo.SynchronousReplication {
 			// enable sync replication
-			request.SynchronousNodesAdditional = instance.ToPeripheralResourceName()
+			request.SynchronousNodesAdditional = pointer.String(instance.ToPeripheralResourceName())
 		} else {
 			// disable sync replication
-			request.SynchronousNodesAdditional = ""
+			request.SynchronousNodesAdditional = nil
 		}
 	} else {
 		// TODO check values first
@@ -678,6 +679,7 @@ func (r *PostgresReconciler) updatePatroniConfig(ctx context.Context, instance *
 				Port:                 int(instance.Spec.PostgresConnectionInfo.ConnectionPort),
 				ApplicationName:      instance.ToPeripheralResourceName(),
 			},
+			SynchronousNodesAdditional: nil,
 		}
 	}
 	r.Log.Info("Prepared request", "request", request)
