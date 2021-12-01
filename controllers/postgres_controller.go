@@ -550,7 +550,10 @@ func (r *PostgresReconciler) ensureStandbySecrets(ctx context.Context, instance 
 		return nil
 	}
 
-	//  TODO check if instance.Spec.PostgresConnectionInfo.ConnectionSecretName is defined
+	//  Check if instance.Spec.PostgresConnectionInfo.ConnectionSecretName is defined
+	if instance.Spec.PostgresConnectionInfo.ConnectionSecretName == "" {
+		return goerrors.New("connectionInfo.secretName not configured")
+	}
 
 	// Check if secrets exist local in SERVICE Cluster
 	localStandbySecretName := "standby." + instance.ToPeripheralResourceName() + ".credentials"
