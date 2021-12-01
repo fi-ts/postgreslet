@@ -557,49 +557,51 @@ func (r *PostgresReconciler) ensureStandbySecrets(ctx context.Context, instance 
 	localSecretNamespace := instance.ToPeripheralResourceNamespace()
 	localStandbySecret := &corev1.Secret{}
 	r.Log.Info("checking for local standby secret", "namespace", localSecretNamespace, "name", localStandbySecretName)
-	if err := r.SvcClient.Get(ctx, types.NamespacedName{Namespace: localSecretNamespace, Name: localStandbySecretName}, localStandbySecret); err != nil {
-		// we got an error other than not found, so we cannot continue!
-		if !errors.IsNotFound(err) {
-			return fmt.Errorf("error while fetching local stadnby secret from service cluster: %w", err)
-		}
+	err := r.SvcClient.Get(ctx, types.NamespacedName{Namespace: localSecretNamespace, Name: localStandbySecretName}, localStandbySecret)
 
-		r.Log.Info("no local standby secret found, continuing to create one")
-
-		// Check if secrets exist in remote CONTROL Cluster
-		remoteSecretName := instance.Spec.PostgresConnectionInfo.ConnectionSecretName
-		remoteSecretNamespace := instance.ObjectMeta.Namespace
-		remoteSecret := &corev1.Secret{}
-		r.Log.Info("fetching remote standby secret", "namespace", remoteSecretNamespace, "name", remoteSecretName)
-		if err := r.CtrlClient.Get(ctx, types.NamespacedName{Namespace: remoteSecretNamespace, Name: remoteSecretName}, remoteSecret); err != nil {
-			// we cannot read the secret given in the configuration, so we cannot continue!
-			return fmt.Errorf("error while fetching remote standby secret from control plane: %w", err)
-		}
-
-		// copy ALL secrets...
-		for username := range remoteSecret.Data {
-			r.Log.Info("creating local secret", "username", username)
-
-			currentSecretName := strings.ReplaceAll(username, "_", "-") + "." + instance.ToPeripheralResourceName() + ".credentials"
-			postgresSecret := &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      currentSecretName,
-					Namespace: localSecretNamespace,
-					Labels:    map[string]string(instance.ToZalandoPostgresqlMatchingLabels()),
-				},
-				Data: map[string][]byte{
-					"username": []byte(username),
-					"password": remoteSecret.Data[username],
-				},
-			}
-
-			if err := r.SvcClient.Create(ctx, postgresSecret); err != nil {
-				return fmt.Errorf("error while creating local secrets in service cluster: %w", err)
-			}
-			r.Log.Info("created local secret", "secret", postgresSecret)
-		}
-
-	} else {
+	if err == nil {
 		r.Log.Info("local standby secret found, no action needed")
+		return nil
+	}
+
+	// we got an error other than not found, so we cannot continue!
+	if !errors.IsNotFound(err) {
+		return fmt.Errorf("error while fetching local stadnby secret from service cluster: %w", err)
+	}
+
+	r.Log.Info("no local standby secret found, continuing to create one")
+
+	// Check if secrets exist in remote CONTROL Cluster
+	remoteSecretName := instance.Spec.PostgresConnectionInfo.ConnectionSecretName
+	remoteSecretNamespace := instance.ObjectMeta.Namespace
+	remoteSecret := &corev1.Secret{}
+	r.Log.Info("fetching remote standby secret", "namespace", remoteSecretNamespace, "name", remoteSecretName)
+	if err := r.CtrlClient.Get(ctx, types.NamespacedName{Namespace: remoteSecretNamespace, Name: remoteSecretName}, remoteSecret); err != nil {
+		// we cannot read the secret given in the configuration, so we cannot continue!
+		return fmt.Errorf("error while fetching remote standby secret from control plane: %w", err)
+	}
+
+	// copy ALL secrets...
+	for username := range remoteSecret.Data {
+		r.Log.Info("creating local secret", "username", username)
+
+		currentSecretName := strings.ReplaceAll(username, "_", "-") + "." + instance.ToPeripheralResourceName() + ".credentials"
+		postgresSecret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      currentSecretName,
+				Namespace: localSecretNamespace,
+				Labels:    map[string]string(instance.ToZalandoPostgresqlMatchingLabels()),
+			},
+			Data: map[string][]byte{
+				"username": []byte(username),
+				"password": remoteSecret.Data[username],
+			},
+		}
+
+		if err := r.SvcClient.Create(ctx, postgresSecret); err != nil {
+			return fmt.Errorf("error while creating local secrets in service cluster: %w", err)
+		}
+		r.Log.Info("created local secret", "secret", postgresSecret)
 	}
 
 	return nil
