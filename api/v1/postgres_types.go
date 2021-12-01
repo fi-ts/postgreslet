@@ -718,3 +718,73 @@ func setPostgresParams(parameters map[string]string, providedParams map[string]s
 		parameters[k] = v
 	}
 }
+
+func (p *Postgres) ToStandbyClusterIngresCWNPName() string {
+	return p.ToPeripheralResourceName() + "-standby-ingress"
+}
+func (p *Postgres) ToStandbyClusterEgresCWNPName() string {
+	return p.ToPeripheralResourceName() + "-standby-egress"
+}
+
+func (p *Postgres) ToStandbyClusterIngressCWNP(sourceCIDRs []string) (*firewall.ClusterwideNetworkPolicy, error) {
+
+	standbyIngressCWNPName := p.ToStandbyClusterIngresCWNPName()
+	standbyIngressCWNP := &firewall.ClusterwideNetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: standbyIngressCWNPName, Namespace: firewall.ClusterwideNetworkPolicyNamespace}}
+
+	//
+	// Create ingress rule from pre-configured CIDR to this DBs port
+	//
+	standbyClusterIngressIPBlocks := []networkingv1.IPBlock{}
+	for _, cidr := range sourceCIDRs {
+		remoteServiceClusterCIDR, err := netaddr.ParseIPPrefix(cidr)
+		if err != nil {
+			return nil, fmt.Errorf("unable to parse standby host ip %s: %w", p.Spec.PostgresConnectionInfo.ConnectionIP, err)
+		}
+		standbyClusterIPs := networkingv1.IPBlock{
+			CIDR: remoteServiceClusterCIDR.String(),
+		}
+		standbyClusterIngressIPBlocks = append(standbyClusterIngressIPBlocks, standbyClusterIPs)
+	}
+
+	// Add Port to CWNP (if known)
+	tcp := corev1.ProtocolTCP
+	ingressTargetPorts := []networkingv1.NetworkPolicyPort{}
+	if p.Status.Socket.Port != 0 {
+		portObj := intstr.FromInt(int(p.Status.Socket.Port))
+		ingressTargetPorts = append(ingressTargetPorts, networkingv1.NetworkPolicyPort{Port: &portObj, Protocol: &tcp})
+	}
+	standbyIngressCWNP.Spec.Ingress = []firewall.IngressRule{
+		{Ports: ingressTargetPorts, From: standbyClusterIngressIPBlocks},
+	}
+
+	return standbyIngressCWNP, nil
+}
+
+func (p *Postgres) ToStandbyClusterEgressCWNP() (*firewall.ClusterwideNetworkPolicy, error) {
+	standbyClusterEgressIPBlocks := []networkingv1.IPBlock{}
+	if p.Spec.PostgresConnectionInfo.ConnectionIP != "" {
+		remoteServiceClusterCIDR, err := netaddr.ParseIPPrefix(p.Spec.PostgresConnectionInfo.ConnectionIP + "/32")
+		if err != nil {
+			return nil, fmt.Errorf("unable to parse standby host ip %s: %w", p.Spec.PostgresConnectionInfo.ConnectionIP, err)
+		}
+		standbyClusterIPs := networkingv1.IPBlock{
+			CIDR: remoteServiceClusterCIDR.String(),
+		}
+		standbyClusterEgressIPBlocks = append(standbyClusterEgressIPBlocks, standbyClusterIPs)
+	}
+
+	tcp := corev1.ProtocolTCP
+	standbyEgressCWNPName := p.ToStandbyClusterEgresCWNPName()
+	standbyEgressCWNP := &firewall.ClusterwideNetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: standbyEgressCWNPName, Namespace: firewall.ClusterwideNetworkPolicyNamespace}}
+	// Add Port to CWNP
+	egressTargetPorts := []networkingv1.NetworkPolicyPort{}
+	if p.Spec.PostgresConnectionInfo.ConnectionPort != 0 {
+		portObj := intstr.FromInt(int(p.Spec.PostgresConnectionInfo.ConnectionPort))
+		egressTargetPorts = append(egressTargetPorts, networkingv1.NetworkPolicyPort{Port: &portObj, Protocol: &tcp})
+	}
+	standbyEgressCWNP.Spec.Egress = []firewall.EgressRule{
+		{Ports: egressTargetPorts, To: standbyClusterEgressIPBlocks},
+	}
+
+	return standbyEgressCWNP, nil
+}

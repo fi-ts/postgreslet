@@ -18,19 +18,16 @@ import (
 
 	"github.com/go-logr/logr"
 	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
-	"inet.af/netaddr"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/utils/pointer"
 
 	firewall "github.com/metal-stack/firewall-controller/api/v1"
-	networkingv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/intstr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -450,41 +447,19 @@ func (r *PostgresReconciler) createOrUpdateCWNP(ctx context.Context, in *pg.Post
 	r.Log.WithValues("postgres", in.ToKey()).Info("clusterwidenetworkpolicy created or updated")
 
 	if in.Spec.PostgresConnectionInfo == nil {
+		// abort if there are no connected postgres instances
 		return nil
 	}
 
 	// Create CWNP if standby is configured (independant of the current role)
-	standbyIngressCWNPName := in.ToPeripheralResourceName() + "-standby-ingress"
-	standbyIngressCWNP := &firewall.ClusterwideNetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: standbyIngressCWNPName, Namespace: policy.Namespace}}
 
-	//
-	// Create ingress rule from pre-configured CIDR to this DBs port
-	//
-	standbyClusterIngressIPBlocks := []networkingv1.IPBlock{}
-	for _, cidr := range r.StandbyClustersSourceRanges {
-		remoteServiceClusterCIDR, err := netaddr.ParseIPPrefix(cidr)
-		if err != nil {
-			return fmt.Errorf("unable to parse standby host ip %s: %w", in.Spec.PostgresConnectionInfo.ConnectionIP, err)
-		}
-		standbyClusterIPs := networkingv1.IPBlock{
-			CIDR: remoteServiceClusterCIDR.String(),
-		}
-		standbyClusterIngressIPBlocks = append(standbyClusterIngressIPBlocks, standbyClusterIPs)
+	standbyIngressCWNP, err := in.ToStandbyClusterIngressCWNP(r.StandbyClustersSourceRanges)
+	if err != nil {
+		return fmt.Errorf("unable to convert instance to standby ingress ClusterwideNetworkPolicy: %w", err)
 	}
 
-	// Add Port to CWNP (if known)
-	tcp := corev1.ProtocolTCP
-	ingressTargetPorts := []networkingv1.NetworkPolicyPort{}
-	if in.Status.Socket.Port != 0 {
-		portObj := intstr.FromInt(int(in.Status.Socket.Port))
-		ingressTargetPorts = append(ingressTargetPorts, networkingv1.NetworkPolicyPort{Port: &portObj, Protocol: &tcp})
-	}
-	standbyIngressCWNP.Spec.Ingress = []firewall.IngressRule{
-		{Ports: ingressTargetPorts, From: standbyClusterIngressIPBlocks},
-	}
-
-	key2 := &firewall.ClusterwideNetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: standbyIngressCWNPName, Namespace: policy.Namespace}}
-	if _, err := controllerutil.CreateOrUpdate(ctx, r.SvcClient, standbyIngressCWNP, func() error {
+	key2 := &firewall.ClusterwideNetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: standbyIngressCWNP.Name, Namespace: policy.Namespace}}
+	if _, err := controllerutil.CreateOrUpdate(ctx, r.SvcClient, key2, func() error {
 		key2.Spec.Ingress = standbyIngressCWNP.Spec.Ingress
 		return nil
 	}); err != nil {
@@ -494,32 +469,13 @@ func (r *PostgresReconciler) createOrUpdateCWNP(ctx context.Context, in *pg.Post
 	//
 	// Create egress rule to StandbyCluster CIDR and ConnectionPort
 	//
-	standbyClusterEgressIPBlocks := []networkingv1.IPBlock{}
-	if in.Spec.PostgresConnectionInfo.ConnectionIP != "" {
-		remoteServiceClusterCIDR, err := netaddr.ParseIPPrefix(in.Spec.PostgresConnectionInfo.ConnectionIP + "/32")
-		if err != nil {
-			return fmt.Errorf("unable to parse standby host ip %s: %w", in.Spec.PostgresConnectionInfo.ConnectionIP, err)
-		}
-		standbyClusterIPs := networkingv1.IPBlock{
-			CIDR: remoteServiceClusterCIDR.String(),
-		}
-		standbyClusterEgressIPBlocks = append(standbyClusterEgressIPBlocks, standbyClusterIPs)
+	standbyEgressCWNP, err := in.ToStandbyClusterEgressCWNP()
+	if err != nil {
+		return fmt.Errorf("unable to convert instance to standby egress ClusterwideNetworkPolicy: %w", err)
 	}
 
-	standbyEgressCWNPName := in.ToPeripheralResourceName() + "-standby-egress"
-	standbyEgressCWNP := &firewall.ClusterwideNetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: standbyEgressCWNPName, Namespace: policy.Namespace}}
-	// Add Port to CWNP
-	egressTargetPorts := []networkingv1.NetworkPolicyPort{}
-	if in.Spec.PostgresConnectionInfo.ConnectionPort != 0 {
-		portObj := intstr.FromInt(int(in.Spec.PostgresConnectionInfo.ConnectionPort))
-		egressTargetPorts = append(egressTargetPorts, networkingv1.NetworkPolicyPort{Port: &portObj, Protocol: &tcp})
-	}
-	standbyEgressCWNP.Spec.Egress = []firewall.EgressRule{
-		{Ports: egressTargetPorts, To: standbyClusterEgressIPBlocks},
-	}
-
-	key3 := &firewall.ClusterwideNetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: standbyEgressCWNPName, Namespace: policy.Namespace}}
-	if _, err := controllerutil.CreateOrUpdate(ctx, r.SvcClient, standbyEgressCWNP, func() error {
+	key3 := &firewall.ClusterwideNetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: standbyEgressCWNP.Name, Namespace: policy.Namespace}}
+	if _, err := controllerutil.CreateOrUpdate(ctx, r.SvcClient, key3, func() error {
 		key3.Spec.Egress = standbyEgressCWNP.Spec.Egress
 		return nil
 	}); err != nil {
@@ -530,12 +486,27 @@ func (r *PostgresReconciler) createOrUpdateCWNP(ctx context.Context, in *pg.Post
 }
 
 func (r *PostgresReconciler) deleteCWNP(ctx context.Context, in *pg.Postgres) error {
+	stdbyIngresPolicy := &firewall.ClusterwideNetworkPolicy{}
+	stdbyIngresPolicy.Namespace = firewall.ClusterwideNetworkPolicyNamespace
+	stdbyIngresPolicy.Name = in.ToStandbyClusterIngresCWNPName()
+	if err := r.SvcClient.Delete(ctx, stdbyIngresPolicy); err != nil {
+		r.Log.Info("could not delete standby cluster ingress policy")
+	}
+
+	stdbyEgresPolicy := &firewall.ClusterwideNetworkPolicy{}
+	stdbyEgresPolicy.Namespace = firewall.ClusterwideNetworkPolicyNamespace
+	stdbyEgresPolicy.Name = in.ToStandbyClusterEgresCWNPName()
+	if err := r.SvcClient.Delete(ctx, stdbyEgresPolicy); err != nil {
+		r.Log.Info("could not delete standby cluster egress policy")
+	}
+
 	policy := &firewall.ClusterwideNetworkPolicy{}
 	policy.Namespace = firewall.ClusterwideNetworkPolicyNamespace
 	policy.Name = in.ToPeripheralResourceName()
 	if err := r.SvcClient.Delete(ctx, policy); err != nil {
 		return fmt.Errorf("unable to delete CRD ClusterwideNetworkPolicy %v: %w", policy.Name, err)
 	}
+
 	return nil
 }
 
