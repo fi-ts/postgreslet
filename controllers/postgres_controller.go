@@ -649,9 +649,11 @@ func (r *PostgresReconciler) updatePatroniConfig(ctx context.Context, instance *
 		CreateReplicaMethods []string `json:"create_replica_methods"`
 		Host                 string   `json:"host"`
 		Port                 int      `json:"port"`
+		ApplicationName      string   `json:"application_name"`
 	}
 	type PatroniConfigRequest struct {
-		StandbyCluster *PatroniStandbyCluster `json:"standby_cluster"`
+		StandbyCluster             *PatroniStandbyCluster `json:"standby_cluster"`
+		SynchronousNodesAdditional string                 `json:"synchronous_nodes_additional"`
 	}
 
 	r.Log.Info("Preparing request")
@@ -660,6 +662,13 @@ func (r *PostgresReconciler) updatePatroniConfig(ctx context.Context, instance *
 		request = PatroniConfigRequest{
 			StandbyCluster: nil,
 		}
+		if instance.Spec.PostgresConnectionInfo.SynchronousReplication {
+			// enable sync replication
+			request.SynchronousNodesAdditional = instance.ToPeripheralResourceName()
+		} else {
+			// disable sync replication
+			request.SynchronousNodesAdditional = ""
+		}
 	} else {
 		// TODO check values first
 		request = PatroniConfigRequest{
@@ -667,6 +676,7 @@ func (r *PostgresReconciler) updatePatroniConfig(ctx context.Context, instance *
 				CreateReplicaMethods: []string{"basebackup_fast_xlog"},
 				Host:                 instance.Spec.PostgresConnectionInfo.ConnectionIP,
 				Port:                 int(instance.Spec.PostgresConnectionInfo.ConnectionPort),
+				ApplicationName:      instance.ToPeripheralResourceName(),
 			},
 		}
 	}
