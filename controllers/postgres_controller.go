@@ -10,7 +10,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	goerrors "errors"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -19,12 +19,11 @@ import (
 	"github.com/go-logr/logr"
 	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/utils/pointer"
 
 	firewall "github.com/metal-stack/firewall-controller/api/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -67,7 +66,7 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	log.Info("reconciling")
 	instance := &pg.Postgres{}
 	if err := r.CtrlClient.Get(ctx, req.NamespacedName, instance); err != nil {
-		if errors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) {
 			// the instance was updated, but does not exist anymore -> do nothing, it was probably deleted
 			return ctrl.Result{}, nil
 		}
@@ -227,7 +226,7 @@ func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context
 		Namespace: "postgreslet-system",
 		Name:      "postgreslet-postgres-sidecars",
 	}
-	c := &v1.ConfigMap{}
+	c := &corev1.ConfigMap{}
 	if err := r.SvcClient.Get(ctx, cns, c); err != nil {
 		// configmap with configuration does not exists, nothing we can do here...
 		log.Info("could not fetch config for sidecars")
@@ -238,7 +237,7 @@ func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context
 	rawZ, err := r.getZalandoPostgresql(ctx, instance)
 	if err != nil {
 		// errors other than `NotFound`
-		if !errors.IsNotFound(err) {
+		if !apierrors.IsNotFound(err) {
 			return fmt.Errorf("failed to fetch zalando postgresql: %w", err)
 		}
 
@@ -312,7 +311,7 @@ func (r *PostgresReconciler) updatePodEnvironmentConfigMap(ctx context.Context, 
 	}
 
 	// fetch secret
-	backupSecret := &v1.Secret{}
+	backupSecret := &corev1.Secret{}
 	backupNamespace := types.NamespacedName{
 		Name:      p.Spec.BackupSecretRef,
 		Namespace: p.Namespace,
@@ -380,7 +379,7 @@ func (r *PostgresReconciler) updatePodEnvironmentConfigMap(ctx context.Context, 
 		"BACKUP_NUM_TO_RETAIN":             backupNumToRetain,
 	}
 
-	cm := &v1.ConfigMap{}
+	cm := &corev1.ConfigMap{}
 	ns := types.NamespacedName{
 		Name:      operatormanager.PodEnvCMName,
 		Namespace: p.ToPeripheralResourceNamespace(),
@@ -523,7 +522,7 @@ func (r *PostgresReconciler) getZalandoPostgresql(ctx context.Context, instance 
 	if len := len(items); len > 1 {
 		return nil, fmt.Errorf("error while fetching zalando postgresql: Not unique, got %d results", len)
 	} else if len < 1 {
-		return nil, errors.NewNotFound(zalando.Resource("postgresql"), "")
+		return nil, apierrors.NewNotFound(zalando.Resource("postgresql"), "")
 	}
 
 	return &items[0], nil
@@ -552,7 +551,7 @@ func (r *PostgresReconciler) ensureStandbySecrets(ctx context.Context, instance 
 
 	//  Check if instance.Spec.PostgresConnectionInfo.ConnectionSecretName is defined
 	if instance.Spec.PostgresConnection.ConnectionSecretName == "" {
-		return goerrors.New("connectionInfo.secretName not configured")
+		return errors.New("connectionInfo.secretName not configured")
 	}
 
 	// Check if secrets exist local in SERVICE Cluster
@@ -568,7 +567,7 @@ func (r *PostgresReconciler) ensureStandbySecrets(ctx context.Context, instance 
 	}
 
 	// we got an error other than not found, so we cannot continue!
-	if !errors.IsNotFound(err) {
+	if !apierrors.IsNotFound(err) {
 		return fmt.Errorf("error while fetching local stadnby secret from service cluster: %w", err)
 	}
 
@@ -630,7 +629,7 @@ func (r *PostgresReconciler) updatePatroniConfig(ctx context.Context, instance *
 	if len(pods.Items) == 0 {
 		r.Log.Info("no master pod ready, requeuing")
 		// TODO return proper error
-		return goerrors.New("no master pods found")
+		return errors.New("no master pods found")
 	}
 	podIP := pods.Items[0].Status.PodIP
 	podPort := "8008"
