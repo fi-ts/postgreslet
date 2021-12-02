@@ -57,7 +57,8 @@ const (
 	// SharedBufferParameterKey defines the key under which the shared buffer size is stored in the parameters map. Defined by the postgres-operator/patroni
 	SharedBufferParameterKey = "shared_buffers"
 	// StandbyKey defines the key under which the standby configuration is stored in the CR.  Defined by the postgres-operator/patroni
-	StandbyKey = "standby"
+	StandbyKey    = "standby"
+	StandbyMethod = "streaming_host"
 
 	teamIDPrefix = "pg"
 )
@@ -154,8 +155,8 @@ type PostgresSpec struct {
 	// BackupSecretRef reference to the secret where the backup credentials are stored
 	BackupSecretRef string `json:"backupSecretRef,omitempty"`
 
-	// PostgresConnectionInfo Connection info of a streaming host, independant of the current role (leader or standby)
-	PostgresConnectionInfo *PostgresConnectionInfo `json:"connectionInfo,omitempty"`
+	// PostgresConnection Connection info of a streaming host, independant of the current role (leader or standby)
+	PostgresConnection *PostgresConnection `json:"connection,omitempty"`
 
 	// AuditLogs enable or disable default audit logs
 	AuditLogs *bool `json:"auditLogs,omitempty"`
@@ -212,18 +213,20 @@ type PostgresList struct {
 	Items           []Postgres `json:"items"`
 }
 
-// PostgresConnectionInfo A remote postgres instance this one is linked to, e.g. for standby purpouses.
-type PostgresConnectionInfo struct {
-	ConnectedPostgresID  string `json:"connectedPostgresID,omitempty"`
+// PostgresConnection A remote postgres instance this one is linked to, e.g. for standby purpouses.
+type PostgresConnection struct {
+	// ConnectedPostgresID internal ID of the connected Postgres instance
+	ConnectedPostgresID string `json:"postgresID,omitempty"`
+	// ConnectionSecretName name of the internal secret used to connect to the remote postgres
 	ConnectionSecretName string `json:"secretName,omitempty"`
-
-	ConnectionMethod       string `json:"method,omitempty"`
-	ConnectionIP           string `json:"ip,omitempty"`
-	ConnectionPort         int32  `json:"port,omitempty"`
-	SynchronousReplication bool   `json:"synchronous,omitempty"`
-
-	// IsPostgresReplicationPrimary determines if this is the leader or the standby side
-	IsPostgresReplicationPrimary bool `json:"isReplicationPrimary,omitempty"`
+	// ConnectionIP IP of the remote postgres
+	ConnectionIP string `json:"ip,omitempty"`
+	// ConnectionPort port of the remote postgres
+	ConnectionPort uint16 `json:"port,omitempty"`
+	// SynchronousReplication determines if async  or sync replication is used for the standby postgres
+	SynchronousReplication bool `json:"synchronous,omitempty"`
+	// ReplicationPrimary determines if THIS side of the connection is the primary or the standby side
+	ReplicationPrimary bool `json:"localSideIsPrimary,omitempty"`
 }
 
 var SvcLoadBalancerLabel = map[string]string{
@@ -539,17 +542,19 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 	}
 
 	// Enable replication (using unstructured json)
-	if p.IsPrimaryLeader() {
+	if p.IsReplicationPrimary() {
 		// delete field
 		z.Spec.StandbyCluster = nil
 	} else {
 		// overwrite connection info
 		z.Spec.StandbyCluster = &zalando.StandbyDescription{
-			StandbyMethod:     p.Spec.PostgresConnectionInfo.ConnectionMethod,
-			StandbyHost:       p.Spec.PostgresConnectionInfo.ConnectionIP,
-			StandbyPort:       strconv.FormatInt(int64(p.Spec.PostgresConnectionInfo.ConnectionPort), 10),
+			StandbyMethod:     StandbyMethod,
+			StandbyHost:       p.Spec.PostgresConnection.ConnectionIP,
+			StandbyPort:       strconv.FormatInt(int64(p.Spec.PostgresConnection.ConnectionPort), 10),
 			StandbySecretName: "standby." + p.ToPeripheralResourceName() + ".credentials",
 			S3WalPath:         "",
+			// TODO update dependency, set application name
+			// ApplicationName:   p.ObjectMeta.Name,
 		}
 	}
 
@@ -690,8 +695,8 @@ func setSharedBufferSize(parameters map[string]string, shmSize string) {
 	}
 }
 
-func (p *Postgres) IsPrimaryLeader() bool {
-	if p.Spec.PostgresConnectionInfo == nil || p.Spec.PostgresConnectionInfo.IsPostgresReplicationPrimary {
+func (p *Postgres) IsReplicationPrimary() bool {
+	if p.Spec.PostgresConnection == nil || p.Spec.PostgresConnection.ReplicationPrimary {
 		// nothing is configured, or we are the leader. nothing to do.
 		return true
 	}
@@ -738,7 +743,7 @@ func (p *Postgres) ToStandbyClusterIngressCWNP(sourceCIDRs []string) (*firewall.
 	for _, cidr := range sourceCIDRs {
 		remoteServiceClusterCIDR, err := netaddr.ParseIPPrefix(cidr)
 		if err != nil {
-			return nil, fmt.Errorf("unable to parse standby host ip %s: %w", p.Spec.PostgresConnectionInfo.ConnectionIP, err)
+			return nil, fmt.Errorf("unable to parse standby host ip %s: %w", p.Spec.PostgresConnection.ConnectionIP, err)
 		}
 		standbyClusterIPs := networkingv1.IPBlock{
 			CIDR: remoteServiceClusterCIDR.String(),
@@ -762,10 +767,10 @@ func (p *Postgres) ToStandbyClusterIngressCWNP(sourceCIDRs []string) (*firewall.
 
 func (p *Postgres) ToStandbyClusterEgressCWNP() (*firewall.ClusterwideNetworkPolicy, error) {
 	standbyClusterEgressIPBlocks := []networkingv1.IPBlock{}
-	if p.Spec.PostgresConnectionInfo.ConnectionIP != "" {
-		remoteServiceClusterCIDR, err := netaddr.ParseIPPrefix(p.Spec.PostgresConnectionInfo.ConnectionIP + "/32")
+	if p.Spec.PostgresConnection.ConnectionIP != "" {
+		remoteServiceClusterCIDR, err := netaddr.ParseIPPrefix(p.Spec.PostgresConnection.ConnectionIP + "/32")
 		if err != nil {
-			return nil, fmt.Errorf("unable to parse standby host ip %s: %w", p.Spec.PostgresConnectionInfo.ConnectionIP, err)
+			return nil, fmt.Errorf("unable to parse standby host ip %s: %w", p.Spec.PostgresConnection.ConnectionIP, err)
 		}
 		standbyClusterIPs := networkingv1.IPBlock{
 			CIDR: remoteServiceClusterCIDR.String(),
@@ -778,8 +783,8 @@ func (p *Postgres) ToStandbyClusterEgressCWNP() (*firewall.ClusterwideNetworkPol
 	standbyEgressCWNP := &firewall.ClusterwideNetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: standbyEgressCWNPName, Namespace: firewall.ClusterwideNetworkPolicyNamespace}}
 	// Add Port to CWNP
 	egressTargetPorts := []networkingv1.NetworkPolicyPort{}
-	if p.Spec.PostgresConnectionInfo.ConnectionPort != 0 {
-		portObj := intstr.FromInt(int(p.Spec.PostgresConnectionInfo.ConnectionPort))
+	if p.Spec.PostgresConnection.ConnectionPort != 0 {
+		portObj := intstr.FromInt(int(p.Spec.PostgresConnection.ConnectionPort))
 		egressTargetPorts = append(egressTargetPorts, networkingv1.NetworkPolicyPort{Port: &portObj, Protocol: &tcp})
 	}
 	standbyEgressCWNP.Spec.Egress = []firewall.EgressRule{

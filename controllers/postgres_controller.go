@@ -165,7 +165,7 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, fmt.Errorf("error while creating standby secrets: %w", err)
 	}
 
-	if instance.IsPrimaryLeader() {
+	if instance.IsReplicationPrimary() {
 		// the field is not empty, which means we were either a regular, standalone database that was promoted to leader
 		//  (meaning we are already running) or we are a standby which was promoted to leader (also meaning we are
 		// already running)
@@ -446,7 +446,7 @@ func (r *PostgresReconciler) createOrUpdateCWNP(ctx context.Context, in *pg.Post
 	}
 	r.Log.WithValues("postgres", in.ToKey()).Info("clusterwidenetworkpolicy created or updated")
 
-	if in.Spec.PostgresConnectionInfo == nil {
+	if in.Spec.PostgresConnection == nil {
 		// abort if there are no connected postgres instances
 		return nil
 	}
@@ -545,13 +545,13 @@ func (r *PostgresReconciler) getZPostgresqlByLabels(ctx context.Context, matchin
 }
 
 func (r *PostgresReconciler) ensureStandbySecrets(ctx context.Context, instance *pg.Postgres) error {
-	if instance.IsPrimaryLeader() {
+	if instance.IsReplicationPrimary() {
 		// nothing is configured, or we are the leader. nothing to do.
 		return nil
 	}
 
 	//  Check if instance.Spec.PostgresConnectionInfo.ConnectionSecretName is defined
-	if instance.Spec.PostgresConnectionInfo.ConnectionSecretName == "" {
+	if instance.Spec.PostgresConnection.ConnectionSecretName == "" {
 		return goerrors.New("connectionInfo.secretName not configured")
 	}
 
@@ -575,7 +575,7 @@ func (r *PostgresReconciler) ensureStandbySecrets(ctx context.Context, instance 
 	r.Log.Info("no local standby secret found, continuing to create one")
 
 	// Check if secrets exist in remote CONTROL Cluster
-	remoteSecretName := instance.Spec.PostgresConnectionInfo.ConnectionSecretName
+	remoteSecretName := instance.Spec.PostgresConnection.ConnectionSecretName
 	remoteSecretNamespace := instance.ObjectMeta.Namespace
 	remoteSecret := &corev1.Secret{}
 	r.Log.Info("fetching remote standby secret", "namespace", remoteSecretNamespace, "name", remoteSecretName)
@@ -613,7 +613,7 @@ func (r *PostgresReconciler) ensureStandbySecrets(ctx context.Context, instance 
 
 func (r *PostgresReconciler) updatePatroniConfig(ctx context.Context, instance *pg.Postgres) error {
 	// Finally, send a POST to to the database with the correct config
-	if instance.Spec.PostgresConnectionInfo == nil {
+	if instance.Spec.PostgresConnection == nil {
 		return nil
 	}
 
@@ -649,13 +649,13 @@ func (r *PostgresReconciler) updatePatroniConfig(ctx context.Context, instance *
 
 	r.Log.Info("Preparing request")
 	var request PatroniConfigRequest
-	if instance.IsPrimaryLeader() {
+	if instance.IsReplicationPrimary() {
 		request = PatroniConfigRequest{
 			StandbyCluster: nil,
 		}
-		if instance.Spec.PostgresConnectionInfo.SynchronousReplication {
+		if instance.Spec.PostgresConnection.SynchronousReplication {
 			// enable sync replication
-			request.SynchronousNodesAdditional = pointer.String(instance.Spec.PostgresConnectionInfo.ConnectedPostgresID)
+			request.SynchronousNodesAdditional = pointer.String(instance.Spec.PostgresConnection.ConnectedPostgresID)
 		} else {
 			// disable sync replication
 			request.SynchronousNodesAdditional = nil
@@ -665,8 +665,8 @@ func (r *PostgresReconciler) updatePatroniConfig(ctx context.Context, instance *
 		request = PatroniConfigRequest{
 			StandbyCluster: &PatroniStandbyCluster{
 				CreateReplicaMethods: []string{"basebackup_fast_xlog"},
-				Host:                 instance.Spec.PostgresConnectionInfo.ConnectionIP,
-				Port:                 int(instance.Spec.PostgresConnectionInfo.ConnectionPort),
+				Host:                 instance.Spec.PostgresConnection.ConnectionIP,
+				Port:                 int(instance.Spec.PostgresConnection.ConnectionPort),
 				ApplicationName:      instance.ObjectMeta.Name,
 			},
 			SynchronousNodesAdditional: nil,
