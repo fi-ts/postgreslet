@@ -548,13 +548,12 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 	} else {
 		// overwrite connection info
 		z.Spec.StandbyCluster = &zalando.StandbyDescription{
-			StandbyMethod:     StandbyMethod,
-			StandbyHost:       p.Spec.PostgresConnection.ConnectionIP,
-			StandbyPort:       strconv.FormatInt(int64(p.Spec.PostgresConnection.ConnectionPort), 10),
-			StandbySecretName: "standby." + p.ToPeripheralResourceName() + ".credentials",
-			S3WalPath:         "",
-			// TODO update dependency, set application name
-			// ApplicationName:   p.ObjectMeta.Name,
+			StandbyMethod:          StandbyMethod,
+			StandbyHost:            p.Spec.PostgresConnection.ConnectionIP,
+			StandbyPort:            strconv.FormatInt(int64(p.Spec.PostgresConnection.ConnectionPort), 10),
+			StandbySecretName:      "standby." + p.ToPeripheralResourceName() + ".credentials",
+			S3WalPath:              "",
+			StandbyApplicationName: p.ObjectMeta.Name,
 		}
 	}
 
