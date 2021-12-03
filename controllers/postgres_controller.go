@@ -7,19 +7,23 @@
 package controllers
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net/http"
 	"net/url"
+	"strings"
 
 	"github.com/go-logr/logr"
 	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/tools/record"
+	"k8s.io/utils/pointer"
 
 	firewall "github.com/metal-stack/firewall-controller/api/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -46,8 +50,9 @@ type PostgresReconciler struct {
 	PartitionID, Tenant, StorageClass string
 	*operatormanager.OperatorManager
 	*lbmanager.LBManager
-	recorder         record.EventRecorder
-	PgParamBlockList map[string]bool
+	recorder                    record.EventRecorder
+	PgParamBlockList            map[string]bool
+	StandbyClustersSourceRanges []string
 }
 
 // Reconcile is the entry point for postgres reconciliation.
@@ -61,7 +66,7 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	log.Info("reconciling")
 	instance := &pg.Postgres{}
 	if err := r.CtrlClient.Get(ctx, req.NamespacedName, instance); err != nil {
-		if errors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) {
 			// the instance was updated, but does not exist anymore -> do nothing, it was probably deleted
 			return ctrl.Result{}, nil
 		}
@@ -153,6 +158,31 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, fmt.Errorf("error while ensuring Zalando dependencies: %w", err)
 	}
 
+	// Make sure the standby secrets exist, if neccessary
+	if err := r.ensureStandbySecrets(ctx, instance); err != nil {
+		r.recorder.Eventf(instance, "Warning", "Error", "failed to create standby secrets: %v", err)
+		return ctrl.Result{}, fmt.Errorf("error while creating standby secrets: %w", err)
+	}
+
+	if instance.IsReplicationPrimary() {
+		// the field is not empty, which means we were either a regular, standalone database that was promoted to leader
+		//  (meaning we are already running) or we are a standby which was promoted to leader (also meaning we are
+		// already running)
+		// That means we should be able to call the patroni api already. this is required, as updating the custom
+		// ressource of a standby db seems to fail (maybe because of the users/databases?)...
+		// anyway, let's get on with it
+		if err := r.updatePatroniConfig(ctx, instance); err != nil {
+			// TODO what to do here? reschedule or ignore?
+			log.Error(err, "failed to update patroni config via REST call")
+		}
+	}
+
+	// create standby egress rule first, so the standby can actually connect to the primary
+	if err := r.createOrUpdateEgressCWNP(ctx, instance); err != nil {
+		r.recorder.Event(instance, "Warning", "Error", "failed to create or update egress ClusterwideNetworkPolicy")
+		return ctrl.Result{}, fmt.Errorf("unable to create or update egress ClusterwideNetworkPolicy: %w", err)
+	}
+
 	if err := r.createOrUpdateZalandoPostgresql(ctx, instance, log); err != nil {
 		r.recorder.Eventf(instance, "Warning", "Error", "failed to create Zalando resource: %v", err)
 		return ctrl.Result{}, fmt.Errorf("failed to create or update zalando postgresql: %w", err)
@@ -172,9 +202,14 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	}
 
 	// Update status will be handled by the StatusReconciler, based on the Zalando Status
-	if err := r.createOrUpdateCWNP(ctx, instance, int(port)); err != nil {
-		r.recorder.Event(instance, "Warning", "Error", "failed to create or update ClusterwideNetworkPolicy")
-		return ctrl.Result{}, fmt.Errorf("unable to create or update corresponding CRD ClusterwideNetworkPolicy: %w", err)
+	if err := r.createOrUpdateIngressCWNP(ctx, instance, int(port)); err != nil {
+		r.recorder.Event(instance, "Warning", "Error", "failed to create or update ingress ClusterwideNetworkPolicy")
+		return ctrl.Result{}, fmt.Errorf("unable to create or update ingress ClusterwideNetworkPolicy: %w", err)
+	}
+
+	// this is the call for standbys
+	if err := r.updatePatroniConfig(ctx, instance); err != nil {
+		return requeue, fmt.Errorf("unable to update patroni config: %w", err)
 	}
 
 	r.recorder.Event(instance, "Normal", "Reconciled", "postgres up to date")
@@ -197,7 +232,7 @@ func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context
 		Namespace: "postgreslet-system",
 		Name:      "postgreslet-postgres-sidecars",
 	}
-	c := &v1.ConfigMap{}
+	c := &corev1.ConfigMap{}
 	if err := r.SvcClient.Get(ctx, cns, c); err != nil {
 		// configmap with configuration does not exists, nothing we can do here...
 		log.Info("could not fetch config for sidecars")
@@ -208,7 +243,7 @@ func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context
 	rawZ, err := r.getZalandoPostgresql(ctx, instance)
 	if err != nil {
 		// errors other than `NotFound`
-		if !errors.IsNotFound(err) {
+		if !apierrors.IsNotFound(err) {
 			return fmt.Errorf("failed to fetch zalando postgresql: %w", err)
 		}
 
@@ -282,7 +317,7 @@ func (r *PostgresReconciler) updatePodEnvironmentConfigMap(ctx context.Context, 
 	}
 
 	// fetch secret
-	backupSecret := &v1.Secret{}
+	backupSecret := &corev1.Secret{}
 	backupNamespace := types.NamespacedName{
 		Name:      p.Spec.BackupSecretRef,
 		Namespace: p.Namespace,
@@ -350,7 +385,7 @@ func (r *PostgresReconciler) updatePodEnvironmentConfigMap(ctx context.Context, 
 		"BACKUP_NUM_TO_RETAIN":             backupNumToRetain,
 	}
 
-	cm := &v1.ConfigMap{}
+	cm := &corev1.ConfigMap{}
 	ns := types.NamespacedName{
 		Name:      operatormanager.PodEnvCMName,
 		Namespace: p.ToPeripheralResourceNamespace(),
@@ -398,9 +433,9 @@ func (r *PostgresReconciler) deleteZPostgresqlByLabels(ctx context.Context, matc
 }
 
 // todo: Change to `controllerutl.CreateOrPatch`
-// createOrUpdateCWNP will create an ingress firewall rule on the firewall in front of the k8s cluster
-// based on the spec.AccessList.SourceRanges given.
-func (r *PostgresReconciler) createOrUpdateCWNP(ctx context.Context, in *pg.Postgres, port int) error {
+// createOrUpdateIngressCWNP will create an ingress firewall rule on the firewall in front of the k8s cluster
+// based on the spec.AccessList.SourceRanges and pre-configured standby clusters source ranges sgiven.
+func (r *PostgresReconciler) createOrUpdateIngressCWNP(ctx context.Context, in *pg.Postgres, port int) error {
 	policy, err := in.ToCWNP(port)
 	if err != nil {
 		return fmt.Errorf("unable to convert instance to CRD ClusterwideNetworkPolicy: %w", err)
@@ -416,16 +451,80 @@ func (r *PostgresReconciler) createOrUpdateCWNP(ctx context.Context, in *pg.Post
 	}
 	r.Log.WithValues("postgres", in.ToKey()).Info("clusterwidenetworkpolicy created or updated")
 
+	if in.Spec.PostgresConnection == nil {
+		// abort if there are no connected postgres instances
+		return nil
+	}
+
+	// Create CWNP if standby is configured (independant of the current role)
+
+	standbyIngressCWNP, err := in.ToStandbyClusterIngressCWNP(r.StandbyClustersSourceRanges)
+	if err != nil {
+		return fmt.Errorf("unable to convert instance to standby ingress ClusterwideNetworkPolicy: %w", err)
+	}
+
+	key2 := &firewall.ClusterwideNetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: standbyIngressCWNP.Name, Namespace: standbyIngressCWNP.Namespace}}
+	if _, err := controllerutil.CreateOrUpdate(ctx, r.SvcClient, key2, func() error {
+		key2.Spec.Ingress = standbyIngressCWNP.Spec.Ingress
+		return nil
+	}); err != nil {
+		return fmt.Errorf("unable to deploy standby ingress ClusterwideNetworkPolicy: %w", err)
+	}
+
+	return nil
+}
+
+// todo: Change to `controllerutl.CreateOrPatch`
+// createOrUpdateEgressCWNP will create an egress firewall rule on the firewall in front of the k8s cluster
+// based on the spec.PostgresConnection.
+func (r *PostgresReconciler) createOrUpdateEgressCWNP(ctx context.Context, in *pg.Postgres) error {
+
+	if in.Spec.PostgresConnection == nil {
+		// abort if there are no connected postgres instances
+		return nil
+	}
+
+	//
+	// Create egress rule to StandbyCluster CIDR and ConnectionPort
+	//
+	standbyEgressCWNP, err := in.ToStandbyClusterEgressCWNP()
+	if err != nil {
+		return fmt.Errorf("unable to convert instance to standby egress ClusterwideNetworkPolicy: %w", err)
+	}
+
+	key3 := &firewall.ClusterwideNetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: standbyEgressCWNP.Name, Namespace: standbyEgressCWNP.Namespace}}
+	if _, err := controllerutil.CreateOrUpdate(ctx, r.SvcClient, key3, func() error {
+		key3.Spec.Egress = standbyEgressCWNP.Spec.Egress
+		return nil
+	}); err != nil {
+		return fmt.Errorf("unable to deploy standby egress ClusterwideNetworkPolicy: %w", err)
+	}
+
 	return nil
 }
 
 func (r *PostgresReconciler) deleteCWNP(ctx context.Context, in *pg.Postgres) error {
+	stdbyIngresPolicy := &firewall.ClusterwideNetworkPolicy{}
+	stdbyIngresPolicy.Namespace = firewall.ClusterwideNetworkPolicyNamespace
+	stdbyIngresPolicy.Name = in.ToStandbyClusterIngresCWNPName()
+	if err := r.SvcClient.Delete(ctx, stdbyIngresPolicy); err != nil {
+		r.Log.Info("could not delete standby cluster ingress policy")
+	}
+
+	stdbyEgresPolicy := &firewall.ClusterwideNetworkPolicy{}
+	stdbyEgresPolicy.Namespace = firewall.ClusterwideNetworkPolicyNamespace
+	stdbyEgresPolicy.Name = in.ToStandbyClusterEgresCWNPName()
+	if err := r.SvcClient.Delete(ctx, stdbyEgresPolicy); err != nil {
+		r.Log.Info("could not delete standby cluster egress policy")
+	}
+
 	policy := &firewall.ClusterwideNetworkPolicy{}
 	policy.Namespace = firewall.ClusterwideNetworkPolicyNamespace
 	policy.Name = in.ToPeripheralResourceName()
 	if err := r.SvcClient.Delete(ctx, policy); err != nil {
 		return fmt.Errorf("unable to delete CRD ClusterwideNetworkPolicy %v: %w", policy.Name, err)
 	}
+
 	return nil
 }
 
@@ -442,7 +541,7 @@ func (r *PostgresReconciler) getZalandoPostgresql(ctx context.Context, instance 
 	if len := len(items); len > 1 {
 		return nil, fmt.Errorf("error while fetching zalando postgresql: Not unique, got %d results", len)
 	} else if len < 1 {
-		return nil, errors.NewNotFound(zalando.Resource("postgresql"), "")
+		return nil, apierrors.NewNotFound(zalando.Resource("postgresql"), "")
 	}
 
 	return &items[0], nil
@@ -461,4 +560,157 @@ func (r *PostgresReconciler) getZPostgresqlByLabels(ctx context.Context, matchin
 	}
 
 	return zpl.Items, nil
+}
+
+func (r *PostgresReconciler) ensureStandbySecrets(ctx context.Context, instance *pg.Postgres) error {
+	if instance.IsReplicationPrimary() {
+		// nothing is configured, or we are the leader. nothing to do.
+		return nil
+	}
+
+	//  Check if instance.Spec.PostgresConnectionInfo.ConnectionSecretName is defined
+	if instance.Spec.PostgresConnection.ConnectionSecretName == "" {
+		return errors.New("connectionInfo.secretName not configured")
+	}
+
+	// Check if secrets exist local in SERVICE Cluster
+	localStandbySecretName := "standby." + instance.ToPeripheralResourceName() + ".credentials"
+	localSecretNamespace := instance.ToPeripheralResourceNamespace()
+	localStandbySecret := &corev1.Secret{}
+	r.Log.Info("checking for local standby secret", "namespace", localSecretNamespace, "name", localStandbySecretName)
+	err := r.SvcClient.Get(ctx, types.NamespacedName{Namespace: localSecretNamespace, Name: localStandbySecretName}, localStandbySecret)
+
+	if err == nil {
+		r.Log.Info("local standby secret found, no action needed")
+		return nil
+	}
+
+	// we got an error other than not found, so we cannot continue!
+	if !apierrors.IsNotFound(err) {
+		return fmt.Errorf("error while fetching local stadnby secret from service cluster: %w", err)
+	}
+
+	r.Log.Info("no local standby secret found, continuing to create one")
+
+	// Check if secrets exist in remote CONTROL Cluster
+	remoteSecretName := instance.Spec.PostgresConnection.ConnectionSecretName
+	remoteSecretNamespace := instance.ObjectMeta.Namespace
+	remoteSecret := &corev1.Secret{}
+	r.Log.Info("fetching remote standby secret", "namespace", remoteSecretNamespace, "name", remoteSecretName)
+	if err := r.CtrlClient.Get(ctx, types.NamespacedName{Namespace: remoteSecretNamespace, Name: remoteSecretName}, remoteSecret); err != nil {
+		// we cannot read the secret given in the configuration, so we cannot continue!
+		return fmt.Errorf("error while fetching remote standby secret from control plane: %w", err)
+	}
+
+	// copy ALL secrets...
+	for username := range remoteSecret.Data {
+		r.Log.Info("creating local secret", "username", username)
+
+		currentSecretName := strings.ReplaceAll(username, "_", "-") + "." + instance.ToPeripheralResourceName() + ".credentials"
+		postgresSecret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      currentSecretName,
+				Namespace: localSecretNamespace,
+				Labels:    map[string]string(instance.ToZalandoPostgresqlMatchingLabels()),
+			},
+			Data: map[string][]byte{
+				"username": []byte(username),
+				"password": remoteSecret.Data[username],
+			},
+		}
+
+		if err := r.SvcClient.Create(ctx, postgresSecret); err != nil {
+			return fmt.Errorf("error while creating local secrets in service cluster: %w", err)
+		}
+		r.Log.Info("created local secret", "secret", postgresSecret)
+	}
+
+	return nil
+
+}
+
+func (r *PostgresReconciler) updatePatroniConfig(ctx context.Context, instance *pg.Postgres) error {
+	// Finally, send a POST to to the database with the correct config
+	if instance.Spec.PostgresConnection == nil {
+		return nil
+	}
+
+	r.Log.Info("Sending REST call to Patroni API")
+	pods := &corev1.PodList{}
+	opts := []client.ListOption{
+		client.InNamespace(instance.ToPeripheralResourceNamespace()),
+		client.MatchingLabels{"spilo-role": "master"},
+	}
+	if err := r.SvcClient.List(ctx, pods, opts...); err != nil {
+		r.Log.Info("could not query pods, requeuing")
+		return err
+	}
+	if len(pods.Items) == 0 {
+		r.Log.Info("no master pod ready, requeuing")
+		// TODO return proper error
+		return errors.New("no master pods found")
+	}
+	podIP := pods.Items[0].Status.PodIP
+	podPort := "8008"
+	path := "config"
+
+	type PatroniStandbyCluster struct {
+		CreateReplicaMethods []string `json:"create_replica_methods"`
+		Host                 string   `json:"host"`
+		Port                 int      `json:"port"`
+		ApplicationName      string   `json:"application_name"`
+	}
+	type PatroniConfigRequest struct {
+		StandbyCluster             *PatroniStandbyCluster `json:"standby_cluster"`
+		SynchronousNodesAdditional *string                `json:"synchronous_nodes_additional"`
+	}
+
+	r.Log.Info("Preparing request")
+	var request PatroniConfigRequest
+	if instance.IsReplicationPrimary() {
+		request = PatroniConfigRequest{
+			StandbyCluster: nil,
+		}
+		if instance.Spec.PostgresConnection.SynchronousReplication {
+			// enable sync replication
+			request.SynchronousNodesAdditional = pointer.String(instance.Spec.PostgresConnection.ConnectedPostgresID)
+		} else {
+			// disable sync replication
+			request.SynchronousNodesAdditional = nil
+		}
+	} else {
+		// TODO check values first
+		request = PatroniConfigRequest{
+			StandbyCluster: &PatroniStandbyCluster{
+				CreateReplicaMethods: []string{"basebackup_fast_xlog"},
+				Host:                 instance.Spec.PostgresConnection.ConnectionIP,
+				Port:                 int(instance.Spec.PostgresConnection.ConnectionPort),
+				ApplicationName:      instance.ObjectMeta.Name,
+			},
+			SynchronousNodesAdditional: nil,
+		}
+	}
+	r.Log.Info("Prepared request", "request", request)
+	jsonReq, err := json.Marshal(request)
+	if err != nil {
+		r.Log.Info("could not create config")
+		return err
+	}
+
+	httpClient := &http.Client{}
+	url := "http://" + podIP + ":" + podPort + "/" + path
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPatch, url, bytes.NewBuffer(jsonReq))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	return nil
 }

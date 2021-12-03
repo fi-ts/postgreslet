@@ -1,0 +1,28 @@
+apiVersion: database.fits.cloud/v1
+kind: Postgres
+metadata:
+  namespace: metal-extension-cloud
+  name: standby-a
+spec:
+  accessList:
+    sourceRanges:
+    - 1.2.3.4/24
+    - 1.2.4.4/24
+  maintenance:
+    - "Sun:21:00-22:00"
+  numberOfInstances: 1
+  partitionID: sample-partition
+  projectID: sample-project
+  size:
+    cpu: 500m
+    memory: 512Mi
+    storageSize: 1Gi
+  tenant: sample-tenant
+  version: "12"
+  # connection:
+  #   localSideIsPrimary: true
+  #   synchronous: false
+  #   postgresID: standby-b
+  #   secretName: "standby-b-passwords"
+  #   ip: "10.96.147.227" # manually add the current ip of the standby-b postgres cluster for local dev
+  #   port: 5432

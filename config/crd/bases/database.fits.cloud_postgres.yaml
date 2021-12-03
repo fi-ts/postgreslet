@@ -72,6 +72,33 @@ spec:
                 description: BackupSecretRef reference to the secret where the backup
                   credentials are stored
                 type: string
+              connection:
+                description: PostgresConnection Connection info of a streaming host,
+                  independant of the current role (leader or standby)
+                properties:
+                  ip:
+                    description: ConnectionIP IP of the remote postgres
+                    type: string
+                  localSideIsPrimary:
+                    description: ReplicationPrimary determines if THIS side of the
+                      connection is the primary or the standby side
+                    type: boolean
+                  port:
+                    description: ConnectionPort port of the remote postgres
+                    type: integer
+                  postgresID:
+                    description: ConnectedPostgresID internal ID of the connected
+                      Postgres instance
+                    type: string
+                  secretName:
+                    description: ConnectionSecretName name of the internal secret
+                      used to connect to the remote postgres
+                    type: string
+                  synchronous:
+                    description: SynchronousReplication determines if async  or sync
+                      replication is used for the standby postgres
+                    type: boolean
+                type: object
               description:
                 description: Description
                 type: string
