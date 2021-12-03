@@ -177,6 +177,12 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		}
 	}
 
+	// create standby egress rule first, so the standby can actually connect to the primary
+	if err := r.createOrUpdateEgressCWNP(ctx, instance); err != nil {
+		r.recorder.Event(instance, "Warning", "Error", "failed to create or update egress ClusterwideNetworkPolicy")
+		return ctrl.Result{}, fmt.Errorf("unable to create or update egress ClusterwideNetworkPolicy: %w", err)
+	}
+
 	if err := r.createOrUpdateZalandoPostgresql(ctx, instance, log); err != nil {
 		r.recorder.Eventf(instance, "Warning", "Error", "failed to create Zalando resource: %v", err)
 		return ctrl.Result{}, fmt.Errorf("failed to create or update zalando postgresql: %w", err)
@@ -196,9 +202,9 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	}
 
 	// Update status will be handled by the StatusReconciler, based on the Zalando Status
-	if err := r.createOrUpdateCWNP(ctx, instance, int(port)); err != nil {
-		r.recorder.Event(instance, "Warning", "Error", "failed to create or update ClusterwideNetworkPolicy")
-		return ctrl.Result{}, fmt.Errorf("unable to create or update corresponding CRD ClusterwideNetworkPolicy: %w", err)
+	if err := r.createOrUpdateIngressCWNP(ctx, instance, int(port)); err != nil {
+		r.recorder.Event(instance, "Warning", "Error", "failed to create or update ingress ClusterwideNetworkPolicy")
+		return ctrl.Result{}, fmt.Errorf("unable to create or update ingress ClusterwideNetworkPolicy: %w", err)
 	}
 
 	// this is the call for standbys
@@ -427,9 +433,9 @@ func (r *PostgresReconciler) deleteZPostgresqlByLabels(ctx context.Context, matc
 }
 
 // todo: Change to `controllerutl.CreateOrPatch`
-// createOrUpdateCWNP will create an ingress firewall rule on the firewall in front of the k8s cluster
-// based on the spec.AccessList.SourceRanges given.
-func (r *PostgresReconciler) createOrUpdateCWNP(ctx context.Context, in *pg.Postgres, port int) error {
+// createOrUpdateIngressCWNP will create an ingress firewall rule on the firewall in front of the k8s cluster
+// based on the spec.AccessList.SourceRanges and pre-configured standby clusters source ranges sgiven.
+func (r *PostgresReconciler) createOrUpdateIngressCWNP(ctx context.Context, in *pg.Postgres, port int) error {
 	policy, err := in.ToCWNP(port)
 	if err != nil {
 		return fmt.Errorf("unable to convert instance to CRD ClusterwideNetworkPolicy: %w", err)
@@ -457,12 +463,25 @@ func (r *PostgresReconciler) createOrUpdateCWNP(ctx context.Context, in *pg.Post
 		return fmt.Errorf("unable to convert instance to standby ingress ClusterwideNetworkPolicy: %w", err)
 	}
 
-	key2 := &firewall.ClusterwideNetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: standbyIngressCWNP.Name, Namespace: policy.Namespace}}
+	key2 := &firewall.ClusterwideNetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: standbyIngressCWNP.Name, Namespace: standbyIngressCWNP.Namespace}}
 	if _, err := controllerutil.CreateOrUpdate(ctx, r.SvcClient, key2, func() error {
 		key2.Spec.Ingress = standbyIngressCWNP.Spec.Ingress
 		return nil
 	}); err != nil {
 		return fmt.Errorf("unable to deploy standby ingress ClusterwideNetworkPolicy: %w", err)
+	}
+
+	return nil
+}
+
+// todo: Change to `controllerutl.CreateOrPatch`
+// createOrUpdateEgressCWNP will create an egress firewall rule on the firewall in front of the k8s cluster
+// based on the spec.PostgresConnection.
+func (r *PostgresReconciler) createOrUpdateEgressCWNP(ctx context.Context, in *pg.Postgres) error {
+
+	if in.Spec.PostgresConnection == nil {
+		// abort if there are no connected postgres instances
+		return nil
 	}
 
 	//
@@ -473,7 +492,7 @@ func (r *PostgresReconciler) createOrUpdateCWNP(ctx context.Context, in *pg.Post
 		return fmt.Errorf("unable to convert instance to standby egress ClusterwideNetworkPolicy: %w", err)
 	}
 
-	key3 := &firewall.ClusterwideNetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: standbyEgressCWNP.Name, Namespace: policy.Namespace}}
+	key3 := &firewall.ClusterwideNetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: standbyEgressCWNP.Name, Namespace: standbyEgressCWNP.Namespace}}
 	if _, err := controllerutil.CreateOrUpdate(ctx, r.SvcClient, key3, func() error {
 		key3.Spec.Egress = standbyEgressCWNP.Spec.Egress
 		return nil
