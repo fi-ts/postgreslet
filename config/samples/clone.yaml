@@ -1,0 +1,28 @@
+apiVersion: database.fits.cloud/v1
+kind: Postgres
+metadata:
+  namespace: metal-extension-cloud
+  name: clone
+spec:
+  accessList:
+    sourceRanges:
+    - 1.2.3.4/24
+  maintenance:
+    - "Sun:21:00-22:00"
+  numberOfInstances: 1
+  partitionID: sample-partition
+  projectID: sample-project
+  size:
+    cpu: 500m
+    memory: 512Mi
+    storageSize: 1Gi
+  tenant: sample-tenant
+  version: "12"
+  clone:
+    # uid: dcdefc27-0e9f-4e00-ac6a-2aab2bf529bb
+    cluster: pgfits-philippuidtest3bd11c
+    timestamp: "2021-12-06T19:15:00+01:00"
+    s3Endpoint: 
+    s3AccessKeyId: ""
+    s3SecretAccessKey: ""
+    s3ForcePathStyle: true

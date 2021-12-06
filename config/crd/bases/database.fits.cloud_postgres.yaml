@@ -85,6 +85,8 @@ spec:
                     type: boolean
                   s3SecretAccessKey:
                     type: string
+                  s3WalPath:
+                    type: string
                   timestamp:
                     type: string
                   uid:

@@ -194,9 +194,10 @@ type Clone struct {
 	ClusterName       string `json:"cluster,omitempty"`
 	Timestamp         string `json:"timestamp,omitempty"`
 	S3Endpoint        string `json:"s3Endpoint,omitempty"`
+	S3WalPath         string `json:"s3WalPath,omitempty"`
 	S3AccessKeyId     string `json:"s3AccessKeyId,omitempty"`
 	S3SecretAccessKey string `json:"s3SecretAccessKey,omitempty"`
-	S3ForcePathStyle  *bool  `json:"s3ForcePathStyle,omitempty" defaults:"false"`
+	S3ForcePathStyle  bool   `json:"s3ForcePathStyle,omitempty"`
 }
 
 // PostgresStatus defines the observed state of Postgres
@@ -555,13 +556,16 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 	}
 
 	if p.Spec.Clone != nil {
-		z.Spec.Clone.UID = p.Spec.Clone.UID
-		z.Spec.Clone.ClusterName = p.Spec.Clone.ClusterName
-		z.Spec.Clone.EndTimestamp = p.Spec.Clone.Timestamp
-		z.Spec.Clone.S3Endpoint = p.Spec.Clone.S3Endpoint
-		z.Spec.Clone.S3AccessKeyId = p.Spec.Clone.S3AccessKeyId
-		z.Spec.Clone.S3SecretAccessKey = p.Spec.Clone.S3SecretAccessKey
-		z.Spec.Clone.S3ForcePathStyle = p.Spec.Clone.S3ForcePathStyle
+		z.Spec.Clone = &zalando.CloneDescription{
+			UID:               p.Spec.Clone.UID,
+			ClusterName:       p.Spec.Clone.ClusterName,
+			EndTimestamp:      p.Spec.Clone.Timestamp,
+			S3Endpoint:        p.Spec.Clone.S3Endpoint,
+			S3WalPath:         p.Spec.Clone.S3WalPath, // TODO do we *always* need this or only locally? we didn't need it in the old environment...
+			S3AccessKeyId:     p.Spec.Clone.S3AccessKeyId,
+			S3SecretAccessKey: p.Spec.Clone.S3SecretAccessKey,
+			S3ForcePathStyle:  pointer.Bool(p.Spec.Clone.S3ForcePathStyle),
+		}
 	}
 
 	// Enable replication (using unstructured json)
