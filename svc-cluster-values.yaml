@@ -1,0 +1,9 @@
+image:
+  tag: "latest"
+  pullPolicy: "Never" # we test unreleased images here, so download would fail anyway
+postgreslet:
+  storageClass: "" # kind cluster does not have our default storage class installed
+  enableCrdValidation: false # required for the custom operator crd
+  operatorImage: "ermajn/postgres-operator:v1.7.0-1-g711648b-dirty"
+  postgresImage: "cybertecpostgresql/spilo:2.1-p1_de-sync-standby-cluster_0.3.2_8c82e1e"
+addRandomLabel: true # changes the manifest with each update, in turn forcing a rolling update even when using the 'latest' image

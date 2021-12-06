@@ -1,9 +1,25 @@
+ARG baseImage="golang:1.17"
 # Build the manager binary
-FROM golang:1.16 as builder
+FROM ${baseImage} as builder
 
 WORKDIR /workspace
+
+# Download dependencies in it's own step to optimize caching during docker build
+COPY go.mod .
+COPY go.sum .
+RUN go mod download all
+
+# Download and cache controller-gen
+COPY Makefile .
+RUN make controller-gen
+
 COPY . .
 RUN make
+
+# Start obj-cache
+# https://medium.com/windmill-engineering/tips-tricks-for-making-your-golang-container-builds-10x-faster-4cc618a43827
+FROM golang:1.17 as obj-cache
+COPY --from=builder /root/.cache /root/.cache
 
 # Use distroless as minimal base image to package the manager binary
 # Refer to https://github.com/GoogleContainerTools/distroless for more details

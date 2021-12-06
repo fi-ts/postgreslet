@@ -26,6 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/yaml"
+	"k8s.io/utils/pointer"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -55,6 +56,9 @@ const (
 	BackupConfigKey = "config"
 	// SharedBufferParameterKey defines the key under which the shared buffer size is stored in the parameters map. Defined by the postgres-operator/patroni
 	SharedBufferParameterKey = "shared_buffers"
+	// StandbyKey defines the key under which the standby configuration is stored in the CR.  Defined by the postgres-operator/patroni
+	StandbyKey    = "standby"
+	StandbyMethod = "streaming_host"
 
 	teamIDPrefix = "pg"
 )
@@ -153,6 +157,14 @@ type PostgresSpec struct {
 
 	// Clone defines the location of a database backup to clone
 	Clone *Clone `json:"clone,omitempty"`
+	// PostgresConnection Connection info of a streaming host, independant of the current role (leader or standby)
+	PostgresConnection *PostgresConnection `json:"connection,omitempty"`
+
+	// AuditLogs enable or disable default audit logs
+	AuditLogs *bool `json:"auditLogs,omitempty"`
+
+	// PostgresParams additional parameters that are passed along to the postgres config
+	PostgresParams map[string]string `json:"postgresParams,omitempty"`
 }
 
 // AccessList defines the type of restrictions to access the database
@@ -212,6 +224,22 @@ type PostgresList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []Postgres `json:"items"`
+}
+
+// PostgresConnection A remote postgres instance this one is linked to, e.g. for standby purpouses.
+type PostgresConnection struct {
+	// ConnectedPostgresID internal ID of the connected Postgres instance
+	ConnectedPostgresID string `json:"postgresID,omitempty"`
+	// ConnectionSecretName name of the internal secret used to connect to the remote postgres
+	ConnectionSecretName string `json:"secretName,omitempty"`
+	// ConnectionIP IP of the remote postgres
+	ConnectionIP string `json:"ip,omitempty"`
+	// ConnectionPort port of the remote postgres
+	ConnectionPort uint16 `json:"port,omitempty"`
+	// SynchronousReplication determines if async  or sync replication is used for the standby postgres
+	SynchronousReplication bool `json:"synchronous,omitempty"`
+	// ReplicationPrimary determines if THIS side of the connection is the primary or the standby side
+	ReplicationPrimary bool `json:"localSideIsPrimary,omitempty"`
 }
 
 var SvcLoadBalancerLabel = map[string]string{
@@ -448,7 +476,7 @@ func (p *Postgres) ToPeripheralResourceLookupKey() types.NamespacedName {
 	}
 }
 
-func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *corev1.ConfigMap, sc string) (*unstructured.Unstructured, error) {
+func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *corev1.ConfigMap, sc string, pgParamBlockList map[string]bool) (*unstructured.Unstructured, error) {
 	if z == nil {
 		z = &zalando.Postgresql{}
 	}
@@ -459,8 +487,18 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 
 	z.Spec.NumberOfInstances = p.Spec.NumberOfInstances
 	z.Spec.PostgresqlParam.PgVersion = p.Spec.Version
+
+	// initialize the parameters
 	z.Spec.PostgresqlParam.Parameters = map[string]string{}
+	// enable default audit logs (if not configured otherwise)
+	if p.Spec.AuditLogs == nil || *p.Spec.AuditLogs {
+		enableAuditLogs(z.Spec.PostgresqlParam.Parameters)
+	}
+	// now set the given generic parameters (and potentially allow overwriting of e.g. audit log params)
+	setPostgresParams(z.Spec.PostgresqlParam.Parameters, p.Spec.PostgresParams, pgParamBlockList)
+	// finally, overwrite the (special to us) shared buffer parameter
 	setSharedBufferSize(z.Spec.PostgresqlParam.Parameters, p.Spec.Size.SharedBuffer)
+
 	z.Spec.Resources.ResourceRequests.CPU = p.Spec.Size.CPU
 	z.Spec.Resources.ResourceRequests.Memory = p.Spec.Size.Memory
 	z.Spec.Resources.ResourceLimits.CPU = p.Spec.Size.CPU
@@ -473,6 +511,38 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 	z.Spec.Patroni.TTL = 130
 	z.Spec.Patroni.SynchronousMode = true
 	z.Spec.Patroni.SynchronousModeStrict = false
+
+	// required with image ermajn/postgres-operator:v1.6.0-20-g1cc71663-dirty
+	// see https://github.com/fi-ts/postgreslet/issues/293
+	z.Spec.EnableConnectionPooler = pointer.Bool(false)
+
+	prefix := alphaNumericRegExp.ReplaceAllString(string(p.Spec.Tenant), "")
+	prefix = strings.ToLower(prefix)
+	databaseName := prefix + "db01"
+	prepDbName := prefix + "prepdb01"
+	ownerName := prefix + "dbo"
+
+	// Create database owner
+	z.Spec.Users = make(map[string]zalando.UserFlags)
+	z.Spec.Users[ownerName] = zalando.UserFlags{"superuser", "createdb"}
+
+	// Create default database
+	z.Spec.Databases = make(map[string]string)
+	z.Spec.Databases[databaseName] = ownerName
+
+	// Create prepared database
+	z.Spec.PreparedDatabases = make(map[string]zalando.PreparedDatabase)
+	z.Spec.PreparedDatabases[prepDbName] = zalando.PreparedDatabase{
+		DefaultUsers: true,
+		Extensions: map[string]string{
+			"pg_partman": "public",
+			"pgcrypto":   "public",
+		},
+		PreparedSchemas: map[string]zalando.PreparedSchema{
+			"data":    zalando.PreparedSchema{},
+			"history": zalando.PreparedSchema{},
+		},
+	}
 
 	// skip if the configmap does not exist
 	if c != nil {
@@ -492,6 +562,22 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 		z.Spec.Clone.S3AccessKeyId = p.Spec.Clone.S3AccessKeyId
 		z.Spec.Clone.S3SecretAccessKey = p.Spec.Clone.S3SecretAccessKey
 		z.Spec.Clone.S3ForcePathStyle = p.Spec.Clone.S3ForcePathStyle
+	}
+
+	// Enable replication (using unstructured json)
+	if p.IsReplicationPrimary() {
+		// delete field
+		z.Spec.StandbyCluster = nil
+	} else {
+		// overwrite connection info
+		z.Spec.StandbyCluster = &zalando.StandbyDescription{
+			StandbyMethod:          StandbyMethod,
+			StandbyHost:            p.Spec.PostgresConnection.ConnectionIP,
+			StandbyPort:            strconv.FormatInt(int64(p.Spec.PostgresConnection.ConnectionPort), 10),
+			StandbySecretName:      "standby." + p.ToPeripheralResourceName() + ".credentials",
+			S3WalPath:              "",
+			StandbyApplicationName: p.ObjectMeta.Name,
+		}
 	}
 
 	jsonZ, err := runtime.DefaultUnstructuredConverter.ToUnstructured(z)
@@ -629,4 +715,103 @@ func setSharedBufferSize(parameters map[string]string, shmSize string) {
 			parameters[SharedBufferParameterKey] = strconv.FormatInt(sizeInMB, 10) + "MB"
 		}
 	}
+}
+
+func (p *Postgres) IsReplicationPrimary() bool {
+	if p.Spec.PostgresConnection == nil || p.Spec.PostgresConnection.ReplicationPrimary {
+		// nothing is configured, or we are the leader. nothing to do.
+		return true
+	}
+	return false
+}
+
+// enableAuditLogs configures this postgres instances audit logging
+func enableAuditLogs(parameters map[string]string) {
+	// default values: bg_mon,pg_stat_statements,pgextwlist,pg_auth_mon,set_user,timescaledb,pg_cron,pg_stat_kcache
+	parameters["shared_preload_libraries"] = "bg_mon,pg_stat_statements,pgextwlist,pg_auth_mon,set_user,timescaledb,pg_cron,pg_stat_kcache,pgaudit"
+	parameters["pgaudit.log_catalog"] = "off"
+	parameters["pgaudit.log"] = "ddl"
+	parameters["pgaudit.log_relation"] = "on"
+	parameters["pgaudit.log_parameter"] = "on"
+}
+
+// setPostgresParams add the provided params to the parameter map (but ignore params that are blocked)
+func setPostgresParams(parameters map[string]string, providedParams map[string]string, blockList map[string]bool) {
+	for k, v := range providedParams {
+		if _, isBlocked := blockList[k]; isBlocked {
+			// k is on the blockList, ignore that param
+			continue
+		}
+		parameters[k] = v
+	}
+}
+
+func (p *Postgres) ToStandbyClusterIngresCWNPName() string {
+	return p.ToPeripheralResourceName() + "-standby-ingress"
+}
+func (p *Postgres) ToStandbyClusterEgresCWNPName() string {
+	return p.ToPeripheralResourceName() + "-standby-egress"
+}
+
+func (p *Postgres) ToStandbyClusterIngressCWNP(sourceCIDRs []string) (*firewall.ClusterwideNetworkPolicy, error) {
+
+	standbyIngressCWNPName := p.ToStandbyClusterIngresCWNPName()
+	standbyIngressCWNP := &firewall.ClusterwideNetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: standbyIngressCWNPName, Namespace: firewall.ClusterwideNetworkPolicyNamespace}}
+
+	//
+	// Create ingress rule from pre-configured CIDR to this DBs port
+	//
+	standbyClusterIngressIPBlocks := []networkingv1.IPBlock{}
+	for _, cidr := range sourceCIDRs {
+		remoteServiceClusterCIDR, err := netaddr.ParseIPPrefix(cidr)
+		if err != nil {
+			return nil, fmt.Errorf("unable to parse standby host ip %s: %w", p.Spec.PostgresConnection.ConnectionIP, err)
+		}
+		standbyClusterIPs := networkingv1.IPBlock{
+			CIDR: remoteServiceClusterCIDR.String(),
+		}
+		standbyClusterIngressIPBlocks = append(standbyClusterIngressIPBlocks, standbyClusterIPs)
+	}
+
+	// Add Port to CWNP (if known)
+	tcp := corev1.ProtocolTCP
+	ingressTargetPorts := []networkingv1.NetworkPolicyPort{}
+	if p.Status.Socket.Port != 0 {
+		portObj := intstr.FromInt(int(p.Status.Socket.Port))
+		ingressTargetPorts = append(ingressTargetPorts, networkingv1.NetworkPolicyPort{Port: &portObj, Protocol: &tcp})
+	}
+	standbyIngressCWNP.Spec.Ingress = []firewall.IngressRule{
+		{Ports: ingressTargetPorts, From: standbyClusterIngressIPBlocks},
+	}
+
+	return standbyIngressCWNP, nil
+}
+
+func (p *Postgres) ToStandbyClusterEgressCWNP() (*firewall.ClusterwideNetworkPolicy, error) {
+	standbyClusterEgressIPBlocks := []networkingv1.IPBlock{}
+	if p.Spec.PostgresConnection.ConnectionIP != "" {
+		remoteServiceClusterCIDR, err := netaddr.ParseIPPrefix(p.Spec.PostgresConnection.ConnectionIP + "/32")
+		if err != nil {
+			return nil, fmt.Errorf("unable to parse standby host ip %s: %w", p.Spec.PostgresConnection.ConnectionIP, err)
+		}
+		standbyClusterIPs := networkingv1.IPBlock{
+			CIDR: remoteServiceClusterCIDR.String(),
+		}
+		standbyClusterEgressIPBlocks = append(standbyClusterEgressIPBlocks, standbyClusterIPs)
+	}
+
+	tcp := corev1.ProtocolTCP
+	standbyEgressCWNPName := p.ToStandbyClusterEgresCWNPName()
+	standbyEgressCWNP := &firewall.ClusterwideNetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: standbyEgressCWNPName, Namespace: firewall.ClusterwideNetworkPolicyNamespace}}
+	// Add Port to CWNP
+	egressTargetPorts := []networkingv1.NetworkPolicyPort{}
+	if p.Spec.PostgresConnection.ConnectionPort != 0 {
+		portObj := intstr.FromInt(int(p.Spec.PostgresConnection.ConnectionPort))
+		egressTargetPorts = append(egressTargetPorts, networkingv1.NetworkPolicyPort{Port: &portObj, Protocol: &tcp})
+	}
+	standbyEgressCWNP.Spec.Egress = []firewall.EgressRule{
+		{Ports: egressTargetPorts, To: standbyClusterEgressIPBlocks},
+	}
+
+	return standbyEgressCWNP, nil
 }
