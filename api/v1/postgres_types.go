@@ -158,6 +158,7 @@ type PostgresSpec struct {
 
 	// Clone defines the location of a database backup to clone
 	Clone *Clone `json:"clone,omitempty"`
+
 	// PostgresConnection Connection info of a streaming host, independant of the current role (leader or standby)
 	PostgresConnection *PostgresConnection `json:"connection,omitempty"`
 
