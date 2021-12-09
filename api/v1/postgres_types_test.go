@@ -9,9 +9,12 @@ package v1
 import (
 	"regexp"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
+	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 )
 
@@ -212,6 +215,108 @@ func TestPostgres_ToPeripheralResourceName(t *testing.T) {
 			maxLen := 37
 			if len(got) > maxLen {
 				t.Errorf("Postgres.ToPeripheralResourceName() got %v, more than %d characters long", got, maxLen)
+			}
+		})
+	}
+}
+
+func TestPostgresCloneTimestamp_ToUnstructuredZalandoPostgresql(t *testing.T) {
+	tests := []struct {
+		name             string
+		spec             PostgresSpec
+		c                *corev1.ConfigMap
+		sc               string
+		pgParamBlockList map[string]bool
+		want             string
+		wantErr          bool
+	}{
+		{
+			name: "empty timestamp initialized with current time",
+			spec: PostgresSpec{
+				Size: &Size{
+					CPU:          "1",
+					Memory:       "4Gi",
+					SharedBuffer: "64Mi",
+				},
+				Clone: &Clone{
+					Timestamp: "",
+				},
+			},
+			c:                nil,
+			sc:               "fake-storage-class",
+			pgParamBlockList: map[string]bool{},
+			want:             time.Now().Format(time.RFC3339),
+			wantErr:          false,
+		},
+		{
+			name: "undefined timestamp initialized with current time",
+			spec: PostgresSpec{
+				Size: &Size{
+					CPU:          "1",
+					Memory:       "4Gi",
+					SharedBuffer: "64Mi",
+				},
+				Clone: &Clone{},
+			},
+			c:                nil,
+			sc:               "fake-storage-class",
+			pgParamBlockList: map[string]bool{},
+			want:             time.Now().Format(time.RFC3339),
+			wantErr:          false,
+		},
+		{
+			name: "given timestamp is passed along",
+			spec: PostgresSpec{
+				Size: &Size{
+					CPU:          "1",
+					Memory:       "4Gi",
+					SharedBuffer: "64Mi",
+				},
+				Clone: &Clone{
+					Timestamp: "invalid but whatever",
+				},
+			},
+			c:                nil,
+			sc:               "fake-storage-class",
+			pgParamBlockList: map[string]bool{},
+			want:             "invalid but whatever",
+			wantErr:          false,
+		},
+		{
+			name: "fail on purpose",
+			spec: PostgresSpec{
+				Size: &Size{
+					CPU:          "1",
+					Memory:       "4Gi",
+					SharedBuffer: "64Mi",
+				},
+				Clone: &Clone{
+					Timestamp: "apples",
+				},
+			},
+			c:                nil,
+			sc:               "fake-storage-class",
+			pgParamBlockList: map[string]bool{},
+			want:             "oranges",
+			wantErr:          true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := &Postgres{
+				Spec: tt.spec,
+			}
+			got, _ := p.ToUnstructuredZalandoPostgresql(nil, tt.c, tt.sc, tt.pgParamBlockList)
+
+			jsonZ, err := runtime.DefaultUnstructuredConverter.ToUnstructured(got)
+			if err != nil {
+				t.Errorf("failed to convert to unstructured zalando postgresql: %v", err)
+			}
+			jsonSpec, _ := jsonZ["spec"].(map[string]interface{})
+			jsonClone, _ := jsonSpec["clone"].(map[string]interface{})
+
+			if !tt.wantErr && tt.want != jsonClone["timestamp"] {
+				t.Errorf("Spec.Clone.Timestamp was %v, but expected %v", jsonClone["timestamp"], tt.want)
 			}
 		})
 	}
