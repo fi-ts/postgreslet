@@ -18,11 +18,13 @@ spec:
     storageSize: 1Gi
   tenant: sample-tenant
   version: "12"
+  # does this only work properly when using the same backup bucket?!?
   clone:
-    # uid: dcdefc27-0e9f-4e00-ac6a-2aab2bf529bb
-    cluster: pgfits-philippuidtest3bd11c
-    timestamp: "2021-12-06T19:15:00+01:00"
-    s3Endpoint: 
-    s3AccessKeyId: ""
-    s3SecretAccessKey: ""
-    s3ForcePathStyle: true
+    # uid: dcdefc27-0e9f-4e00-ac6a-2aab2bf529bb # usually not needed
+    cluster: INSERT_CLUSTER_NAME # postgres.ToPeripheralResourceName()
+    timestamp: "2021-12-06T19:15:00+01:00" # Always set! Probably won't work without it as clusters are managed by different operators!
+    s3Endpoint: INSERT_ENDPOINT
+    s3WalPath: INSERT_WAL_PATH # s3://<BUCKET>/<CLUSTER_NAME>
+    s3AccessKeyId: INSERT_ACCESS_KEY_ID
+    s3SecretAccessKey: INSERT_SECRET_ACCESS_KEY
+    s3ForcePathStyle: true # required for non-AWS S3
