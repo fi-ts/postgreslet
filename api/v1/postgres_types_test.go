@@ -302,6 +302,7 @@ func TestPostgresCloneTimestamp_ToUnstructuredZalandoPostgresql(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
+		tt := tt // pin!
 		t.Run(tt.name, func(t *testing.T) {
 			p := &Postgres{
 				Spec: tt.spec,
