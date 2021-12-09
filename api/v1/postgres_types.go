@@ -566,6 +566,12 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 	}
 
 	if p.Spec.Clone != nil {
+		// make sure there is always a value set. The operator will fall back to CLONE_WITH_BASEBACKUP, which assumes the source db's credentials are existing within the same namespace, which is not the case with the postgreslet.
+		if p.Spec.Clone.Timestamp == "" {
+			// e.g. 2021-12-07T15:28:00+01:00
+			p.Spec.Clone.Timestamp = time.Now().Format(time.RFC3339)
+		}
+
 		z.Spec.Clone = &zalando.CloneDescription{
 			UID:               p.Spec.Clone.UID, // optional
 			ClusterName:       p.Spec.Clone.ClusterName,
@@ -576,12 +582,7 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 			S3SecretAccessKey: p.Spec.Clone.S3SecretAccessKey,
 			S3ForcePathStyle:  pointer.Bool(p.Spec.Clone.S3ForcePathStyle),
 		}
-		// make sure there is always a value set. The operator will fall back to CLONE_WITH_BASEBACKUP, which assumes the source db's credentials are existing within the same namespace, which is not the case with the postgreslet.
-		if z.Spec.Clone.EndTimestamp == "" {
-			// e.g. 2021-12-07T15:28:00+01:00
-			z.Spec.Clone.EndTimestamp = time.Now().Format(time.RFC3339) // TODO check if this works, else use ISO 8601
 
-		}
 	}
 
 	// Enable replication (using unstructured json)
