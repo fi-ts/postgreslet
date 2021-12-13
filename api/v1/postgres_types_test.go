@@ -220,13 +220,15 @@ func TestPostgres_ToPeripheralResourceName(t *testing.T) {
 	}
 }
 
-func TestPostgresCloneTimestamp_ToUnstructuredZalandoPostgresql(t *testing.T) {
+func TestPostgresRestoreTimestamp_ToUnstructuredZalandoPostgresql(t *testing.T) {
 	tests := []struct {
 		name             string
 		spec             PostgresSpec
 		c                *corev1.ConfigMap
 		sc               string
 		pgParamBlockList map[string]bool
+		rbs              *BackupConfig
+		srcDB            *Postgres
 		want             string
 		wantErr          bool
 	}{
@@ -238,15 +240,25 @@ func TestPostgresCloneTimestamp_ToUnstructuredZalandoPostgresql(t *testing.T) {
 					Memory:       "4Gi",
 					SharedBuffer: "64Mi",
 				},
-				Clone: &Clone{
+				PostgresRestore: &PostgresRestore{
 					Timestamp: "",
 				},
 			},
 			c:                nil,
 			sc:               "fake-storage-class",
 			pgParamBlockList: map[string]bool{},
-			want:             time.Now().Format(time.RFC3339), // I know this is not perfect, let's just hope we always finish within the same second...
-			wantErr:          false,
+			rbs:              &BackupConfig{},
+			srcDB: &Postgres{
+				ObjectMeta: v1.ObjectMeta{
+					Name: uuid.NewString(),
+				},
+				Spec: PostgresSpec{
+					Tenant:      "tenant",
+					Description: "description",
+				},
+			},
+			want:    time.Now().Format(time.RFC3339), // I know this is not perfect, let's just hope we always finish within the same second...
+			wantErr: false,
 		},
 		{
 			name: "undefined timestamp initialized with current time",
@@ -256,13 +268,23 @@ func TestPostgresCloneTimestamp_ToUnstructuredZalandoPostgresql(t *testing.T) {
 					Memory:       "4Gi",
 					SharedBuffer: "64Mi",
 				},
-				Clone: &Clone{},
+				PostgresRestore: &PostgresRestore{},
 			},
 			c:                nil,
 			sc:               "fake-storage-class",
 			pgParamBlockList: map[string]bool{},
-			want:             time.Now().Format(time.RFC3339), // I know this is not perfect, let's just hope we always finish within the same second...
-			wantErr:          false,
+			rbs:              &BackupConfig{},
+			srcDB: &Postgres{
+				ObjectMeta: v1.ObjectMeta{
+					Name: uuid.NewString(),
+				},
+				Spec: PostgresSpec{
+					Tenant:      "tenant",
+					Description: "description",
+				},
+			},
+			want:    time.Now().Format(time.RFC3339), // I know this is not perfect, let's just hope we always finish within the same second...
+			wantErr: false,
 		},
 		{
 			name: "given timestamp is passed along",
@@ -272,15 +294,25 @@ func TestPostgresCloneTimestamp_ToUnstructuredZalandoPostgresql(t *testing.T) {
 					Memory:       "4Gi",
 					SharedBuffer: "64Mi",
 				},
-				Clone: &Clone{
+				PostgresRestore: &PostgresRestore{
 					Timestamp: "invalid but whatever",
 				},
 			},
 			c:                nil,
 			sc:               "fake-storage-class",
 			pgParamBlockList: map[string]bool{},
-			want:             "invalid but whatever",
-			wantErr:          false,
+			rbs:              &BackupConfig{},
+			srcDB: &Postgres{
+				ObjectMeta: v1.ObjectMeta{
+					Name: uuid.NewString(),
+				},
+				Spec: PostgresSpec{
+					Tenant:      "tenant",
+					Description: "description",
+				},
+			},
+			want:    "invalid but whatever",
+			wantErr: false,
 		},
 		{
 			name: "fail on purpose",
@@ -290,15 +322,25 @@ func TestPostgresCloneTimestamp_ToUnstructuredZalandoPostgresql(t *testing.T) {
 					Memory:       "4Gi",
 					SharedBuffer: "64Mi",
 				},
-				Clone: &Clone{
+				PostgresRestore: &PostgresRestore{
 					Timestamp: "apples",
 				},
 			},
 			c:                nil,
 			sc:               "fake-storage-class",
 			pgParamBlockList: map[string]bool{},
-			want:             "oranges",
-			wantErr:          true,
+			rbs:              &BackupConfig{},
+			srcDB: &Postgres{
+				ObjectMeta: v1.ObjectMeta{
+					Name: uuid.NewString(),
+				},
+				Spec: PostgresSpec{
+					Tenant:      "tenant",
+					Description: "description",
+				},
+			},
+			want:    "oranges",
+			wantErr: true,
 		},
 	}
 	for _, tt := range tests {
@@ -307,7 +349,7 @@ func TestPostgresCloneTimestamp_ToUnstructuredZalandoPostgresql(t *testing.T) {
 			p := &Postgres{
 				Spec: tt.spec,
 			}
-			got, _ := p.ToUnstructuredZalandoPostgresql(nil, tt.c, tt.sc, tt.pgParamBlockList)
+			got, _ := p.ToUnstructuredZalandoPostgresql(nil, tt.c, tt.sc, tt.pgParamBlockList, tt.rbs, tt.srcDB)
 
 			jsonZ, err := runtime.DefaultUnstructuredConverter.ToUnstructured(got)
 			if err != nil {
@@ -319,11 +361,6 @@ func TestPostgresCloneTimestamp_ToUnstructuredZalandoPostgresql(t *testing.T) {
 			if !tt.wantErr && tt.want != jsonClone["timestamp"] {
 				t.Errorf("Spec.Clone.Timestamp was %v, but expected %v", jsonClone["timestamp"], tt.want)
 			}
-
-			// if !tt.wantErr && !regexp.MustCompile(`^([0-9]+)-(0[1-9]|1[012])-(0[1-9]|[12][0-9]|3[01])[Tt]([01][0-9]|2[0-3]):([0-5][0-9]):([0-5][0-9]|60)(\\.[0-9]+)?(([+-]([01][0-9]|2[0-3]):[0-5][0-9]))$`).MatchString(gotTimestamp) {
-			// 	t.Errorf("Spec.Clone.Timestamp does not match regexp")
-			// 	return
-			// }
 		})
 	}
 }

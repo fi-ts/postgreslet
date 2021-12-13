@@ -239,6 +239,32 @@ func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context
 		c = nil
 	}
 
+	var restoreBackupConfig *pg.BackupConfig
+	var restoreSouceInstance *pg.Postgres
+	if instance.Spec.PostgresRestore != nil {
+		if instance.Spec.PostgresRestore.SourcePostgresID == "" {
+			return fmt.Errorf("restore requested, but no source configured")
+		}
+		srcNs := types.NamespacedName{
+			Namespace: instance.Namespace,
+			Name:      instance.Spec.PostgresRestore.SourcePostgresID,
+		}
+		src := &pg.Postgres{}
+		if err := r.CtrlClient.Get(ctx, srcNs, src); err != nil {
+			r.recorder.Eventf(instance, "Warning", "Error", "failed to get resource: %v", err)
+			return err
+		}
+		log.Info("source for restore fetched", "postgres", instance)
+
+		bc, err := r.getBackupConfig(ctx, instance.Namespace, src.Spec.BackupSecretRef)
+		if err != nil {
+			return err
+		}
+
+		restoreBackupConfig = bc
+		restoreSouceInstance = src
+	}
+
 	// Get zalando postgresql and create one if none.
 	rawZ, err := r.getZalandoPostgresql(ctx, instance)
 	if err != nil {
@@ -247,7 +273,7 @@ func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context
 			return fmt.Errorf("failed to fetch zalando postgresql: %w", err)
 		}
 
-		u, err := instance.ToUnstructuredZalandoPostgresql(nil, c, r.StorageClass, r.PgParamBlockList)
+		u, err := instance.ToUnstructuredZalandoPostgresql(nil, c, r.StorageClass, r.PgParamBlockList, restoreBackupConfig, restoreSouceInstance)
 		if err != nil {
 			return fmt.Errorf("failed to convert to unstructured zalando postgresql: %w", err)
 		}
@@ -263,7 +289,7 @@ func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context
 	// Update zalando postgresql
 	mergeFrom := client.MergeFrom(rawZ.DeepCopy())
 
-	u, err := instance.ToUnstructuredZalandoPostgresql(rawZ, c, r.StorageClass, r.PgParamBlockList)
+	u, err := instance.ToUnstructuredZalandoPostgresql(rawZ, c, r.StorageClass, r.PgParamBlockList, restoreBackupConfig, restoreSouceInstance)
 	if err != nil {
 		return fmt.Errorf("failed to convert to unstructured zalando postgresql: %w", err)
 	}
@@ -316,24 +342,9 @@ func (r *PostgresReconciler) updatePodEnvironmentConfigMap(ctx context.Context, 
 		return nil
 	}
 
-	// fetch secret
-	backupSecret := &corev1.Secret{}
-	backupNamespace := types.NamespacedName{
-		Name:      p.Spec.BackupSecretRef,
-		Namespace: p.Namespace,
-	}
-	if err := r.CtrlClient.Get(ctx, backupNamespace, backupSecret); err != nil {
-		return fmt.Errorf("error while getting the backup secret from control plane cluster: %w", err)
-	}
-
-	backupConfigJSON, ok := backupSecret.Data[pg.BackupConfigKey]
-	if !ok {
-		return fmt.Errorf("no backupConfig stored in the secret")
-	}
-	var backupConfig pg.BackupConfig
-	err := json.Unmarshal(backupConfigJSON, &backupConfig)
+	backupConfig, err := r.getBackupConfig(ctx, p.Namespace, p.Spec.BackupSecretRef)
 	if err != nil {
-		return fmt.Errorf("unable to unmarshal backupconfig:%w", err)
+		return err
 	}
 
 	s3url, err := url.Parse(backupConfig.S3Endpoint)
@@ -713,4 +724,27 @@ func (r *PostgresReconciler) updatePatroniConfig(ctx context.Context, instance *
 	defer resp.Body.Close()
 
 	return nil
+}
+
+func (r *PostgresReconciler) getBackupConfig(ctx context.Context, ns, name string) (*pg.BackupConfig, error) {
+	// fetch secret
+	backupSecret := &corev1.Secret{}
+	backupNamespace := types.NamespacedName{
+		Name:      name,
+		Namespace: ns,
+	}
+	if err := r.CtrlClient.Get(ctx, backupNamespace, backupSecret); err != nil {
+		return nil, fmt.Errorf("error while getting the backup secret from control plane cluster: %w", err)
+	}
+
+	backupConfigJSON, ok := backupSecret.Data[pg.BackupConfigKey]
+	if !ok {
+		return nil, fmt.Errorf("no backupConfig stored in the secret")
+	}
+	var backupConfig pg.BackupConfig
+	err := json.Unmarshal(backupConfigJSON, &backupConfig)
+	if err != nil {
+		return nil, fmt.Errorf("unable to unmarshal backupconfig:%w", err)
+	}
+	return &backupConfig, nil
 }

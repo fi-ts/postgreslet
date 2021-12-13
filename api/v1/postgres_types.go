@@ -156,8 +156,8 @@ type PostgresSpec struct {
 	// BackupSecretRef reference to the secret where the backup credentials are stored
 	BackupSecretRef string `json:"backupSecretRef,omitempty"`
 
-	// Clone defines the location of a database backup to clone
-	Clone *Clone `json:"clone,omitempty"`
+	// PostgresRestore
+	PostgresRestore *PostgresRestore `json:"restore,omitempty"`
 
 	// PostgresConnection Connection info of a streaming host, independant of the current role (leader or standby)
 	PostgresConnection *PostgresConnection `json:"connection,omitempty"`
@@ -191,23 +191,12 @@ type Size struct {
 	StorageSize string `json:"storageSize,omitempty"`
 }
 
-type Clone struct {
-	// UID Optional of the source DB (which is used internally as a subfolder in the bucket)
-	UID string `json:"uid,omitempty"`
-	// ClusterName Peripheral ressource name of the source DB (via p.ToPeripheralResourceName())
-	ClusterName string `json:"cluster,omitempty"`
+// Restore defines what to restore from where
+type PostgresRestore struct {
+	// SourcePostgresID internal ID of the Postgres instance to whose backup to restore
+	SourcePostgresID string `json:"postgresID,omitempty"`
 	// Timestamp The point in time to recover. Must be set, or the clone with switch from WALs from the S3 to a basebackup via direct sql connection (which won't work when the source db is managed by another posgres-operator)
 	Timestamp string `json:"timestamp,omitempty"`
-	// S3Endpoint The endpoint of the S3 user to use
-	S3Endpoint string `json:"s3Endpoint,omitempty"`
-	// S3WalPath The path to the WALs, must be in the form of s3://<BUCKET>/<CLUSTER_NAME>
-	S3WalPath string `json:"s3WalPath,omitempty"`
-	// S3AccessKeyId The access key id of the S3 user to use
-	S3AccessKeyId string `json:"s3AccessKeyId,omitempty"`
-	// S3SecretAccessKey The secret access key of the S3 user to use
-	S3SecretAccessKey string `json:"s3SecretAccessKey,omitempty"`
-	// S3ForcePathStyle the path style to use. Shoud be true for non-AWS S3
-	S3ForcePathStyle bool `json:"s3ForcePathStyle,omitempty"`
 }
 
 // PostgresStatus defines the observed state of Postgres
@@ -487,7 +476,7 @@ func (p *Postgres) ToPeripheralResourceLookupKey() types.NamespacedName {
 	}
 }
 
-func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *corev1.ConfigMap, sc string, pgParamBlockList map[string]bool) (*unstructured.Unstructured, error) {
+func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *corev1.ConfigMap, sc string, pgParamBlockList map[string]bool, rbs *BackupConfig, srcDB *Postgres) (*unstructured.Unstructured, error) {
 	if z == nil {
 		z = &zalando.Postgresql{}
 	}
@@ -565,24 +554,21 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 		z.Spec.AllowedSourceRanges = p.Spec.AccessList.SourceRanges
 	}
 
-	if p.Spec.Clone != nil {
+	if p.Spec.PostgresRestore != nil && rbs != nil {
 		// make sure there is always a value set. The operator will fall back to CLONE_WITH_BASEBACKUP, which assumes the source db's credentials are existing within the same namespace, which is not the case with the postgreslet.
-		if p.Spec.Clone.Timestamp == "" {
+		if p.Spec.PostgresRestore.Timestamp == "" {
 			// e.g. 2021-12-07T15:28:00+01:00
-			p.Spec.Clone.Timestamp = time.Now().Format(time.RFC3339)
+			p.Spec.PostgresRestore.Timestamp = time.Now().Format(time.RFC3339)
 		}
 
 		z.Spec.Clone = &zalando.CloneDescription{
-			UID:               p.Spec.Clone.UID, // optional
-			ClusterName:       p.Spec.Clone.ClusterName,
-			EndTimestamp:      p.Spec.Clone.Timestamp,
-			S3Endpoint:        p.Spec.Clone.S3Endpoint,
-			S3WalPath:         p.Spec.Clone.S3WalPath,
-			S3AccessKeyId:     p.Spec.Clone.S3AccessKeyId,
-			S3SecretAccessKey: p.Spec.Clone.S3SecretAccessKey,
-			S3ForcePathStyle:  pointer.Bool(p.Spec.Clone.S3ForcePathStyle),
+			ClusterName:       srcDB.ToPeripheralResourceName(),
+			EndTimestamp:      p.Spec.PostgresRestore.Timestamp,
+			S3Endpoint:        rbs.S3Endpoint,
+			S3AccessKeyId:     rbs.S3AccessKey,
+			S3SecretAccessKey: rbs.S3SecretKey,
+			S3ForcePathStyle:  pointer.Bool(true),
 		}
-
 	}
 
 	// Enable replication (using unstructured json)

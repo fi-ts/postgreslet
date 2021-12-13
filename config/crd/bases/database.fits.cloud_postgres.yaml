@@ -72,43 +72,6 @@ spec:
                 description: BackupSecretRef reference to the secret where the backup
                   credentials are stored
                 type: string
-              clone:
-                description: Clone defines the location of a database backup to clone
-                properties:
-                  cluster:
-                    description: ClusterName Peripheral ressource name of the source
-                      DB (via p.ToPeripheralResourceName())
-                    type: string
-                  s3AccessKeyId:
-                    description: S3AccessKeyId The access key id of the S3 user to
-                      use
-                    type: string
-                  s3Endpoint:
-                    description: S3Endpoint The endpoint of the S3 user to use
-                    type: string
-                  s3ForcePathStyle:
-                    description: S3ForcePathStyle the path style to use. Shoud be
-                      true for non-AWS S3
-                    type: boolean
-                  s3SecretAccessKey:
-                    description: S3SecretAccessKey The secret access key of the S3
-                      user to use
-                    type: string
-                  s3WalPath:
-                    description: S3WalPath The path to the WALs, must be in the form
-                      of s3://<BUCKET>/<CLUSTER_NAME>
-                    type: string
-                  timestamp:
-                    description: Timestamp The point in time to recover. Must be set,
-                      or the clone with switch from WALs from the S3 to a basebackup
-                      via direct sql connection (which won't work when the source
-                      db is managed by another posgres-operator)
-                    type: string
-                  uid:
-                    description: UID Optional of the source DB (which is used internally
-                      as a subfolder in the bucket)
-                    type: string
-                type: object
               connection:
                 description: PostgresConnection Connection info of a streaming host,
                   independant of the current role (leader or standby)
@@ -163,6 +126,20 @@ spec:
               projectID:
                 description: ProjectID metal project ID
                 type: string
+              restore:
+                description: PostgresRestore
+                properties:
+                  postgresID:
+                    description: SourcePostgresID internal ID of the Postgres instance
+                      to whose backup to restore
+                    type: string
+                  timestamp:
+                    description: Timestamp The point in time to recover. Must be set,
+                      or the clone with switch from WALs from the S3 to a basebackup
+                      via direct sql connection (which won't work when the source
+                      db is managed by another posgres-operator)
+                    type: string
+                type: object
               size:
                 description: Size of the database
                 properties:
