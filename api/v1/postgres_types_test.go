@@ -245,7 +245,7 @@ func TestPostgresCloneTimestamp_ToUnstructuredZalandoPostgresql(t *testing.T) {
 			c:                nil,
 			sc:               "fake-storage-class",
 			pgParamBlockList: map[string]bool{},
-			want:             time.Now().Format(time.RFC3339),
+			want:             time.Now().Format(time.RFC3339), // I know this is not perfect, let's just hope we always finish within the same second...
 			wantErr:          false,
 		},
 		{
@@ -261,7 +261,7 @@ func TestPostgresCloneTimestamp_ToUnstructuredZalandoPostgresql(t *testing.T) {
 			c:                nil,
 			sc:               "fake-storage-class",
 			pgParamBlockList: map[string]bool{},
-			want:             time.Now().Format(time.RFC3339),
+			want:             time.Now().Format(time.RFC3339), // I know this is not perfect, let's just hope we always finish within the same second...
 			wantErr:          false,
 		},
 		{
@@ -319,6 +319,11 @@ func TestPostgresCloneTimestamp_ToUnstructuredZalandoPostgresql(t *testing.T) {
 			if !tt.wantErr && tt.want != jsonClone["timestamp"] {
 				t.Errorf("Spec.Clone.Timestamp was %v, but expected %v", jsonClone["timestamp"], tt.want)
 			}
+
+			// if !tt.wantErr && !regexp.MustCompile(`^([0-9]+)-(0[1-9]|1[012])-(0[1-9]|[12][0-9]|3[01])[Tt]([01][0-9]|2[0-3]):([0-5][0-9]):([0-5][0-9]|60)(\\.[0-9]+)?(([+-]([01][0-9]|2[0-3]):[0-5][0-9]))$`).MatchString(gotTimestamp) {
+			// 	t.Errorf("Spec.Clone.Timestamp does not match regexp")
+			// 	return
+			// }
 		})
 	}
 }
