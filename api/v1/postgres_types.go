@@ -550,8 +550,8 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 			"pgcrypto":   "public",
 		},
 		PreparedSchemas: map[string]zalando.PreparedSchema{
-			"data":    zalando.PreparedSchema{},
-			"history": zalando.PreparedSchema{},
+			"data":    {},
+			"history": {},
 		},
 	}
 
