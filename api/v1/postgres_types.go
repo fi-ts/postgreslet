@@ -553,7 +553,7 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 		z.Spec.AllowedSourceRanges = p.Spec.AccessList.SourceRanges
 	}
 
-	if p.Spec.PostgresRestore != nil && rbs != nil {
+	if p.Spec.PostgresRestore != nil && rbs != nil && srcDB != nil {
 		// make sure there is always a value set. The operator will fall back to CLONE_WITH_BASEBACKUP, which assumes the source db's credentials are existing within the same namespace, which is not the case with the postgreslet.
 		if p.Spec.PostgresRestore.Timestamp == "" {
 			// e.g. 2021-12-07T15:28:00+01:00
