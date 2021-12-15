@@ -11,6 +11,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"time"
 
 	"regexp"
 
@@ -155,6 +156,9 @@ type PostgresSpec struct {
 	// BackupSecretRef reference to the secret where the backup credentials are stored
 	BackupSecretRef string `json:"backupSecretRef,omitempty"`
 
+	// PostgresRestore
+	PostgresRestore *PostgresRestore `json:"restore,omitempty"`
+
 	// PostgresConnection Connection info of a streaming host, independant of the current role (leader or standby)
 	PostgresConnection *PostgresConnection `json:"connection,omitempty"`
 
@@ -185,6 +189,14 @@ type Size struct {
 	// +kubebuilder:default="1Gi"
 	// +kubebuilder:validation:Pattern=^[1-9][0-9]*Gi
 	StorageSize string `json:"storageSize,omitempty"`
+}
+
+// Restore defines what to restore from where
+type PostgresRestore struct {
+	// SourcePostgresID internal ID of the Postgres instance to whose backup to restore
+	SourcePostgresID string `json:"postgresID,omitempty"`
+	// Timestamp The point in time to recover. Must be set, or the clone with switch from WALs from the S3 to a basebackup via direct sql connection (which won't work when the source db is managed by another posgres-operator)
+	Timestamp string `json:"timestamp,omitempty"`
 }
 
 // PostgresStatus defines the observed state of Postgres
@@ -463,7 +475,7 @@ func (p *Postgres) ToPeripheralResourceLookupKey() types.NamespacedName {
 	}
 }
 
-func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *corev1.ConfigMap, sc string, pgParamBlockList map[string]bool) (*unstructured.Unstructured, error) {
+func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *corev1.ConfigMap, sc string, pgParamBlockList map[string]bool, rbs *BackupConfig, srcDB *Postgres) (*unstructured.Unstructured, error) {
 	if z == nil {
 		z = &zalando.Postgresql{}
 	}
@@ -526,8 +538,8 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 			"pgcrypto":   "public",
 		},
 		PreparedSchemas: map[string]zalando.PreparedSchema{
-			"data":    zalando.PreparedSchema{},
-			"history": zalando.PreparedSchema{},
+			"data":    {},
+			"history": {},
 		},
 	}
 
@@ -539,6 +551,23 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 
 	if p.HasSourceRanges() {
 		z.Spec.AllowedSourceRanges = p.Spec.AccessList.SourceRanges
+	}
+
+	if p.Spec.PostgresRestore != nil && rbs != nil && srcDB != nil {
+		// make sure there is always a value set. The operator will fall back to CLONE_WITH_BASEBACKUP, which assumes the source db's credentials are existing within the same namespace, which is not the case with the postgreslet.
+		if p.Spec.PostgresRestore.Timestamp == "" {
+			// e.g. 2021-12-07T15:28:00+01:00
+			p.Spec.PostgresRestore.Timestamp = time.Now().Format(time.RFC3339)
+		}
+
+		z.Spec.Clone = &zalando.CloneDescription{
+			ClusterName:       srcDB.ToPeripheralResourceName(),
+			EndTimestamp:      p.Spec.PostgresRestore.Timestamp,
+			S3Endpoint:        rbs.S3Endpoint,
+			S3AccessKeyId:     rbs.S3AccessKey,
+			S3SecretAccessKey: rbs.S3SecretKey,
+			S3ForcePathStyle:  pointer.Bool(true),
+		}
 	}
 
 	// Enable replication (using unstructured json)

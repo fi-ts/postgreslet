@@ -126,6 +126,20 @@ spec:
               projectID:
                 description: ProjectID metal project ID
                 type: string
+              restore:
+                description: PostgresRestore
+                properties:
+                  postgresID:
+                    description: SourcePostgresID internal ID of the Postgres instance
+                      to whose backup to restore
+                    type: string
+                  timestamp:
+                    description: Timestamp The point in time to recover. Must be set,
+                      or the clone with switch from WALs from the S3 to a basebackup
+                      via direct sql connection (which won't work when the source
+                      db is managed by another posgres-operator)
+                    type: string
+                type: object
               size:
                 description: Size of the database
                 properties:

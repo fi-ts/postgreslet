@@ -85,7 +85,7 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		// update the status of the remote object
 		owner.Status.Description = instance.Status.PostgresClusterStatus
 		// update the reference to the zalando instance in the remote object
-		owner.Status.ChildName = instance.Name
+		owner.Status.ChildName = instance.ObjectMeta.Name
 
 		log.Info("Updating owner", "owner", owner.UID)
 		if err := r.CtrlClient.Status().Update(ctx, &owner); err != nil {
