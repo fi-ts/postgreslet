@@ -207,8 +207,7 @@ type PostgresStatus struct {
 
 	Socket Socket `json:"socket,omitempty"`
 
-	ChildName       string `json:"childName,omitempty"`
-	ChildInternalID string `json:"childInternalID,omitempty"`
+	ChildName string `json:"childName,omitempty"`
 }
 
 // Socket represents load-balancer socket of Postgres

@@ -169,8 +169,6 @@ spec:
           status:
             description: PostgresStatus defines the observed state of Postgres
             properties:
-              childInternalID:
-                type: string
               childName:
                 type: string
               description:

@@ -10,7 +10,6 @@ import (
 	"fmt"
 
 	"github.com/go-logr/logr"
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -87,19 +86,6 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		owner.Status.Description = instance.Status.PostgresClusterStatus
 		// update the reference to the zalando instance in the remote object
 		owner.Status.ChildName = instance.ObjectMeta.Name
-		// update the internal uid
-		if owner.Status.ChildInternalID == "" {
-			// find corresponding statefulset and use its uid
-			sts := &appsv1.StatefulSetList{}
-			matchingLabels := map[string]string{
-				"cluster-name": instance.ObjectMeta.ClusterName,
-			}
-			if err = r.SvcClient.List(ctx, sts, client.InNamespace(instance.Namespace), client.MatchingLabels(matchingLabels)); err == nil {
-				if len(sts.Items) == 1 {
-					owner.Status.ChildInternalID = string(sts.Items[0].UID)
-				}
-			}
-		}
 
 		log.Info("Updating owner", "owner", owner.UID)
 		if err := r.CtrlClient.Status().Update(ctx, &owner); err != nil {
