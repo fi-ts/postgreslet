@@ -4,7 +4,7 @@ go 1.17
 
 require (
 	github.com/go-logr/logr v0.4.0
-	github.com/google/uuid v1.2.0
+	github.com/google/uuid v1.3.0
 	github.com/metal-stack/firewall-controller v1.1.2
 	github.com/metal-stack/v v1.0.3
 	github.com/onsi/ginkgo v1.16.5
