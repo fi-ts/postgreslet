@@ -29,6 +29,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/rest"
+	"k8s.io/utils/pointer"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -53,6 +54,8 @@ const (
 	SidecarsCMExporterQueriesKey string = "queries.yaml"
 
 	sidecarsCMName = "postgres-sidecars-configmap"
+
+	OperatorRunAsUser int64 = 1000
 )
 
 // operatorPodMatchingLabels is for listing operator pods
@@ -364,9 +367,18 @@ func (m *OperatorManager) createNewClientObject(ctx context.Context, obj client.
 		m.log.Info("handling Deployment")
 		if len(v.Spec.Template.Spec.Containers) != 1 {
 			m.log.Info("Unexpected number of containers in deployment, ignoring.")
-		} else if m.options.OperatorImage != "" {
-			m.log.Info("Patching operator image", "image", m.options.OperatorImage)
-			v.Spec.Template.Spec.Containers[0].Image = m.options.OperatorImage
+		} else {
+			if m.options.OperatorImage != "" {
+				m.log.Info("Patching operator image", "image", m.options.OperatorImage)
+				v.Spec.Template.Spec.Containers[0].Image = m.options.OperatorImage
+			}
+
+			v.Spec.Template.Spec.Containers[0].SecurityContext = &corev1.SecurityContext{
+				RunAsUser:                pointer.Int64(OperatorRunAsUser),
+				RunAsNonRoot:             pointer.Bool(true),
+				ReadOnlyRootFilesystem:   pointer.Bool(true),
+				AllowPrivilegeEscalation: pointer.Bool(false),
+			}
 		}
 		err = m.Get(ctx, key, &appsv1.Deployment{})
 	default:
@@ -417,6 +429,10 @@ func (m *OperatorManager) editConfigMap(cm *corev1.ConfigMap, namespace string, 
 
 	cm.Data["enable_crd_validation"] = strconv.FormatBool(options.CRDValidation)
 	cm.Data["major_version_upgrade_mode"] = options.MajorVersionUpgradeMode
+
+	// disable privilege escalation for operator and spilo
+	cm.Data["spilo_allow_privilege_escalation"] = "false"
+	cm.Data["spilo_privileged"] = "false"
 }
 
 // ensureCleanMetadata ensures obj has clean metadata

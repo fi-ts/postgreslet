@@ -62,6 +62,9 @@ const (
 	StandbyMethod = "streaming_host"
 
 	teamIDPrefix = "pg"
+
+	SpiloRunAsUser  int64 = 101
+	SpiloRunAsGroup int64 = 101
 )
 
 var (
@@ -585,6 +588,10 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 			StandbyApplicationName: p.ObjectMeta.Name,
 		}
 	}
+
+	// Fix uid/gid for the spilo user
+	z.Spec.SpiloRunAsUser = pointer.Int64(SpiloRunAsUser)
+	z.Spec.SpiloRunAsGroup = pointer.Int64(SpiloRunAsGroup)
 
 	jsonZ, err := runtime.DefaultUnstructuredConverter.ToUnstructured(z)
 	if err != nil {
