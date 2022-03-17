@@ -55,7 +55,8 @@ const (
 
 	sidecarsCMName = "postgres-sidecars-configmap"
 
-	OperatorRunAsUser int64 = 1000
+	// operatorRunAsUser the uid to use when running the operator image
+	operatorRunAsUser int64 = 1000
 )
 
 // operatorPodMatchingLabels is for listing operator pods
@@ -374,7 +375,7 @@ func (m *OperatorManager) createNewClientObject(ctx context.Context, obj client.
 			}
 
 			v.Spec.Template.Spec.Containers[0].SecurityContext = &corev1.SecurityContext{
-				RunAsUser:                pointer.Int64(OperatorRunAsUser),
+				RunAsUser:                pointer.Int64(operatorRunAsUser),
 				RunAsNonRoot:             pointer.Bool(true),
 				ReadOnlyRootFilesystem:   pointer.Bool(true),
 				AllowPrivilegeEscalation: pointer.Bool(false),

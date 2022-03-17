@@ -63,8 +63,10 @@ const (
 
 	teamIDPrefix = "pg"
 
-	SpiloRunAsUser  int64 = 101
-	SpiloRunAsGroup int64 = 101
+	// spiloRunAsUser the uid to use when running the spilo (postgres) image
+	spiloRunAsUser int64 = 101
+	// spiloRunAsGroup the gid to use when running the spilo (postgres) image
+	spiloRunAsGroup int64 = 101
 )
 
 var (
@@ -590,8 +592,8 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 	}
 
 	// Fix uid/gid for the spilo user
-	z.Spec.SpiloRunAsUser = pointer.Int64(SpiloRunAsUser)
-	z.Spec.SpiloRunAsGroup = pointer.Int64(SpiloRunAsGroup)
+	z.Spec.SpiloRunAsUser = pointer.Int64(spiloRunAsUser)
+	z.Spec.SpiloRunAsGroup = pointer.Int64(spiloRunAsGroup)
 
 	jsonZ, err := runtime.DefaultUnstructuredConverter.ToUnstructured(z)
 	if err != nil {
