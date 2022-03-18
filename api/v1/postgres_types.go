@@ -62,6 +62,9 @@ const (
 	StandbyMethod = "streaming_host"
 
 	teamIDPrefix = "pg"
+
+	defaultPostgresParamValueTCPKeepAlivesIdle     = "200"
+	defaultPostgresParamValueTCPKeepAlivesInterval = "30"
 )
 
 var (
@@ -493,7 +496,9 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 	if p.Spec.AuditLogs == nil || *p.Spec.AuditLogs {
 		enableAuditLogs(z.Spec.PostgresqlParam.Parameters)
 	}
-	// now set the given generic parameters (and potentially allow overwriting of e.g. audit log params)
+	// set some default postgres parameters
+	setDefaultPostgresParams(z.Spec.PostgresqlParam.Parameters)
+	// now set the given generic parameters (and potentially allow overwriting of default postgres params or audit log params)
 	setPostgresParams(z.Spec.PostgresqlParam.Parameters, p.Spec.PostgresParams, pgParamBlockList)
 	// finally, overwrite the (special to us) shared buffer parameter
 	setSharedBufferSize(z.Spec.PostgresqlParam.Parameters, p.Spec.Size.SharedBuffer)
@@ -739,6 +744,12 @@ func enableAuditLogs(parameters map[string]string) {
 	parameters["pgaudit.log"] = "ddl"
 	parameters["pgaudit.log_relation"] = "on"
 	parameters["pgaudit.log_parameter"] = "on"
+}
+
+// setDefaultPostgresParams configures default keepalive values
+func setDefaultPostgresParams(parameters map[string]string) {
+	parameters["tcp_keepalives_idle"] = defaultPostgresParamValueTCPKeepAlivesIdle
+	parameters["tcp_keepalives_interval"] = defaultPostgresParamValueTCPKeepAlivesInterval
 }
 
 // setPostgresParams add the provided params to the parameter map (but ignore params that are blocked)
