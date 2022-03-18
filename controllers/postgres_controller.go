@@ -23,10 +23,12 @@ import (
 	"k8s.io/utils/pointer"
 
 	firewall "github.com/metal-stack/firewall-controller/api/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -111,6 +113,8 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		}
 		log.Info("owned zalando postgresql deleted")
 
+		// TODO delete netpol
+
 		deletable, err := r.IsOperatorDeletable(ctx, namespace)
 		if err != nil {
 			r.recorder.Eventf(instance, "Warning", "Error", "failed to check if the operator is idle: %v", err)
@@ -156,6 +160,12 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	if err := r.ensureZalandoDependencies(ctx, instance); err != nil {
 		r.recorder.Eventf(instance, "Warning", "Error", "failed to install operator: %v", err)
 		return ctrl.Result{}, fmt.Errorf("error while ensuring Zalando dependencies: %w", err)
+	}
+
+	// Add network policy
+	if err := r.createOrUpdateNetPol(ctx, instance); err != nil {
+		r.recorder.Eventf(instance, "Warning", "Error", "failed to create netpol: %v", err)
+		return ctrl.Result{}, fmt.Errorf("error while creating netpol: %w", err)
 	}
 
 	// Make sure the standby secrets exist, if neccessary
@@ -747,4 +757,118 @@ func (r *PostgresReconciler) getBackupConfig(ctx context.Context, ns, name strin
 		return nil, fmt.Errorf("unable to unmarshal backupconfig:%w", err)
 	}
 	return &backupConfig, nil
+}
+
+func (r *PostgresReconciler) createOrUpdateNetPol(ctx context.Context, instance *pg.Postgres) error {
+
+	name := instance.ToPeripheralResourceName() + "-egress"
+	namespace := instance.ToPeripheralResourceNamespace()
+
+	pgPodMatchingLabels := instance.ToZalandoPostgresqlMatchingLabels()
+	pgPodMatchingLabels["application"] = "spilo"
+
+	spec := networkingv1.NetworkPolicySpec{
+		PodSelector: metav1.LabelSelector{
+			MatchLabels: pgPodMatchingLabels,
+		},
+		Egress: []networkingv1.NetworkPolicyEgressRule{},
+	}
+
+	// pgToPgEgress allows communication to the postgres pods
+	pgToPgEgress := networkingv1.NetworkPolicyEgressRule{
+		To: []networkingv1.NetworkPolicyPeer{
+			{
+				PodSelector: &metav1.LabelSelector{
+					MatchLabels: pgPodMatchingLabels,
+				},
+			},
+		},
+	}
+	// add rule
+	spec.Egress = append(spec.Egress, pgToPgEgress)
+
+	// coreDNSEgress allows communication to the dns
+	coreDNSEgress := networkingv1.NetworkPolicyEgressRule{
+		To: []networkingv1.NetworkPolicyPeer{
+			{
+				NamespaceSelector: &metav1.LabelSelector{
+					// TODO make configurable
+					MatchLabels: client.MatchingLabels{
+						"gardener.cloud/purpose": "kube-system",
+					},
+				},
+				PodSelector: &metav1.LabelSelector{
+					// TODO make configurable
+					MatchLabels: client.MatchingLabels{
+						"k8s-app": "kube-dns",
+					},
+				},
+			},
+		},
+	}
+	// add rule
+	spec.Egress = append(spec.Egress, coreDNSEgress)
+
+	// TODO etcd (if configured)
+	// # etcd
+	// - to:
+	// 	- ipBlock:
+	// 		cidr: 0.0.0.0/0
+	// 	ports:
+	// 	- port: 2379
+	//	protocol: TCP
+
+	// allows communication to the S3 (and any other port 443...)
+	s3Port := intstr.FromInt(443)
+	s3Protocol := corev1.ProtocolTCP
+	s3Egress := networkingv1.NetworkPolicyEgressRule{
+		To: []networkingv1.NetworkPolicyPeer{
+			{
+				IPBlock: &networkingv1.IPBlock{
+					CIDR: "0.0.0.0/0",
+				},
+			},
+		},
+		Ports: []networkingv1.NetworkPolicyPort{
+			{
+				Port:     &s3Port,
+				Protocol: &s3Protocol,
+			},
+		},
+	}
+	// add rule
+	spec.Egress = append(spec.Egress, s3Egress)
+
+	// allows communication to the configured primary postgres
+	if instance.Spec.PostgresConnection != nil && !instance.Spec.PostgresConnection.ReplicationPrimary {
+		postgresPort := intstr.FromInt(int(instance.Spec.PostgresConnection.ConnectionPort))
+		postgresProtocol := corev1.ProtocolTCP
+		standbyToPrimaryEgress := networkingv1.NetworkPolicyEgressRule{
+			To: []networkingv1.NetworkPolicyPeer{
+				{
+					IPBlock: &networkingv1.IPBlock{
+						CIDR: instance.Spec.PostgresConnection.ConnectionIP + "/32", // TODO find a better solution
+					},
+				},
+			},
+			Ports: []networkingv1.NetworkPolicyPort{
+				{
+					Port:     &postgresPort,
+					Protocol: &postgresProtocol,
+				},
+			},
+		}
+		// add rule
+		spec.Egress = append(spec.Egress, standbyToPrimaryEgress)
+	}
+
+	np := &networkingv1.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace}}
+	if _, err := controllerutil.CreateOrUpdate(ctx, r.SvcClient, np, func() error {
+		np.Spec = spec
+		return nil
+	}); err != nil {
+		return fmt.Errorf("unable to deploy NetworkPolicy: %w", err)
+	}
+
+	return nil
 }
