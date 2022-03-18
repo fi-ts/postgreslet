@@ -162,6 +162,7 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, fmt.Errorf("error while ensuring Zalando dependencies: %w", err)
 	}
 
+	// TODO make configurable
 	// Add network policy
 	if err := r.createOrUpdateNetPol(ctx, instance); err != nil {
 		r.recorder.Eventf(instance, "Warning", "Error", "failed to create netpol: %v", err)
