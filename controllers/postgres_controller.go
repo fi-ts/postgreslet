@@ -210,13 +210,13 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, fmt.Errorf("could not fetch config for sidecars")
 	}
 	// Add services for our sidecars
-	namespace := req.NamespacedName
-	if err := r.createOrUpdateExporterSidecarServices(ctx, namespace.Namespace, sidecarCM); err != nil {
+	namespace := instance.ToPeripheralResourceNamespace()
+	if err := r.createOrUpdateExporterSidecarServices(ctx, namespace, sidecarCM); err != nil {
 		return ctrl.Result{}, fmt.Errorf("error while creating sidecars services %v: %w", namespace, err)
 	}
 
 	// Add service monitor for our exporter sidecar
-	err := r.createOrUpdateExporterSidecarServiceMonitor(ctx, namespace.Name, instance)
+	err := r.createOrUpdateExporterSidecarServiceMonitor(ctx, namespace, instance)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("error while creating sidecars servicemonitor %v: %w", namespace, err)
 	}
