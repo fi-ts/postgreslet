@@ -46,7 +46,7 @@ const (
 	// SidecarsCMExporterQueriesKey Name of the key containing the queries.yaml config file
 	SidecarsCMExporterQueriesKey string = "queries.yaml"
 
-	sidecarsCMName = "postgres-sidecars-configmap"
+	localSidecarsCMName = "postgres-sidecars-configmap"
 )
 
 // operatorPodMatchingLabels is for listing operator pods
@@ -491,24 +491,24 @@ func (m *OperatorManager) createOrUpdateSidecarsConfig(ctx context.Context, name
 		Namespace: "postgreslet-system",
 		Name:      "postgreslet-postgres-sidecars",
 	}
-	sidecarsCM := &corev1.ConfigMap{}
-	if err := m.Get(ctx, cns, sidecarsCM); err != nil {
+	globalSidecarsCM := &corev1.ConfigMap{}
+	if err := m.Get(ctx, cns, globalSidecarsCM); err != nil {
 		// configmap with configuration does not exists, nothing we can do here...
 		m.log.Error(err, "could not fetch config for sidecars")
 		return err
 	}
 
 	// Add our sidecars configmap
-	if err := m.createOrUpdateSidecarsConfigMap(ctx, namespace, sidecarsCM); err != nil {
+	if err := m.createOrUpdateSidecarsConfigMap(ctx, namespace, globalSidecarsCM); err != nil {
 		return fmt.Errorf("error while creating sidecars configmap %v: %w", namespace, err)
 	}
 
 	return nil
 }
 
-func (m *OperatorManager) createOrUpdateSidecarsConfigMap(ctx context.Context, namespace string, configmap *corev1.ConfigMap) error {
+func (m *OperatorManager) createOrUpdateSidecarsConfigMap(ctx context.Context, namespace string, globalSidecarsCM *corev1.ConfigMap) error {
 	sccm := &corev1.ConfigMap{}
-	if err := m.SetName(sccm, sidecarsCMName); err != nil {
+	if err := m.SetName(sccm, localSidecarsCMName); err != nil {
 		return fmt.Errorf("error while setting the name of the new Sidecars ConfigMap to %v: %w", namespace, err)
 	}
 	if err := m.SetNamespace(sccm, namespace); err != nil {
@@ -519,14 +519,14 @@ func (m *OperatorManager) createOrUpdateSidecarsConfigMap(ctx context.Context, n
 	sccm.Data = make(map[string]string)
 
 	// decode and write the fluentd.conf key from the global configmap to the local configmap
-	b, err := base64.StdEncoding.DecodeString(configmap.Data["fluent-bit.conf"])
+	b, err := base64.StdEncoding.DecodeString(globalSidecarsCM.Data["fluent-bit.conf"])
 	if err == nil {
 
 		sccm.Data[SidecarsCMFluentBitConfKey] = string(b)
 	}
 
 	// decode and write the queries.yaml key from the global configmap to the local configmap
-	b, err = base64.StdEncoding.DecodeString(configmap.Data["queries.yaml"])
+	b, err = base64.StdEncoding.DecodeString(globalSidecarsCM.Data["queries.yaml"])
 	if err == nil {
 		sccm.Data[SidecarsCMExporterQueriesKey] = string(b)
 	}
@@ -534,7 +534,7 @@ func (m *OperatorManager) createOrUpdateSidecarsConfigMap(ctx context.Context, n
 	// try to fetch any existing local sidecars configmap
 	ns := types.NamespacedName{
 		Namespace: namespace,
-		Name:      sidecarsCMName,
+		Name:      localSidecarsCMName,
 	}
 	if err := m.Get(ctx, ns, &corev1.ConfigMap{}); err == nil {
 		// local configmap aleady exists, updating it

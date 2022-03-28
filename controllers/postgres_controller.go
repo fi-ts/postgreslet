@@ -204,14 +204,14 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		Namespace: "postgreslet-system",
 		Name:      "postgreslet-postgres-sidecars",
 	}
-	sidecarsCM := &corev1.ConfigMap{}
-	if err := r.SvcClient.Get(ctx, cns, sidecarsCM); err != nil {
+	globalSidecarsCM := &corev1.ConfigMap{}
+	if err := r.SvcClient.Get(ctx, cns, globalSidecarsCM); err != nil {
 		// configmap with configuration does not exists, nothing we can do here...
 		return ctrl.Result{}, fmt.Errorf("could not fetch config for sidecars")
 	}
 	// Add services for our sidecars
 	namespace := instance.ToPeripheralResourceNamespace()
-	if err := r.createOrUpdateExporterSidecarServices(ctx, namespace, sidecarsCM, instance); err != nil {
+	if err := r.createOrUpdateExporterSidecarServices(ctx, namespace, globalSidecarsCM, instance); err != nil {
 		return ctrl.Result{}, fmt.Errorf("error while creating sidecars services %v: %w", namespace, err)
 	}
 
@@ -221,7 +221,7 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, fmt.Errorf("error while creating sidecars servicemonitor %v: %w", namespace, err)
 	}
 
-	if err := r.createOrUpdateZalandoPostgresql(ctx, instance, log, sidecarsCM); err != nil {
+	if err := r.createOrUpdateZalandoPostgresql(ctx, instance, log, globalSidecarsCM); err != nil {
 		r.recorder.Eventf(instance, "Warning", "Error", "failed to create Zalando resource: %v", err)
 		return ctrl.Result{}, fmt.Errorf("failed to create or update zalando postgresql: %w", err)
 	}
