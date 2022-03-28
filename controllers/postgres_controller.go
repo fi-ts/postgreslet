@@ -204,14 +204,14 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		Namespace: "postgreslet-system",
 		Name:      "postgreslet-postgres-sidecars",
 	}
-	sidecarCM := &corev1.ConfigMap{}
-	if err := r.SvcClient.Get(ctx, cns, sidecarCM); err != nil {
+	sidecarsCM := &corev1.ConfigMap{}
+	if err := r.SvcClient.Get(ctx, cns, sidecarsCM); err != nil {
 		// configmap with configuration does not exists, nothing we can do here...
 		return ctrl.Result{}, fmt.Errorf("could not fetch config for sidecars")
 	}
 	// Add services for our sidecars
 	namespace := instance.ToPeripheralResourceNamespace()
-	if err := r.createOrUpdateExporterSidecarServices(ctx, namespace, sidecarCM, instance); err != nil {
+	if err := r.createOrUpdateExporterSidecarServices(ctx, namespace, sidecarsCM, instance); err != nil {
 		return ctrl.Result{}, fmt.Errorf("error while creating sidecars services %v: %w", namespace, err)
 	}
 
@@ -221,7 +221,7 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, fmt.Errorf("error while creating sidecars servicemonitor %v: %w", namespace, err)
 	}
 
-	if err := r.createOrUpdateZalandoPostgresql(ctx, instance, log, sidecarCM); err != nil {
+	if err := r.createOrUpdateZalandoPostgresql(ctx, instance, log, sidecarsCM); err != nil {
 		r.recorder.Eventf(instance, "Warning", "Error", "failed to create Zalando resource: %v", err)
 		return ctrl.Result{}, fmt.Errorf("failed to create or update zalando postgresql: %w", err)
 	}
@@ -262,7 +262,7 @@ func (r *PostgresReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context, instance *pg.Postgres, log logr.Logger, c *corev1.ConfigMap) error {
+func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context, instance *pg.Postgres, log logr.Logger, sidecarsCM *corev1.ConfigMap) error {
 	var restoreBackupConfig *pg.BackupConfig
 	var restoreSouceInstance *pg.Postgres
 	if instance.Spec.PostgresRestore != nil {
@@ -297,7 +297,7 @@ func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context
 			return fmt.Errorf("failed to fetch zalando postgresql: %w", err)
 		}
 
-		u, err := instance.ToUnstructuredZalandoPostgresql(nil, c, r.StorageClass, r.PgParamBlockList, restoreBackupConfig, restoreSouceInstance)
+		u, err := instance.ToUnstructuredZalandoPostgresql(nil, sidecarsCM, r.StorageClass, r.PgParamBlockList, restoreBackupConfig, restoreSouceInstance)
 		if err != nil {
 			return fmt.Errorf("failed to convert to unstructured zalando postgresql: %w", err)
 		}
@@ -313,7 +313,7 @@ func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context
 	// Update zalando postgresql
 	mergeFrom := client.MergeFrom(rawZ.DeepCopy())
 
-	u, err := instance.ToUnstructuredZalandoPostgresql(rawZ, c, r.StorageClass, r.PgParamBlockList, restoreBackupConfig, restoreSouceInstance)
+	u, err := instance.ToUnstructuredZalandoPostgresql(rawZ, sidecarsCM, r.StorageClass, r.PgParamBlockList, restoreBackupConfig, restoreSouceInstance)
 	if err != nil {
 		return fmt.Errorf("failed to convert to unstructured zalando postgresql: %w", err)
 	}

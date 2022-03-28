@@ -491,15 +491,15 @@ func (m *OperatorManager) createOrUpdateSidecarsConfig(ctx context.Context, name
 		Namespace: "postgreslet-system",
 		Name:      "postgreslet-postgres-sidecars",
 	}
-	c := &corev1.ConfigMap{}
-	if err := m.Get(ctx, cns, c); err != nil {
+	sidecarsCM := &corev1.ConfigMap{}
+	if err := m.Get(ctx, cns, sidecarsCM); err != nil {
 		// configmap with configuration does not exists, nothing we can do here...
 		m.log.Error(err, "could not fetch config for sidecars")
 		return err
 	}
 
 	// Add our sidecars configmap
-	if err := m.createOrUpdateSidecarsConfigMap(ctx, namespace, c); err != nil {
+	if err := m.createOrUpdateSidecarsConfigMap(ctx, namespace, sidecarsCM); err != nil {
 		return fmt.Errorf("error while creating sidecars configmap %v: %w", namespace, err)
 	}
 
