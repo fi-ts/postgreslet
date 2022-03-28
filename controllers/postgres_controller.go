@@ -221,7 +221,7 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, fmt.Errorf("error while creating sidecars servicemonitor %v: %w", namespace, err)
 	}
 
-	if err := r.createOrUpdateZalandoPostgresql(ctx, instance, log); err != nil {
+	if err := r.createOrUpdateZalandoPostgresql(ctx, instance, log, sidecarCM); err != nil {
 		r.recorder.Eventf(instance, "Warning", "Error", "failed to create Zalando resource: %v", err)
 		return ctrl.Result{}, fmt.Errorf("failed to create or update zalando postgresql: %w", err)
 	}
@@ -262,21 +262,7 @@ func (r *PostgresReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context, instance *pg.Postgres, log logr.Logger) error {
-	// Get the sidecar config
-	// try to fetch the global sidecars configmap
-	cns := types.NamespacedName{
-		// TODO don't use string literals here! name is dependent of the release name of the helm chart!
-		Namespace: "postgreslet-system",
-		Name:      "postgreslet-postgres-sidecars",
-	}
-	c := &corev1.ConfigMap{}
-	if err := r.SvcClient.Get(ctx, cns, c); err != nil {
-		// configmap with configuration does not exists, nothing we can do here...
-		log.Info("could not fetch config for sidecars")
-		c = nil
-	}
-
+func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context, instance *pg.Postgres, log logr.Logger, c *corev1.ConfigMap) error {
 	var restoreBackupConfig *pg.BackupConfig
 	var restoreSouceInstance *pg.Postgres
 	if instance.Spec.PostgresRestore != nil {
