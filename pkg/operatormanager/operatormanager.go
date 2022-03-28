@@ -60,6 +60,8 @@ type Options struct {
 	EtcdHost                string
 	CRDValidation           bool
 	MajorVersionUpgradeMode string
+	PostgresletNamespace    string
+	SidecarsConfigMapName   string
 }
 
 // OperatorManager manages the operator
@@ -487,9 +489,8 @@ func (m *OperatorManager) createPodEnvironmentConfigMap(ctx context.Context, nam
 func (m *OperatorManager) createOrUpdateSidecarsConfig(ctx context.Context, namespace string) error {
 	// try to fetch the global sidecars configmap
 	cns := types.NamespacedName{
-		// TODO don't use string literals here! name is dependent of the release name of the helm chart!
-		Namespace: "postgreslet-system",
-		Name:      "postgreslet-postgres-sidecars",
+		Namespace: m.options.PostgresletNamespace,
+		Name:      m.options.SidecarsConfigMapName,
 	}
 	globalSidecarsCM := &corev1.ConfigMap{}
 	if err := m.Get(ctx, cns, globalSidecarsCM); err != nil {

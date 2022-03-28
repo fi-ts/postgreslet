@@ -63,6 +63,8 @@ type PostgresReconciler struct {
 	recorder                    record.EventRecorder
 	PgParamBlockList            map[string]bool
 	StandbyClustersSourceRanges []string
+	PostgresletNamespace        string
+	SidecarsConfigMapName       string
 }
 
 // Reconcile is the entry point for postgres reconciliation.
@@ -200,9 +202,8 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 
 	// try to fetch the global sidecars configmap
 	cns := types.NamespacedName{
-		// TODO don't use string literals here! name is dependent of the release name of the helm chart!
-		Namespace: "postgreslet-system",
-		Name:      "postgreslet-postgres-sidecars",
+		Namespace: r.PostgresletNamespace,
+		Name:      r.SidecarsConfigMapName,
 	}
 	globalSidecarsCM := &corev1.ConfigMap{}
 	if err := r.SvcClient.Get(ctx, cns, globalSidecarsCM); err != nil {
