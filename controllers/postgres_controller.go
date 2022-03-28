@@ -211,7 +211,7 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	}
 	// Add services for our sidecars
 	namespace := instance.ToPeripheralResourceNamespace()
-	if err := r.createOrUpdateExporterSidecarServices(ctx, namespace, sidecarCM); err != nil {
+	if err := r.createOrUpdateExporterSidecarServices(ctx, namespace, sidecarCM, instance); err != nil {
 		return ctrl.Result{}, fmt.Errorf("error while creating sidecars services %v: %w", namespace, err)
 	}
 
@@ -788,7 +788,7 @@ func (r *PostgresReconciler) getBackupConfig(ctx context.Context, ns, name strin
 }
 
 // createOrUpdateExporterSidecarServices ensures the neccessary services to acces the sidecars exist
-func (r *PostgresReconciler) createOrUpdateExporterSidecarServices(ctx context.Context, namespace string, c *corev1.ConfigMap) error {
+func (r *PostgresReconciler) createOrUpdateExporterSidecarServices(ctx context.Context, namespace string, c *corev1.ConfigMap, in *pg.Postgres) error {
 	log := r.Log.WithValues("namespace", namespace)
 
 	exporterServicePort, error := strconv.ParseInt(c.Data["postgres-exporter-service-port"], 10, 32)
@@ -817,6 +817,13 @@ func (r *PostgresReconciler) createOrUpdateExporterSidecarServices(ctx context.C
 	}
 	if err := r.SetLabels(pes, labels); err != nil {
 		return fmt.Errorf("error while setting the labels of the postgres-exporter service to %v: %w", labels, err)
+	}
+	annotations := map[string]string{
+		postgresExporterServiceTenantAnnotationName:    in.Spec.Tenant,
+		postgresExporterServiceProjectIDAnnotationName: in.Spec.ProjectID,
+	}
+	if err := r.SetAnnotations(pes, annotations); err != nil {
+		return fmt.Errorf("error while setting the annotations of the postgres-exporter service to %v: %w", annotations, err)
 	}
 
 	pes.Spec.Ports = []corev1.ServicePort{
@@ -885,7 +892,7 @@ func (r *PostgresReconciler) createOrUpdateExporterSidecarServiceMonitor(ctx con
 		postgresExporterServiceProjectIDAnnotationName: in.Spec.ProjectID,
 	}
 	if err := r.SetAnnotations(pesm, annotations); err != nil {
-		return fmt.Errorf("error while setting the annotations of the postgres-exporter service to %v: %w", annotations, err)
+		return fmt.Errorf("error while setting the annotations of the postgres-exporter service monitor to %v: %w", annotations, err)
 	}
 
 	pesm.Spec.Endpoints = []coreosv1.Endpoint{
