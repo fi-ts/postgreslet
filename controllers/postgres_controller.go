@@ -42,8 +42,8 @@ import (
 const (
 	postgresExporterServiceName                    string = "postgres-exporter"
 	postgresExporterServicePortName                string = "metrics"
-	postgresExporterServiceTenantAnnotationName    string = "cs.fits.cloud/tenant"
-	postgresExporterServiceProjectIDAnnotationName string = "cs.fits.cloud/project-id"
+	postgresExporterServiceTenantAnnotationName    string = pg.TenantLabelName
+	postgresExporterServiceProjectIDAnnotationName string = pg.ProjectIDLabelName
 )
 
 // requeue defines in how many seconds a requeue should happen
