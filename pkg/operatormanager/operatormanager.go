@@ -506,6 +506,7 @@ func (m *OperatorManager) createOrUpdateSidecarsConfig(ctx context.Context, name
 	return nil
 }
 
+// createOrUpdateSidecarsConfigMap Creates/updates a local ConfigMap for the sidecars, which e.g. contains the config files to mount in the sidecars
 func (m *OperatorManager) createOrUpdateSidecarsConfigMap(ctx context.Context, namespace string, globalSidecarsCM *corev1.ConfigMap) error {
 	sccm := &corev1.ConfigMap{}
 	if err := m.SetName(sccm, localSidecarsCMName); err != nil {
