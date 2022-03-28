@@ -17,17 +17,14 @@ import (
 
 	pg "github.com/fi-ts/postgreslet/api/v1"
 	"github.com/go-logr/logr"
-	coreosv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -43,9 +40,6 @@ const (
 
 	operatorPodLabelName  string = "name"
 	operatorPodLabelValue string = "postgres-operator"
-
-	postgresExporterServiceName     string = "postgres-exporter"
-	postgresExporterServicePortName string = "metrics"
 
 	// SidecarsCMFluentBitConfKey Name of the key containing the fluent-bit.conf config file
 	SidecarsCMFluentBitConfKey string = "fluent-bit.conf"
@@ -246,11 +240,6 @@ func (m *OperatorManager) UninstallOperator(ctx context.Context, namespace strin
 		return fmt.Errorf("error while deleting pod environment configmap: %w", err)
 	}
 
-	// delete the postgres-exporter service
-	if err := m.deleteExporterSidecarService(ctx, namespace); client.IgnoreNotFound(err) != nil {
-		return fmt.Errorf("error while deleting the postgres-exporter service: %w", err)
-	}
-
 	// Delete the namespace.
 	nsObj := &corev1.Namespace{}
 	nsObj.Name = namespace
@@ -417,6 +406,10 @@ func (m *OperatorManager) editConfigMap(cm *corev1.ConfigMap, namespace string, 
 
 	cm.Data["enable_crd_validation"] = strconv.FormatBool(options.CRDValidation)
 	cm.Data["major_version_upgrade_mode"] = options.MajorVersionUpgradeMode
+
+	// we specifically refer to those two users in the cloud-api, so we hardcode them here as well to be on the safe side.
+	cm.Data["super_username"] = "postgres"
+	cm.Data["replication_username"] = "standby"
 }
 
 // ensureCleanMetadata ensures obj has clean metadata
@@ -510,21 +503,10 @@ func (m *OperatorManager) createOrUpdateSidecarsConfig(ctx context.Context, name
 		return fmt.Errorf("error while creating sidecars configmap %v: %w", namespace, err)
 	}
 
-	// Add services for our sidecars
-	if err := m.createOrUpdateExporterSidecarService(ctx, namespace, c); err != nil {
-		return fmt.Errorf("error while creating sidecars services %v: %w", namespace, err)
-	}
-
-	// Add services for our sidecars
-	err := m.createOrUpdateExporterSidecarServiceMonitor(ctx, namespace)
-	if err != nil {
-		return fmt.Errorf("error while creating sidecars servicemonitor %v: %w", namespace, err)
-	}
-
 	return nil
 }
 
-func (m *OperatorManager) createOrUpdateSidecarsConfigMap(ctx context.Context, namespace string, c *corev1.ConfigMap) error {
+func (m *OperatorManager) createOrUpdateSidecarsConfigMap(ctx context.Context, namespace string, configmap *corev1.ConfigMap) error {
 	sccm := &corev1.ConfigMap{}
 	if err := m.SetName(sccm, sidecarsCMName); err != nil {
 		return fmt.Errorf("error while setting the name of the new Sidecars ConfigMap to %v: %w", namespace, err)
@@ -537,14 +519,14 @@ func (m *OperatorManager) createOrUpdateSidecarsConfigMap(ctx context.Context, n
 	sccm.Data = make(map[string]string)
 
 	// decode and write the fluentd.conf key from the global configmap to the local configmap
-	b, err := base64.StdEncoding.DecodeString(c.Data["fluent-bit.conf"])
+	b, err := base64.StdEncoding.DecodeString(configmap.Data["fluent-bit.conf"])
 	if err == nil {
 
 		sccm.Data[SidecarsCMFluentBitConfKey] = string(b)
 	}
 
 	// decode and write the queries.yaml key from the global configmap to the local configmap
-	b, err = base64.StdEncoding.DecodeString(c.Data["queries.yaml"])
+	b, err = base64.StdEncoding.DecodeString(configmap.Data["queries.yaml"])
 	if err == nil {
 		sccm.Data[SidecarsCMExporterQueriesKey] = string(b)
 	}
@@ -573,140 +555,6 @@ func (m *OperatorManager) createOrUpdateSidecarsConfigMap(ctx context.Context, n
 	return nil
 }
 
-// createOrUpdateExporterSidecarService ensures the neccessary services to acces the sidecars exist
-func (m *OperatorManager) createOrUpdateExporterSidecarService(ctx context.Context, namespace string, c *corev1.ConfigMap) error {
-	exporterServicePort, error := strconv.ParseInt(c.Data["postgres-exporter-service-port"], 10, 32)
-	if error != nil {
-		// todo log error
-		exporterServicePort = 9187
-	}
-
-	exporterServiceTargetPort, error := strconv.ParseInt(c.Data["postgres-exporter-service-target-port"], 10, 32)
-	if error != nil {
-		// todo log error
-		exporterServiceTargetPort = exporterServicePort
-	}
-
-	pes := &corev1.Service{}
-
-	if err := m.SetName(pes, postgresExporterServiceName); err != nil {
-		return fmt.Errorf("error while setting the name of the postgres-exporter service to %v: %w", namespace, err)
-	}
-	if err := m.SetNamespace(pes, namespace); err != nil {
-		return fmt.Errorf("error while setting the namespace of the postgres-exporter service to %v: %w", namespace, err)
-	}
-	labels := map[string]string{
-		// "application": "spilo", // TODO check if we still need that label, IsOperatorDeletable won't work anymore if we set it.
-		"app": "postgres-exporter",
-	}
-	if err := m.SetLabels(pes, labels); err != nil {
-		return fmt.Errorf("error while setting the namespace of the postgres-exporter service to %v: %w", namespace, err)
-	}
-
-	pes.Spec.Ports = []corev1.ServicePort{
-		{
-			Name:       postgresExporterServicePortName,
-			Port:       int32(exporterServicePort),
-			Protocol:   corev1.ProtocolTCP,
-			TargetPort: intstr.FromInt(int(exporterServiceTargetPort)),
-		},
-	}
-	selector := map[string]string{
-		"application": "spilo",
-	}
-	pes.Spec.Selector = selector
-	pes.Spec.Type = corev1.ServiceTypeClusterIP
-
-	// try to fetch any existing postgres-exporter service
-	ns := types.NamespacedName{
-		Namespace: namespace,
-		Name:      postgresExporterServiceName,
-	}
-	old := &corev1.Service{}
-	if err := m.Get(ctx, ns, old); err == nil {
-		// service exists, overwriting it (but using the same clusterip)
-		pes.Spec.ClusterIP = old.Spec.ClusterIP
-		pes.ObjectMeta.ResourceVersion = old.GetObjectMeta().GetResourceVersion()
-		if err := m.Update(ctx, pes); err != nil {
-			return fmt.Errorf("error while updating the postgres-exporter service: %w", err)
-		}
-		m.log.Info("postgres-exporter service updated")
-		return nil
-	}
-	// todo: handle errors other than `NotFound`
-
-	// local servicemonitor does not exist, creating it
-	if err := m.Create(ctx, pes); err != nil {
-		return fmt.Errorf("error while creating the postgres-exporter service: %w", err)
-	}
-	m.log.Info("postgres-exporter service created")
-
-	return nil
-}
-
-// createOrUpdateExporterSidecarServiceMonitor ensures the servicemonitors for the sidecars exist
-func (m *OperatorManager) createOrUpdateExporterSidecarServiceMonitor(ctx context.Context, namespace string) error {
-
-	pesm := &coreosv1.ServiceMonitor{}
-
-	// TODO what's the correct name?
-	if err := m.SetName(pesm, postgresExporterServiceName); err != nil {
-		return fmt.Errorf("error while setting the name of the postgres-exporter servicemonitor to %v: %w", namespace, err)
-	}
-	if err := m.SetNamespace(pesm, namespace); err != nil {
-		return fmt.Errorf("error while setting the namespace of the postgres-exporter servicemonitor to %v: %w", namespace, err)
-	}
-	labels := map[string]string{
-		// TODO add labels for tenant and project
-		"app":     "postgres-exporter",
-		"release": "prometheus",
-	}
-	if err := m.SetLabels(pesm, labels); err != nil {
-		return fmt.Errorf("error while setting the namespace of the postgres-exporter servicemonitor to %v: %w", namespace, err)
-	}
-
-	pesm.Spec.Endpoints = []coreosv1.Endpoint{
-		{
-			Port: postgresExporterServicePortName,
-		},
-	}
-	pesm.Spec.NamespaceSelector = coreosv1.NamespaceSelector{
-		MatchNames: []string{namespace},
-	}
-	matchLabels := map[string]string{
-		// TODO use extraced string
-		"app": "postgres-exporter",
-	}
-	pesm.Spec.Selector = metav1.LabelSelector{
-		MatchLabels: matchLabels,
-	}
-
-	// try to fetch any existing postgres-exporter service
-	ns := types.NamespacedName{
-		Namespace: namespace,
-		Name:      postgresExporterServiceName,
-	}
-	old := &coreosv1.ServiceMonitor{}
-	if err := m.Get(ctx, ns, old); err == nil {
-		// Copy the resource version
-		pesm.ObjectMeta.ResourceVersion = old.ObjectMeta.ResourceVersion
-		if err := m.Update(ctx, pesm); err != nil {
-			return fmt.Errorf("error while updating the postgres-exporter servicemonitor: %w", err)
-		}
-		m.log.Info("postgres-exporter servicemonitor updated")
-		return nil
-	}
-	// todo: handle errors other than `NotFound`
-
-	// local servicemonitor does not exist, creating it
-	if err := m.Create(ctx, pesm); err != nil {
-		return fmt.Errorf("error while creating the postgres-exporter servicemonitor: %w", err)
-	}
-	m.log.Info("postgres-exporter servicemonitor created")
-
-	return nil
-}
-
 func (m *OperatorManager) deletePodEnvironmentConfigMap(ctx context.Context, namespace string) error {
 	cm := &corev1.ConfigMap{}
 	if err := m.SetName(cm, PodEnvCMName); err != nil {
@@ -719,22 +567,6 @@ func (m *OperatorManager) deletePodEnvironmentConfigMap(ctx context.Context, nam
 		return fmt.Errorf("error while deleting the Pod Environment ConfigMap: %w", err)
 	}
 	m.log.Info("Pod Environment ConfigMap deleted")
-
-	return nil
-}
-
-func (m *OperatorManager) deleteExporterSidecarService(ctx context.Context, namespace string) error {
-	s := &corev1.Service{}
-	if err := m.SetName(s, postgresExporterServiceName); err != nil {
-		return fmt.Errorf("error while setting the name of the postgres-exporter service to delete to %v: %w", PodEnvCMName, err)
-	}
-	if err := m.SetNamespace(s, namespace); err != nil {
-		return fmt.Errorf("error while setting the namespace of the postgres-exporter service to delete to %v: %w", namespace, err)
-	}
-	if err := m.Delete(ctx, s); err != nil {
-		return fmt.Errorf("error while deleting the postgres-exporter service: %w", err)
-	}
-	m.log.Info("postgres-exporter service deleted")
 
 	return nil
 }
