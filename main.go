@@ -53,6 +53,8 @@ const (
 	pgParamBlockListFlg            = "postgres-param-blocklist"
 	majorVersionUpgradeModeFlg     = "major-version-upgrade-mode"
 	standbyClustersSourceRangesFlg = "standby-clusters-source-ranges"
+	postgresletNamespaceFlg        = "postgreslet-namespace"
+	sidecarsCMNameFlg              = "sidecars-configmap-name"
 )
 
 var (
@@ -71,7 +73,7 @@ func init() {
 }
 
 func main() {
-	var metricsAddrCtrlMgr, metricsAddrSvcMgr, partitionID, tenant, ctrlClusterKubeconfig, pspName, lbIP, storageClass, postgresImage, etcdHost, operatorImage, majorVersionUpgradeMode string
+	var metricsAddrCtrlMgr, metricsAddrSvcMgr, partitionID, tenant, ctrlClusterKubeconfig, pspName, lbIP, storageClass, postgresImage, etcdHost, operatorImage, majorVersionUpgradeMode, postgresletNamespace, sidecarsCMName string
 	var enableLeaderElection, enableCRDValidation bool
 	var portRangeStart, portRangeSize int
 	var pgParamBlockList map[string]bool
@@ -143,6 +145,12 @@ func main() {
 	viper.SetDefault(standbyClustersSourceRangesFlg, "255.255.255.255/32")
 	standbyClusterSourceRanges = viper.GetStringSlice(standbyClustersSourceRangesFlg)
 
+	viper.SetDefault(postgresletNamespaceFlg, "postgreslet-system")
+	postgresletNamespace = viper.GetString(postgresletNamespaceFlg)
+
+	viper.SetDefault(sidecarsCMNameFlg, "postgreslet-postgres-sidecars")
+	sidecarsCMName = viper.GetString(sidecarsCMNameFlg)
+
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 
 	ctrl.Log.Info("flag",
@@ -164,6 +172,8 @@ func main() {
 		pgParamBlockListFlg, pgParamBlockList,
 		majorVersionUpgradeModeFlg, majorVersionUpgradeMode,
 		standbyClustersSourceRangesFlg, standbyClusterSourceRanges,
+		postgresletNamespaceFlg, postgresletNamespace,
+		sidecarsCMNameFlg, sidecarsCMName,
 	)
 
 	svcClusterConf := ctrl.GetConfigOrDie()
@@ -203,6 +213,8 @@ func main() {
 		EtcdHost:                etcdHost,
 		CRDValidation:           enableCRDValidation,
 		MajorVersionUpgradeMode: majorVersionUpgradeMode,
+		PostgresletNamespace:    postgresletNamespace,
+		SidecarsConfigMapName:   sidecarsCMName,
 	}
 	opMgr, err := operatormanager.New(svcClusterConf, "external/svc-postgres-operator.yaml", scheme, ctrl.Log.WithName("OperatorManager"), opMgrOpts)
 	if err != nil {
@@ -227,6 +239,8 @@ func main() {
 		LBManager:                   lbmanager.New(svcClusterMgr.GetClient(), lbMgrOpts),
 		PgParamBlockList:            pgParamBlockList,
 		StandbyClustersSourceRanges: standbyClusterSourceRanges,
+		PostgresletNamespace:        postgresletNamespace,
+		SidecarsConfigMapName:       sidecarsCMName,
 	}).SetupWithManager(ctrlPlaneClusterMgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Postgres")
 		os.Exit(1)
