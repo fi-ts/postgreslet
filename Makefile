@@ -84,7 +84,6 @@ vet:
 
 # Generate code
 generate: controller-gen
-	echo ${CONTROLLER_GEN}
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
 
 # Build the docker image
