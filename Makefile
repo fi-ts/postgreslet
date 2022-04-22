@@ -113,7 +113,6 @@ kind-load-image: cacheobjs
 # find or download controller-gen
 # download controller-gen if necessary
 controller-gen:
-	which controller-gen
 ifeq (, $(shell which controller-gen))
 	@{ \
 	set -e ;\
