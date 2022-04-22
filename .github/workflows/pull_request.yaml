@@ -52,7 +52,7 @@ jobs:
       run: make kubebuilder
 
     - name: Run tests
-      run: make -d test
+      run: make test
 
     - name: Figure out if running fork PR
       id: fork
