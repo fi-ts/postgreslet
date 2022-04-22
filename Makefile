@@ -203,8 +203,7 @@ ifeq (,$(wildcard ~/.kubebuilder/${KUBEBUILDER_VERSION}))
 	{ \
 	os=$$(go env GOOS) ;\
 	arch=$$(go env GOARCH) ;\
-	curl -L https://go.kubebuilder.io/dl/${KUBEBUILDER_VERSION}/$${os}/$${arch} | tar -xz -C /tmp/ ;\
-	mv /tmp/kubebuilder_${KUBEBUILDER_VERSION}_$${os}_$${arch}/bin/* ${GOBIN} ;\
+	curl -L https://github.com/kubernetes-sigs/kubebuilder/releases/download/v${KUBEBUILDER_VERSION}/kubebuilder_$${os}_$${arch} -o ${GOBIN}/kubebuilder ;\
 	mkdir -p ~/.kubebuilder ;\
 	touch ~/.kubebuilder/${KUBEBUILDER_VERSION} ;\
 	}
