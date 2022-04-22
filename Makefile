@@ -84,6 +84,7 @@ vet:
 
 # Generate code
 generate: controller-gen
+	echo ${CONTROLLER_GEN}
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
 
 # Build the docker image
@@ -112,6 +113,7 @@ kind-load-image: cacheobjs
 # find or download controller-gen
 # download controller-gen if necessary
 controller-gen:
+	which controller-gen
 ifeq (, $(shell which controller-gen))
 	@{ \
 	set -e ;\
