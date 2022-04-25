@@ -9,7 +9,7 @@ require (
 	github.com/metal-stack/v v1.0.3
 	github.com/onsi/ginkgo v1.16.5
 	github.com/onsi/gomega v1.17.0
-	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.52.1
+	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.56.0
 	github.com/spf13/viper v1.10.1
 	github.com/zalando/postgres-operator v1.7.0
 	inet.af/netaddr v0.0.0-20211027220019-c74959edd3b6
