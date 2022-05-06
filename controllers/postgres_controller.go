@@ -395,10 +395,10 @@ func (r *PostgresReconciler) updatePodEnvironmentConfigMap(ctx context.Context, 
 	// s3 server side encryption SSE is enabled if the key is given
 	// TODO our s3 needs a small change to make this work
 	walgDisableSSE := "true"
-	walgSSE := ""
+	// walgSSE := ""
 	if backupConfig.S3EncryptionKey != nil {
 		walgDisableSSE = "false"
-		walgSSE = *backupConfig.S3EncryptionKey
+		// walgSSE = *backupConfig.S3EncryptionKey
 	}
 
 	// create updated content for pod environment configmap
