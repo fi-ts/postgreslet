@@ -416,9 +416,10 @@ func (r *PostgresReconciler) updatePodEnvironmentConfigMap(ctx context.Context, 
 		"AWS_S3_FORCE_PATH_STYLE":          "true",
 		"AWS_REGION":                       region,         // now we can use AWS S3
 		"WALG_DISABLE_S3_SSE":              walgDisableSSE, // disable server side encryption if key is nil
-		"WALG_S3_SSE":                      walgSSE,        // server side encryption key
-		"BACKUP_SCHEDULE":                  backupSchedule,
-		"BACKUP_NUM_TO_RETAIN":             backupNumToRetain,
+		"WALG_S3_SSE":                      "AES256",       // server side algorithm
+		// "WALG_S3_SSE":                      walgSSE,        // server side encryption key // TODO how to provide the SSE-C key?
+		"BACKUP_SCHEDULE":      backupSchedule,
+		"BACKUP_NUM_TO_RETAIN": backupNumToRetain,
 	}
 
 	cm := &corev1.ConfigMap{}
