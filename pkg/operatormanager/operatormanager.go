@@ -35,8 +35,8 @@ const (
 	// TODO: use different account for operator and database
 	serviceAccountName string = "postgres-operator"
 
-	// PodEnvCMName Name of the pod environment configmap to create and use
-	PodEnvCMName string = "postgres-pod-config"
+	// PodEnvSecretName Name of the pod environment secret to create and use
+	PodEnvSecretName string = "postgres-pod-config"
 
 	operatorPodLabelName  string = "name"
 	operatorPodLabelValue string = "postgres-operator"
@@ -117,7 +117,7 @@ func (m *OperatorManager) InstallOrUpdateOperator(ctx context.Context, namespace
 	}
 
 	// Add our (initially empty) custom pod environment configmap
-	if err := m.createPodEnvironmentConfigMap(ctx, namespace); err != nil {
+	if err := m.createPodEnvironmentSecret(ctx, namespace); err != nil {
 		return fmt.Errorf("error while creating pod environment configmap %v: %w", namespace, err)
 	}
 
@@ -392,7 +392,7 @@ func (m *OperatorManager) editConfigMap(cm *corev1.ConfigMap, namespace string, 
 	// TODO don't use the same serviceaccount for operator and databases, see #88
 	cm.Data["pod_service_account_name"] = serviceAccountName
 	// set the reference to our custom pod environment configmap
-	cm.Data["pod_environment_configmap"] = PodEnvCMName
+	cm.Data["pod_environment_secret"] = PodEnvSecretName
 	// set the list of inherited labels that will be passed on to the pods
 	s := []string{pg.TenantLabelName, pg.ProjectIDLabelName, pg.UIDLabelName, pg.NameLabelName}
 	// TODO maybe use a precompiled string here
@@ -457,31 +457,31 @@ func (m *OperatorManager) createNamespace(ctx context.Context, namespace string)
 	return nil
 }
 
-// createPodEnvironmentConfigMap creates a new ConfigMap with additional environment variables for the pods
-func (m *OperatorManager) createPodEnvironmentConfigMap(ctx context.Context, namespace string) error {
+// createPodEnvironmentSecret creates a new ConfigMap with additional environment variables for the pods
+func (m *OperatorManager) createPodEnvironmentSecret(ctx context.Context, namespace string) error {
 	ns := types.NamespacedName{
 		Namespace: namespace,
-		Name:      PodEnvCMName,
+		Name:      PodEnvSecretName,
 	}
-	if err := m.Get(ctx, ns, &corev1.ConfigMap{}); err == nil {
-		// configmap already exists, nothing to do here
+	if err := m.Get(ctx, ns, &corev1.Secret{}); err == nil {
+		// secret already exists, nothing to do here
 		// we will update the configmap with the correct S3 config in the postgres controller
-		m.log.Info("Pod Environment ConfigMap already exists")
+		m.log.Info("Pod Environment Secret already exists")
 		return nil
 	}
 
-	cm := &corev1.ConfigMap{}
-	if err := m.SetName(cm, PodEnvCMName); err != nil {
-		return fmt.Errorf("error while setting the name of the new Pod Environment ConfigMap to %v: %w", namespace, err)
+	s := &corev1.Secret{}
+	if err := m.SetName(s, PodEnvSecretName); err != nil {
+		return fmt.Errorf("error while setting the name of the new Pod Environment Secret to %v: %w", namespace, err)
 	}
-	if err := m.SetNamespace(cm, namespace); err != nil {
-		return fmt.Errorf("error while setting the namespace of the new Pod Environment ConfigMap to %v: %w", namespace, err)
+	if err := m.SetNamespace(s, namespace); err != nil {
+		return fmt.Errorf("error while setting the namespace of the new Pod Environment Secret to %v: %w", namespace, err)
 	}
 
-	if err := m.Create(ctx, cm); err != nil {
-		return fmt.Errorf("error while creating the new Pod Environment ConfigMap: %w", err)
+	if err := m.Create(ctx, s); err != nil {
+		return fmt.Errorf("error while creating the new Pod Environment Secret: %w", err)
 	}
-	m.log.Info("new Pod Environment ConfigMap created")
+	m.log.Info("new Pod Environment Secret created")
 
 	return nil
 }
@@ -559,8 +559,8 @@ func (m *OperatorManager) createOrUpdateSidecarsConfigMap(ctx context.Context, n
 
 func (m *OperatorManager) deletePodEnvironmentConfigMap(ctx context.Context, namespace string) error {
 	cm := &corev1.ConfigMap{}
-	if err := m.SetName(cm, PodEnvCMName); err != nil {
-		return fmt.Errorf("error while setting the name of the Pod Environment ConfigMap to delete to %v: %w", PodEnvCMName, err)
+	if err := m.SetName(cm, PodEnvSecretName); err != nil {
+		return fmt.Errorf("error while setting the name of the Pod Environment ConfigMap to delete to %v: %w", PodEnvSecretName, err)
 	}
 	if err := m.SetNamespace(cm, namespace); err != nil {
 		return fmt.Errorf("error while setting the namespace of the Pod Environment ConfigMap to delete to %v: %w", namespace, err)

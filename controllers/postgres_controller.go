@@ -353,14 +353,14 @@ func (r *PostgresReconciler) ensureZalandoDependencies(ctx context.Context, p *p
 		}
 	}
 
-	if err := r.updatePodEnvironmentConfigMap(ctx, p); err != nil {
+	if err := r.updatePodEnvironmentSecret(ctx, p); err != nil {
 		return fmt.Errorf("error while updating backup config: %w", err)
 	}
 
 	return nil
 }
 
-func (r *PostgresReconciler) updatePodEnvironmentConfigMap(ctx context.Context, p *pg.Postgres) error {
+func (r *PostgresReconciler) updatePodEnvironmentSecret(ctx context.Context, p *pg.Postgres) error {
 	log := r.Log.WithValues("postgres", p.UID)
 	if p.Spec.BackupSecretRef == "" {
 		log.Info("No configured backupSecretRef found, skipping configuration of postgres backup")
@@ -395,43 +395,41 @@ func (r *PostgresReconciler) updatePodEnvironmentConfigMap(ctx context.Context, 
 	// s3 server side encryption SSE is enabled if the key is given
 	// TODO our s3 needs a small change to make this work
 	walgDisableSSE := "true"
-	// walgSSE := ""
+	walgLibSodiumKey := ""
 	if backupConfig.S3EncryptionKey != nil {
-		walgDisableSSE = "false"
-		// walgSSE = *backupConfig.S3EncryptionKey
+		walgLibSodiumKey = *backupConfig.S3EncryptionKey
 	}
 
 	// create updated content for pod environment configmap
-	data := map[string]string{
-		"USE_WALG_BACKUP":                  "true",
-		"USE_WALG_RESTORE":                 "true",
-		"WALE_S3_PREFIX":                   "s3://" + bucketName + "/$(SCOPE)",
-		"WALG_S3_PREFIX":                   "s3://" + bucketName + "/$(SCOPE)",
-		"CLONE_WALG_S3_PREFIX":             "s3://" + bucketName + "/$(CLONE_SCOPE)",
-		"WALE_BACKUP_THRESHOLD_PERCENTAGE": "100",
-		"AWS_ENDPOINT":                     awsEndpoint,
-		"WALE_S3_ENDPOINT":                 walES3Endpoint, // same as above, but slightly modified
-		"AWS_ACCESS_KEY_ID":                awsAccessKeyID,
-		"AWS_SECRET_ACCESS_KEY":            awsSecretAccessKey,
-		"AWS_S3_FORCE_PATH_STYLE":          "true",
-		"AWS_REGION":                       region,         // now we can use AWS S3
-		"WALG_DISABLE_S3_SSE":              walgDisableSSE, // disable server side encryption if key is nil
-		"WALG_S3_SSE":                      "AES256",       // server side algorithm
-		// "WALG_S3_SSE":                      walgSSE,        // server side encryption key // TODO how to provide the SSE-C key?
-		"BACKUP_SCHEDULE":      backupSchedule,
-		"BACKUP_NUM_TO_RETAIN": backupNumToRetain,
+	data := map[string][]byte{
+		"USE_WALG_BACKUP":                  []byte("true"),
+		"USE_WALG_RESTORE":                 []byte("true"),
+		"WALE_S3_PREFIX":                   []byte("s3://" + bucketName + "/$(SCOPE)"),
+		"WALG_S3_PREFIX":                   []byte("s3://" + bucketName + "/$(SCOPE)"),
+		"CLONE_WALG_S3_PREFIX":             []byte("s3://" + bucketName + "/$(CLONE_SCOPE)"),
+		"WALE_BACKUP_THRESHOLD_PERCENTAGE": []byte("100"),
+		"AWS_ENDPOINT":                     []byte(awsEndpoint),
+		"WALE_S3_ENDPOINT":                 []byte(walES3Endpoint), // same as above, but slightly modified
+		"AWS_ACCESS_KEY_ID":                []byte(awsAccessKeyID),
+		"AWS_SECRET_ACCESS_KEY":            []byte(awsSecretAccessKey),
+		"AWS_S3_FORCE_PATH_STYLE":          []byte("true"),
+		"AWS_REGION":                       []byte(region),           // now we can use AWS S3
+		"WALG_DISABLE_S3_SSE":              []byte(walgDisableSSE),   // disable server side encryption if key is nil
+		"WALG_LIBSODIUM_KEY":               []byte(walgLibSodiumKey), // libsodium client side encryption key // TODO validate in server-side that it is 32 bytes long, see https://github.com/wal-g/wal-g#encryption
+		"BACKUP_SCHEDULE":                  []byte(backupSchedule),
+		"BACKUP_NUM_TO_RETAIN":             []byte(backupNumToRetain),
 	}
 
-	cm := &corev1.ConfigMap{}
+	s := &corev1.Secret{}
 	ns := types.NamespacedName{
-		Name:      operatormanager.PodEnvCMName,
+		Name:      operatormanager.PodEnvSecretName,
 		Namespace: p.ToPeripheralResourceNamespace(),
 	}
-	if err := r.SvcClient.Get(ctx, ns, cm); err != nil {
+	if err := r.SvcClient.Get(ctx, ns, s); err != nil {
 		return fmt.Errorf("error while getting the pod environment configmap from service cluster: %w", err)
 	}
-	cm.Data = data
-	if err := r.SvcClient.Update(ctx, cm); err != nil {
+	s.Data = data
+	if err := r.SvcClient.Update(ctx, s); err != nil {
 		return fmt.Errorf("error while updating the pod environment configmap in service cluster: %w", err)
 	}
 
