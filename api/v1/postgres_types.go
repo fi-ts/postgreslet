@@ -65,6 +65,7 @@ const (
 
 	defaultPostgresParamValueTCPKeepAlivesIdle     = "200"
 	defaultPostgresParamValueTCPKeepAlivesInterval = "30"
+	defaultPostgresParamValueLogFileMode           = "0600"
 )
 
 var (
@@ -750,6 +751,7 @@ func enableAuditLogs(parameters map[string]string) {
 func setDefaultPostgresParams(parameters map[string]string) {
 	parameters["tcp_keepalives_idle"] = defaultPostgresParamValueTCPKeepAlivesIdle
 	parameters["tcp_keepalives_interval"] = defaultPostgresParamValueTCPKeepAlivesInterval
+	parameters["log_file_mode"] = defaultPostgresParamValueLogFileMode
 }
 
 // setPostgresParams add the provided params to the parameter map (but ignore params that are blocked)
