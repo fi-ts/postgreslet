@@ -66,6 +66,7 @@ type Options struct {
 	MajorVersionUpgradeMode string
 	PostgresletNamespace    string
 	SidecarsConfigMapName   string
+	RunAsNonRoot            bool
 }
 
 // OperatorManager manages the operator
@@ -365,11 +366,13 @@ func (m *OperatorManager) createNewClientObject(ctx context.Context, obj client.
 				v.Spec.Template.Spec.Containers[0].Image = m.options.OperatorImage
 			}
 
-			v.Spec.Template.Spec.Containers[0].SecurityContext = &corev1.SecurityContext{
-				RunAsUser:                pointer.Int64(operatorRunAsUser),
-				RunAsNonRoot:             pointer.Bool(true),
-				ReadOnlyRootFilesystem:   pointer.Bool(true),
-				AllowPrivilegeEscalation: pointer.Bool(false),
+			if m.options.RunAsNonRoot {
+				v.Spec.Template.Spec.Containers[0].SecurityContext = &corev1.SecurityContext{
+					RunAsUser:                pointer.Int64(operatorRunAsUser),
+					RunAsNonRoot:             pointer.Bool(true),
+					ReadOnlyRootFilesystem:   pointer.Bool(true),
+					AllowPrivilegeEscalation: pointer.Bool(false),
+				}
 			}
 		}
 		err = m.Get(ctx, key, &appsv1.Deployment{})
@@ -426,9 +429,11 @@ func (m *OperatorManager) editConfigMap(cm *corev1.ConfigMap, namespace string, 
 	cm.Data["super_username"] = "postgres"
 	cm.Data["replication_username"] = "standby"
 
-	// disable privilege escalation for operator and spilo
-	cm.Data["spilo_allow_privilege_escalation"] = "false"
-	cm.Data["spilo_privileged"] = "false"
+	if m.options.RunAsNonRoot {
+		// disable privilege escalation for operator and spilo
+		cm.Data["spilo_allow_privilege_escalation"] = "false"
+		cm.Data["spilo_privileged"] = "false"
+	}
 }
 
 // ensureCleanMetadata ensures obj has clean metadata

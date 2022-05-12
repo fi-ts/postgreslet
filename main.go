@@ -55,6 +55,7 @@ const (
 	standbyClustersSourceRangesFlg = "standby-clusters-source-ranges"
 	postgresletNamespaceFlg        = "postgreslet-namespace"
 	sidecarsCMNameFlg              = "sidecars-configmap-name"
+	runAsNonRootFlg                = "run-as-non-root"
 )
 
 var (
@@ -74,7 +75,7 @@ func init() {
 
 func main() {
 	var metricsAddrCtrlMgr, metricsAddrSvcMgr, partitionID, tenant, ctrlClusterKubeconfig, pspName, lbIP, storageClass, postgresImage, etcdHost, operatorImage, majorVersionUpgradeMode, postgresletNamespace, sidecarsCMName string
-	var enableLeaderElection, enableCRDValidation bool
+	var enableLeaderElection, enableCRDValidation, runAsNonRoot bool
 	var portRangeStart, portRangeSize int
 	var pgParamBlockList map[string]bool
 	var standbyClusterSourceRanges []string
@@ -151,6 +152,9 @@ func main() {
 	viper.SetDefault(sidecarsCMNameFlg, "postgreslet-postgres-sidecars")
 	sidecarsCMName = viper.GetString(sidecarsCMNameFlg)
 
+	viper.SetDefault(runAsNonRootFlg, false)
+	runAsNonRoot = viper.GetBool(runAsNonRootFlg)
+
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 
 	ctrl.Log.Info("flag",
@@ -174,6 +178,7 @@ func main() {
 		standbyClustersSourceRangesFlg, standbyClusterSourceRanges,
 		postgresletNamespaceFlg, postgresletNamespace,
 		sidecarsCMNameFlg, sidecarsCMName,
+		runAsNonRootFlg, runAsNonRoot,
 	)
 
 	svcClusterConf := ctrl.GetConfigOrDie()
@@ -215,6 +220,7 @@ func main() {
 		MajorVersionUpgradeMode: majorVersionUpgradeMode,
 		PostgresletNamespace:    postgresletNamespace,
 		SidecarsConfigMapName:   sidecarsCMName,
+		RunAsNonRoot:            runAsNonRoot,
 	}
 	opMgr, err := operatormanager.New(svcClusterConf, "external/svc-postgres-operator.yaml", scheme, ctrl.Log.WithName("OperatorManager"), opMgrOpts)
 	if err != nil {
@@ -241,6 +247,7 @@ func main() {
 		StandbyClustersSourceRanges: standbyClusterSourceRanges,
 		PostgresletNamespace:        postgresletNamespace,
 		SidecarsConfigMapName:       sidecarsCMName,
+		RunAsNonRoot:                runAsNonRoot,
 	}).SetupWithManager(ctrlPlaneClusterMgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Postgres")
 		os.Exit(1)

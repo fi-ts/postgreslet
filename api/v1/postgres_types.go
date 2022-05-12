@@ -480,7 +480,7 @@ func (p *Postgres) ToPeripheralResourceLookupKey() types.NamespacedName {
 	}
 }
 
-func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *corev1.ConfigMap, sc string, pgParamBlockList map[string]bool, rbs *BackupConfig, srcDB *Postgres) (*unstructured.Unstructured, error) {
+func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *corev1.ConfigMap, sc string, pgParamBlockList map[string]bool, rbs *BackupConfig, srcDB *Postgres, runAsNonRoot bool) (*unstructured.Unstructured, error) {
 	if z == nil {
 		z = &zalando.Postgresql{}
 	}
@@ -591,9 +591,11 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 		}
 	}
 
-	// Fix uid/gid for the spilo user
-	z.Spec.SpiloRunAsUser = pointer.Int64(spiloRunAsUser)
-	z.Spec.SpiloRunAsGroup = pointer.Int64(spiloRunAsGroup)
+	if runAsNonRoot {
+		// Fix uid/gid for the spilo user
+		z.Spec.SpiloRunAsUser = pointer.Int64(spiloRunAsUser)
+		z.Spec.SpiloRunAsGroup = pointer.Int64(spiloRunAsGroup)
+	}
 
 	jsonZ, err := runtime.DefaultUnstructuredConverter.ToUnstructured(z)
 	if err != nil {
