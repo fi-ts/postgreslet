@@ -430,8 +430,9 @@ func (m *OperatorManager) editConfigMap(cm *corev1.ConfigMap, namespace string, 
 	cm.Data["replication_username"] = "standby"
 
 	if m.options.RunAsNonRoot {
-		// disable privilege escalation for operator and spilo
-		cm.Data["spilo_allow_privilege_escalation"] = "false"
+		// From the docs (https://postgres-operator.readthedocs.io/en/latest/reference/operator_parameters/):
+		// Required by cron which needs setuid. Without this parameter, certification rotation & backups will not be done
+		// cm.Data["spilo_allow_privilege_escalation"] = "false"
 		cm.Data["spilo_privileged"] = "false"
 	}
 }
