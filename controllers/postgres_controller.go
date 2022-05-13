@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -25,6 +26,7 @@ import (
 
 	firewall "github.com/metal-stack/firewall-controller/api/v1"
 	coreosv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -65,6 +67,8 @@ type PostgresReconciler struct {
 	StandbyClustersSourceRanges []string
 	PostgresletNamespace        string
 	SidecarsConfigMapName       string
+	EnableNetPol                bool
+	EtcdHost                    string
 	RunAsNonRoot                bool
 }
 
@@ -129,6 +133,12 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		}
 		log.Info("owned zalando postgresql deleted")
 
+		if err := r.deleteNetPol(ctx, instance); err != nil {
+			log.Error(err, "failed to delete NetworkPolicy")
+		} else {
+			log.Info("corresponding NetworkPolicy deleted")
+		}
+
 		deletable, err := r.IsOperatorDeletable(ctx, namespace)
 		if err != nil {
 			r.recorder.Eventf(instance, "Warning", "Error", "failed to check if the operator is idle: %v", err)
@@ -174,6 +184,19 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	if err := r.ensureZalandoDependencies(ctx, instance); err != nil {
 		r.recorder.Eventf(instance, "Warning", "Error", "failed to install operator: %v", err)
 		return ctrl.Result{}, fmt.Errorf("error while ensuring Zalando dependencies: %w", err)
+	}
+
+	// Add (or remove!) network policy
+	if r.EnableNetPol {
+		if err := r.createOrUpdateNetPol(ctx, instance, r.EtcdHost); err != nil {
+			r.recorder.Eventf(instance, "Warning", "Error", "failed to create netpol: %v", err)
+			return ctrl.Result{}, fmt.Errorf("error while creating netpol: %w", err)
+		}
+	} else {
+		if err := r.deleteNetPol(ctx, instance); err != nil {
+			r.recorder.Eventf(instance, "Warning", "Error", "failed to delete netpol: %v", err)
+			return ctrl.Result{}, fmt.Errorf("error while deleting netpol: %w", err)
+		}
 	}
 
 	// Make sure the standby secrets exist, if neccessary
@@ -354,14 +377,14 @@ func (r *PostgresReconciler) ensureZalandoDependencies(ctx context.Context, p *p
 		}
 	}
 
-	if err := r.updatePodEnvironmentConfigMap(ctx, p); err != nil {
+	if err := r.updatePodEnvironmentSecret(ctx, p); err != nil {
 		return fmt.Errorf("error while updating backup config: %w", err)
 	}
 
 	return nil
 }
 
-func (r *PostgresReconciler) updatePodEnvironmentConfigMap(ctx context.Context, p *pg.Postgres) error {
+func (r *PostgresReconciler) updatePodEnvironmentSecret(ctx context.Context, p *pg.Postgres) error {
 	log := r.Log.WithValues("postgres", p.UID)
 	if p.Spec.BackupSecretRef == "" {
 		log.Info("No configured backupSecretRef found, skipping configuration of postgres backup")
@@ -402,37 +425,37 @@ func (r *PostgresReconciler) updatePodEnvironmentConfigMap(ctx context.Context, 
 		walgSSE = *backupConfig.S3EncryptionKey
 	}
 
-	// create updated content for pod environment configmap
-	data := map[string]string{
-		"USE_WALG_BACKUP":                  "true",
-		"USE_WALG_RESTORE":                 "true",
-		"WALE_S3_PREFIX":                   "s3://" + bucketName + "/$(SCOPE)",
-		"WALG_S3_PREFIX":                   "s3://" + bucketName + "/$(SCOPE)",
-		"CLONE_WALG_S3_PREFIX":             "s3://" + bucketName + "/$(CLONE_SCOPE)",
-		"WALE_BACKUP_THRESHOLD_PERCENTAGE": "100",
-		"AWS_ENDPOINT":                     awsEndpoint,
-		"WALE_S3_ENDPOINT":                 walES3Endpoint, // same as above, but slightly modified
-		"AWS_ACCESS_KEY_ID":                awsAccessKeyID,
-		"AWS_SECRET_ACCESS_KEY":            awsSecretAccessKey,
-		"AWS_S3_FORCE_PATH_STYLE":          "true",
-		"AWS_REGION":                       region,         // now we can use AWS S3
-		"WALG_DISABLE_S3_SSE":              walgDisableSSE, // disable server side encryption if key is nil
-		"WALG_S3_SSE":                      walgSSE,        // server side encryption key
-		"BACKUP_SCHEDULE":                  backupSchedule,
-		"BACKUP_NUM_TO_RETAIN":             backupNumToRetain,
+	// create updated content for pod environment secret
+	data := map[string][]byte{
+		"USE_WALG_BACKUP":                  []byte("true"),
+		"USE_WALG_RESTORE":                 []byte("true"),
+		"WALE_S3_PREFIX":                   []byte("s3://" + bucketName + "/$(SCOPE)"),
+		"WALG_S3_PREFIX":                   []byte("s3://" + bucketName + "/$(SCOPE)"),
+		"CLONE_WALG_S3_PREFIX":             []byte("s3://" + bucketName + "/$(CLONE_SCOPE)"),
+		"WALE_BACKUP_THRESHOLD_PERCENTAGE": []byte("100"),
+		"AWS_ENDPOINT":                     []byte(awsEndpoint),
+		"WALE_S3_ENDPOINT":                 []byte(walES3Endpoint), // same as above, but slightly modified
+		"AWS_ACCESS_KEY_ID":                []byte(awsAccessKeyID),
+		"AWS_SECRET_ACCESS_KEY":            []byte(awsSecretAccessKey),
+		"AWS_S3_FORCE_PATH_STYLE":          []byte("true"),
+		"AWS_REGION":                       []byte(region),         // now we can use AWS S3
+		"WALG_DISABLE_S3_SSE":              []byte(walgDisableSSE), // disable server side encryption if key is nil
+		"WALG_S3_SSE":                      []byte(walgSSE),        // server side encryption key
+		"BACKUP_SCHEDULE":                  []byte(backupSchedule),
+		"BACKUP_NUM_TO_RETAIN":             []byte(backupNumToRetain),
 	}
 
-	cm := &corev1.ConfigMap{}
+	s := &corev1.Secret{}
 	ns := types.NamespacedName{
-		Name:      operatormanager.PodEnvCMName,
+		Name:      operatormanager.PodEnvSecretName,
 		Namespace: p.ToPeripheralResourceNamespace(),
 	}
-	if err := r.SvcClient.Get(ctx, ns, cm); err != nil {
-		return fmt.Errorf("error while getting the pod environment configmap from service cluster: %w", err)
+	if err := r.SvcClient.Get(ctx, ns, s); err != nil {
+		return fmt.Errorf("error while getting the pod environment secret from service cluster: %w", err)
 	}
-	cm.Data = data
-	if err := r.SvcClient.Update(ctx, cm); err != nil {
-		return fmt.Errorf("error while updating the pod environment configmap in service cluster: %w", err)
+	s.Data = data
+	if err := r.SvcClient.Update(ctx, s); err != nil {
+		return fmt.Errorf("error while updating the pod environment secret in service cluster: %w", err)
 	}
 
 	return nil
@@ -775,6 +798,143 @@ func (r *PostgresReconciler) getBackupConfig(ctx context.Context, ns, name strin
 	return &backupConfig, nil
 }
 
+func (r *PostgresReconciler) createOrUpdateNetPol(ctx context.Context, instance *pg.Postgres, etcdHost string) error {
+
+	name := instance.ToPeripheralResourceName() + "-egress"
+	namespace := instance.ToPeripheralResourceNamespace()
+
+	pgPodMatchingLabels := instance.ToZalandoPostgresqlMatchingLabels()
+	pgPodMatchingLabels["application"] = "spilo"
+
+	spec := networkingv1.NetworkPolicySpec{
+		PodSelector: metav1.LabelSelector{
+			MatchLabels: pgPodMatchingLabels,
+		},
+		Egress: []networkingv1.NetworkPolicyEgressRule{},
+		PolicyTypes: []networkingv1.PolicyType{
+			networkingv1.PolicyTypeEgress,
+		},
+	}
+
+	// pgToPgEgress allows communication to the postgres pods
+	pgToPgEgress := networkingv1.NetworkPolicyEgressRule{
+		To: []networkingv1.NetworkPolicyPeer{
+			{
+				PodSelector: &metav1.LabelSelector{
+					MatchLabels: pgPodMatchingLabels,
+				},
+			},
+		},
+	}
+	// add rule
+	spec.Egress = append(spec.Egress, pgToPgEgress)
+
+	// coreDNSEgress allows communication to the dns
+	coreDNSEgress := networkingv1.NetworkPolicyEgressRule{
+		To: []networkingv1.NetworkPolicyPeer{
+			{
+				NamespaceSelector: &metav1.LabelSelector{
+					// TODO make configurable
+					MatchLabels: client.MatchingLabels{
+						"gardener.cloud/purpose": "kube-system",
+					},
+				},
+				PodSelector: &metav1.LabelSelector{
+					// TODO make configurable
+					MatchLabels: client.MatchingLabels{
+						"k8s-app": "kube-dns",
+					},
+				},
+			},
+		},
+	}
+	// add rule
+	spec.Egress = append(spec.Egress, coreDNSEgress)
+
+	// etcd (if configured)
+	if etcdHost != "" {
+		var etcdPort intstr.IntOrString
+		_, port, err := net.SplitHostPort(etcdHost)
+		if err != nil {
+			etcdPort = intstr.FromString(port)
+		} else {
+			etcdPort = intstr.FromInt(2379)
+		}
+		etcdProtocol := corev1.ProtocolTCP
+		etcdEgress := networkingv1.NetworkPolicyEgressRule{
+			To: []networkingv1.NetworkPolicyPeer{
+				{
+					IPBlock: &networkingv1.IPBlock{
+						CIDR: "0.0.0.0/0",
+					},
+				},
+			},
+			Ports: []networkingv1.NetworkPolicyPort{
+				{
+					Port:     &etcdPort,
+					Protocol: &etcdProtocol,
+				},
+			},
+		}
+		// add rule
+		spec.Egress = append(spec.Egress, etcdEgress)
+	}
+
+	// allows communication to the S3 (and any other port 443...)
+	s3Port := intstr.FromInt(443)
+	s3Protocol := corev1.ProtocolTCP
+	s3Egress := networkingv1.NetworkPolicyEgressRule{
+		To: []networkingv1.NetworkPolicyPeer{
+			{
+				IPBlock: &networkingv1.IPBlock{
+					CIDR: "0.0.0.0/0",
+				},
+			},
+		},
+		Ports: []networkingv1.NetworkPolicyPort{
+			{
+				Port:     &s3Port,
+				Protocol: &s3Protocol,
+			},
+		},
+	}
+	// add rule
+	spec.Egress = append(spec.Egress, s3Egress)
+
+	// allows communication to the configured primary postgres
+	if instance.Spec.PostgresConnection != nil && !instance.Spec.PostgresConnection.ReplicationPrimary {
+		postgresPort := intstr.FromInt(int(instance.Spec.PostgresConnection.ConnectionPort))
+		postgresProtocol := corev1.ProtocolTCP
+		standbyToPrimaryEgress := networkingv1.NetworkPolicyEgressRule{
+			To: []networkingv1.NetworkPolicyPeer{
+				{
+					IPBlock: &networkingv1.IPBlock{
+						CIDR: instance.Spec.PostgresConnection.ConnectionIP + "/32", // TODO find a better solution
+					},
+				},
+			},
+			Ports: []networkingv1.NetworkPolicyPort{
+				{
+					Port:     &postgresPort,
+					Protocol: &postgresProtocol,
+				},
+			},
+		}
+		// add rule
+		spec.Egress = append(spec.Egress, standbyToPrimaryEgress)
+	}
+
+	np := &networkingv1.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace}}
+	if _, err := controllerutil.CreateOrUpdate(ctx, r.SvcClient, np, func() error {
+		np.Spec = spec
+		return nil
+	}); err != nil {
+		return fmt.Errorf("unable to deploy NetworkPolicy: %w", err)
+	}
+
+	return nil
+}
+
 // createOrUpdateExporterSidecarServices ensures the neccessary services to acces the sidecars exist
 func (r *PostgresReconciler) createOrUpdateExporterSidecarServices(ctx context.Context, namespace string, c *corev1.ConfigMap, in *pg.Postgres) error {
 	log := r.Log.WithValues("namespace", namespace)
@@ -852,6 +1012,20 @@ func (r *PostgresReconciler) createOrUpdateExporterSidecarServices(ctx context.C
 	}
 	log.Info("postgres-exporter service created")
 
+	return nil
+}
+
+// deleteNetPol Deletes our NetworkPolicy, if it exists. This is probably only neccessary if ENABLE_NETPOL is flipped at runtime, as the the NetworkPolicy is created in the databases namespace, which will be completely removed when the database is deleted.
+func (r *PostgresReconciler) deleteNetPol(ctx context.Context, instance *pg.Postgres) error {
+	netpol := &networkingv1.NetworkPolicy{}
+	netpol.Namespace = instance.ToPeripheralResourceNamespace()
+	netpol.Name = instance.ToPeripheralResourceName() + "-egress"
+	if err := r.SvcClient.Delete(ctx, netpol); err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil
+		}
+		return fmt.Errorf("unable to delete NetworkPolicy %v: %w", netpol.Name, err)
+	}
 	return nil
 }
 

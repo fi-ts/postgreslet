@@ -63,6 +63,13 @@ const (
 
 	teamIDPrefix = "pg"
 
+	defaultPostgresParamValueTCPKeepAlivesIdle      = "200"
+	defaultPostgresParamValueTCPKeepAlivesInterval  = "30"
+	defaultPostgresParamValueLogFileMode            = "0600"
+	defaultPostgresParamValueSSLMinProtocolVersion  = "TLSv1.2"
+	defaultPostgresParamValueSSLPreferServerCiphers = "on"
+	defaultPostgresParamValueSSLCiphers             = "ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384"
+
 	// spiloRunAsUser the uid to use when running the spilo (postgres) image
 	spiloRunAsUser int64 = 101
 	// spiloRunAsGroup the gid to use when running the spilo (postgres) image
@@ -498,7 +505,9 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 	if p.Spec.AuditLogs == nil || *p.Spec.AuditLogs {
 		enableAuditLogs(z.Spec.PostgresqlParam.Parameters)
 	}
-	// now set the given generic parameters (and potentially allow overwriting of e.g. audit log params)
+	// set some default postgres parameters
+	setDefaultPostgresParams(z.Spec.PostgresqlParam.Parameters)
+	// now set the given generic parameters (and potentially allow overwriting of default postgres params or audit log params)
 	setPostgresParams(z.Spec.PostgresqlParam.Parameters, p.Spec.PostgresParams, pgParamBlockList)
 	// finally, overwrite the (special to us) shared buffer parameter
 	setSharedBufferSize(z.Spec.PostgresqlParam.Parameters, p.Spec.Size.SharedBuffer)
@@ -750,6 +759,16 @@ func enableAuditLogs(parameters map[string]string) {
 	parameters["pgaudit.log"] = "ddl"
 	parameters["pgaudit.log_relation"] = "on"
 	parameters["pgaudit.log_parameter"] = "on"
+}
+
+// setDefaultPostgresParams configures default keepalive values
+func setDefaultPostgresParams(parameters map[string]string) {
+	parameters["tcp_keepalives_idle"] = defaultPostgresParamValueTCPKeepAlivesIdle
+	parameters["tcp_keepalives_interval"] = defaultPostgresParamValueTCPKeepAlivesInterval
+	parameters["log_file_mode"] = defaultPostgresParamValueLogFileMode
+	parameters["ssl_min_protocol_version"] = defaultPostgresParamValueSSLMinProtocolVersion
+	parameters["ssl_prefer_server_ciphers"] = defaultPostgresParamValueSSLPreferServerCiphers
+	parameters["ssl_ciphers"] = defaultPostgresParamValueSSLCiphers
 }
 
 // setPostgresParams add the provided params to the parameter map (but ignore params that are blocked)

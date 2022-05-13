@@ -55,6 +55,7 @@ const (
 	standbyClustersSourceRangesFlg = "standby-clusters-source-ranges"
 	postgresletNamespaceFlg        = "postgreslet-namespace"
 	sidecarsCMNameFlg              = "sidecars-configmap-name"
+	enableNetPolFlg                = "enable-netpol"
 	runAsNonRootFlg                = "run-as-non-root"
 )
 
@@ -75,7 +76,7 @@ func init() {
 
 func main() {
 	var metricsAddrCtrlMgr, metricsAddrSvcMgr, partitionID, tenant, ctrlClusterKubeconfig, pspName, lbIP, storageClass, postgresImage, etcdHost, operatorImage, majorVersionUpgradeMode, postgresletNamespace, sidecarsCMName string
-	var enableLeaderElection, enableCRDValidation, runAsNonRoot bool
+	var enableLeaderElection, enableCRDValidation, enableNetPol, runAsNonRoot bool
 	var portRangeStart, portRangeSize int
 	var pgParamBlockList map[string]bool
 	var standbyClusterSourceRanges []string
@@ -152,6 +153,9 @@ func main() {
 	viper.SetDefault(sidecarsCMNameFlg, "postgreslet-postgres-sidecars")
 	sidecarsCMName = viper.GetString(sidecarsCMNameFlg)
 
+	viper.SetDefault(enableNetPolFlg, false)
+	enableNetPol = viper.GetBool(enableNetPolFlg)
+
 	viper.SetDefault(runAsNonRootFlg, false)
 	runAsNonRoot = viper.GetBool(runAsNonRootFlg)
 
@@ -178,6 +182,7 @@ func main() {
 		standbyClustersSourceRangesFlg, standbyClusterSourceRanges,
 		postgresletNamespaceFlg, postgresletNamespace,
 		sidecarsCMNameFlg, sidecarsCMName,
+		enableNetPolFlg, enableNetPol,
 		runAsNonRootFlg, runAsNonRoot,
 	)
 
@@ -247,6 +252,8 @@ func main() {
 		StandbyClustersSourceRanges: standbyClusterSourceRanges,
 		PostgresletNamespace:        postgresletNamespace,
 		SidecarsConfigMapName:       sidecarsCMName,
+		EnableNetPol:                enableNetPol,
+		EtcdHost:                    etcdHost,
 		RunAsNonRoot:                runAsNonRoot,
 	}).SetupWithManager(ctrlPlaneClusterMgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Postgres")
