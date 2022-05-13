@@ -53,6 +53,7 @@ const (
 	pgParamBlockListFlg            = "postgres-param-blocklist"
 	majorVersionUpgradeModeFlg     = "major-version-upgrade-mode"
 	standbyClustersSourceRangesFlg = "standby-clusters-source-ranges"
+	enableNetPolFlg                = "enable-netpol"
 )
 
 var (
@@ -72,7 +73,7 @@ func init() {
 
 func main() {
 	var metricsAddrCtrlMgr, metricsAddrSvcMgr, partitionID, tenant, ctrlClusterKubeconfig, pspName, lbIP, storageClass, postgresImage, etcdHost, operatorImage, majorVersionUpgradeMode string
-	var enableLeaderElection, enableCRDValidation bool
+	var enableLeaderElection, enableCRDValidation, enableNetPol bool
 	var portRangeStart, portRangeSize int
 	var pgParamBlockList map[string]bool
 	var standbyClusterSourceRanges []string
@@ -143,6 +144,9 @@ func main() {
 	viper.SetDefault(standbyClustersSourceRangesFlg, "255.255.255.255/32")
 	standbyClusterSourceRanges = viper.GetStringSlice(standbyClustersSourceRangesFlg)
 
+	viper.SetDefault(enableNetPolFlg, false)
+	enableNetPol = viper.GetBool(enableNetPolFlg)
+
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 
 	ctrl.Log.Info("flag",
@@ -164,6 +168,7 @@ func main() {
 		pgParamBlockListFlg, pgParamBlockList,
 		majorVersionUpgradeModeFlg, majorVersionUpgradeMode,
 		standbyClustersSourceRangesFlg, standbyClusterSourceRanges,
+		enableNetPolFlg, enableNetPol,
 	)
 
 	svcClusterConf := ctrl.GetConfigOrDie()
@@ -227,6 +232,8 @@ func main() {
 		LBManager:                   lbmanager.New(svcClusterMgr.GetClient(), lbMgrOpts),
 		PgParamBlockList:            pgParamBlockList,
 		StandbyClustersSourceRanges: standbyClusterSourceRanges,
+		EnableNetPol:                enableNetPol,
+		EtcdHost:                    etcdHost,
 	}).SetupWithManager(ctrlPlaneClusterMgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Postgres")
 		os.Exit(1)

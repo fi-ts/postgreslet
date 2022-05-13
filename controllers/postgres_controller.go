@@ -55,6 +55,8 @@ type PostgresReconciler struct {
 	recorder                    record.EventRecorder
 	PgParamBlockList            map[string]bool
 	StandbyClustersSourceRanges []string
+	EnableNetPol                bool
+	EtcdHost                    string
 }
 
 // Reconcile is the entry point for postgres reconciliation.
@@ -162,11 +164,17 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, fmt.Errorf("error while ensuring Zalando dependencies: %w", err)
 	}
 
-	// TODO make configurable
-	// Add network policy
-	if err := r.createOrUpdateNetPol(ctx, instance); err != nil {
-		r.recorder.Eventf(instance, "Warning", "Error", "failed to create netpol: %v", err)
-		return ctrl.Result{}, fmt.Errorf("error while creating netpol: %w", err)
+	// Add (or remove!) network policy
+	if r.EnableNetPol {
+		if err := r.createOrUpdateNetPol(ctx, instance, r.EtcdHost); err != nil {
+			r.recorder.Eventf(instance, "Warning", "Error", "failed to create netpol: %v", err)
+			return ctrl.Result{}, fmt.Errorf("error while creating netpol: %w", err)
+		}
+	} else {
+		if err := r.deleteNetPol(ctx, instance); err != nil {
+			r.recorder.Eventf(instance, "Warning", "Error", "failed to delete netpol: %v", err)
+			return ctrl.Result{}, fmt.Errorf("error while deleting netpol: %w", err)
+		}
 	}
 
 	// Make sure the standby secrets exist, if neccessary
@@ -760,7 +768,7 @@ func (r *PostgresReconciler) getBackupConfig(ctx context.Context, ns, name strin
 	return &backupConfig, nil
 }
 
-func (r *PostgresReconciler) createOrUpdateNetPol(ctx context.Context, instance *pg.Postgres) error {
+func (r *PostgresReconciler) createOrUpdateNetPol(ctx context.Context, instance *pg.Postgres, etcdHost string) error {
 
 	name := instance.ToPeripheralResourceName() + "-egress"
 	namespace := instance.ToPeripheralResourceNamespace()
@@ -871,5 +879,19 @@ func (r *PostgresReconciler) createOrUpdateNetPol(ctx context.Context, instance 
 		return fmt.Errorf("unable to deploy NetworkPolicy: %w", err)
 	}
 
+	return nil
+}
+
+// deleteNetPol Deletes our NetworkPolicy, if it exists. This is probably only neccessary if ENABLE_NETPOL is flipped at runtime, as the the NetworkPolicy is created in the databases namespace, which will be completely removed when the database is deleted.
+func (r *PostgresReconciler) deleteNetPol(ctx context.Context, instance *pg.Postgres) error {
+	netpol := &networkingv1.NetworkPolicy{}
+	netpol.Namespace = instance.ToPeripheralResourceNamespace()
+	netpol.Name = instance.ToPeripheralResourceName() + "-egress"
+	if err := r.SvcClient.Delete(ctx, netpol); err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil
+		}
+		return fmt.Errorf("unable to delete NetworkPolicy %v: %w", netpol.Name, err)
+	}
 	return nil
 }
