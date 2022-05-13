@@ -132,7 +132,11 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		}
 		log.Info("owned zalando postgresql deleted")
 
-		// TODO delete netpol
+		if err := r.deleteNetPol(ctx, instance); err != nil {
+			log.Error(err, "failed to delete NetworkPolicy")
+		} else {
+			log.Info("corresponding NetworkPolicy deleted")
+		}
 
 		deletable, err := r.IsOperatorDeletable(ctx, namespace)
 		if err != nil {
