@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/go-logr/logr"
@@ -23,10 +24,12 @@ import (
 	"k8s.io/utils/pointer"
 
 	firewall "github.com/metal-stack/firewall-controller/api/v1"
+	coreosv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -34,6 +37,13 @@ import (
 	pg "github.com/fi-ts/postgreslet/api/v1"
 	"github.com/fi-ts/postgreslet/pkg/lbmanager"
 	"github.com/fi-ts/postgreslet/pkg/operatormanager"
+)
+
+const (
+	postgresExporterServiceName                    string = "postgres-exporter"
+	postgresExporterServicePortName                string = "metrics"
+	postgresExporterServiceTenantAnnotationName    string = pg.TenantLabelName
+	postgresExporterServiceProjectIDAnnotationName string = pg.ProjectIDLabelName
 )
 
 // requeue defines in how many seconds a requeue should happen
@@ -53,6 +63,8 @@ type PostgresReconciler struct {
 	recorder                    record.EventRecorder
 	PgParamBlockList            map[string]bool
 	StandbyClustersSourceRanges []string
+	PostgresletNamespace        string
+	SidecarsConfigMapName       string
 }
 
 // Reconcile is the entry point for postgres reconciliation.
@@ -104,6 +116,11 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 			return ctrl.Result{}, err
 		}
 		log.Info("corresponding Service of type LoadBalancer deleted")
+
+		// delete the postgres-exporter service
+		if err := r.deleteExporterSidecarService(ctx, namespace); client.IgnoreNotFound(err) != nil {
+			return ctrl.Result{}, fmt.Errorf("error while deleting the postgres-exporter service: %w", err)
+		}
 
 		if err := r.deleteZPostgresqlByLabels(ctx, matchingLabels, namespace); err != nil {
 			r.recorder.Eventf(instance, "Warning", "Error", "failed to delete Zalando resource: %v", err)
@@ -183,7 +200,29 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, fmt.Errorf("unable to create or update egress ClusterwideNetworkPolicy: %w", err)
 	}
 
-	if err := r.createOrUpdateZalandoPostgresql(ctx, instance, log); err != nil {
+	// try to fetch the global sidecars configmap
+	cns := types.NamespacedName{
+		Namespace: r.PostgresletNamespace,
+		Name:      r.SidecarsConfigMapName,
+	}
+	globalSidecarsCM := &corev1.ConfigMap{}
+	if err := r.SvcClient.Get(ctx, cns, globalSidecarsCM); err != nil {
+		// configmap with configuration does not exists, nothing we can do here...
+		return ctrl.Result{}, fmt.Errorf("could not fetch config for sidecars")
+	}
+	// Add services for our sidecars
+	namespace := instance.ToPeripheralResourceNamespace()
+	if err := r.createOrUpdateExporterSidecarServices(ctx, namespace, globalSidecarsCM, instance); err != nil {
+		return ctrl.Result{}, fmt.Errorf("error while creating sidecars services %v: %w", namespace, err)
+	}
+
+	// Add service monitor for our exporter sidecar
+	err := r.createOrUpdateExporterSidecarServiceMonitor(ctx, namespace, instance)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("error while creating sidecars servicemonitor %v: %w", namespace, err)
+	}
+
+	if err := r.createOrUpdateZalandoPostgresql(ctx, instance, log, globalSidecarsCM); err != nil {
 		r.recorder.Eventf(instance, "Warning", "Error", "failed to create Zalando resource: %v", err)
 		return ctrl.Result{}, fmt.Errorf("failed to create or update zalando postgresql: %w", err)
 	}
@@ -224,21 +263,7 @@ func (r *PostgresReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context, instance *pg.Postgres, log logr.Logger) error {
-	// Get the sidecar config
-	// try to fetch the global sidecars configmap
-	cns := types.NamespacedName{
-		// TODO don't use string literals here! name is dependent of the release name of the helm chart!
-		Namespace: "postgreslet-system",
-		Name:      "postgreslet-postgres-sidecars",
-	}
-	c := &corev1.ConfigMap{}
-	if err := r.SvcClient.Get(ctx, cns, c); err != nil {
-		// configmap with configuration does not exists, nothing we can do here...
-		log.Info("could not fetch config for sidecars")
-		c = nil
-	}
-
+func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context, instance *pg.Postgres, log logr.Logger, sidecarsCM *corev1.ConfigMap) error {
 	var restoreBackupConfig *pg.BackupConfig
 	var restoreSouceInstance *pg.Postgres
 	if instance.Spec.PostgresRestore != nil {
@@ -273,7 +298,7 @@ func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context
 			return fmt.Errorf("failed to fetch zalando postgresql: %w", err)
 		}
 
-		u, err := instance.ToUnstructuredZalandoPostgresql(nil, c, r.StorageClass, r.PgParamBlockList, restoreBackupConfig, restoreSouceInstance)
+		u, err := instance.ToUnstructuredZalandoPostgresql(nil, sidecarsCM, r.StorageClass, r.PgParamBlockList, restoreBackupConfig, restoreSouceInstance)
 		if err != nil {
 			return fmt.Errorf("failed to convert to unstructured zalando postgresql: %w", err)
 		}
@@ -289,7 +314,7 @@ func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context
 	// Update zalando postgresql
 	mergeFrom := client.MergeFrom(rawZ.DeepCopy())
 
-	u, err := instance.ToUnstructuredZalandoPostgresql(rawZ, c, r.StorageClass, r.PgParamBlockList, restoreBackupConfig, restoreSouceInstance)
+	u, err := instance.ToUnstructuredZalandoPostgresql(rawZ, sidecarsCM, r.StorageClass, r.PgParamBlockList, restoreBackupConfig, restoreSouceInstance)
 	if err != nil {
 		return fmt.Errorf("failed to convert to unstructured zalando postgresql: %w", err)
 	}
@@ -328,14 +353,14 @@ func (r *PostgresReconciler) ensureZalandoDependencies(ctx context.Context, p *p
 		}
 	}
 
-	if err := r.updatePodEnvironmentConfigMap(ctx, p); err != nil {
+	if err := r.updatePodEnvironmentSecret(ctx, p); err != nil {
 		return fmt.Errorf("error while updating backup config: %w", err)
 	}
 
 	return nil
 }
 
-func (r *PostgresReconciler) updatePodEnvironmentConfigMap(ctx context.Context, p *pg.Postgres) error {
+func (r *PostgresReconciler) updatePodEnvironmentSecret(ctx context.Context, p *pg.Postgres) error {
 	log := r.Log.WithValues("postgres", p.UID)
 	if p.Spec.BackupSecretRef == "" {
 		log.Info("No configured backupSecretRef found, skipping configuration of postgres backup")
@@ -376,37 +401,37 @@ func (r *PostgresReconciler) updatePodEnvironmentConfigMap(ctx context.Context, 
 		walgSSE = *backupConfig.S3EncryptionKey
 	}
 
-	// create updated content for pod environment configmap
-	data := map[string]string{
-		"USE_WALG_BACKUP":                  "true",
-		"USE_WALG_RESTORE":                 "true",
-		"WALE_S3_PREFIX":                   "s3://" + bucketName + "/$(SCOPE)",
-		"WALG_S3_PREFIX":                   "s3://" + bucketName + "/$(SCOPE)",
-		"CLONE_WALG_S3_PREFIX":             "s3://" + bucketName + "/$(CLONE_SCOPE)",
-		"WALE_BACKUP_THRESHOLD_PERCENTAGE": "100",
-		"AWS_ENDPOINT":                     awsEndpoint,
-		"WALE_S3_ENDPOINT":                 walES3Endpoint, // same as above, but slightly modified
-		"AWS_ACCESS_KEY_ID":                awsAccessKeyID,
-		"AWS_SECRET_ACCESS_KEY":            awsSecretAccessKey,
-		"AWS_S3_FORCE_PATH_STYLE":          "true",
-		"AWS_REGION":                       region,         // now we can use AWS S3
-		"WALG_DISABLE_S3_SSE":              walgDisableSSE, // disable server side encryption if key is nil
-		"WALG_S3_SSE":                      walgSSE,        // server side encryption key
-		"BACKUP_SCHEDULE":                  backupSchedule,
-		"BACKUP_NUM_TO_RETAIN":             backupNumToRetain,
+	// create updated content for pod environment secret
+	data := map[string][]byte{
+		"USE_WALG_BACKUP":                  []byte("true"),
+		"USE_WALG_RESTORE":                 []byte("true"),
+		"WALE_S3_PREFIX":                   []byte("s3://" + bucketName + "/$(SCOPE)"),
+		"WALG_S3_PREFIX":                   []byte("s3://" + bucketName + "/$(SCOPE)"),
+		"CLONE_WALG_S3_PREFIX":             []byte("s3://" + bucketName + "/$(CLONE_SCOPE)"),
+		"WALE_BACKUP_THRESHOLD_PERCENTAGE": []byte("100"),
+		"AWS_ENDPOINT":                     []byte(awsEndpoint),
+		"WALE_S3_ENDPOINT":                 []byte(walES3Endpoint), // same as above, but slightly modified
+		"AWS_ACCESS_KEY_ID":                []byte(awsAccessKeyID),
+		"AWS_SECRET_ACCESS_KEY":            []byte(awsSecretAccessKey),
+		"AWS_S3_FORCE_PATH_STYLE":          []byte("true"),
+		"AWS_REGION":                       []byte(region),         // now we can use AWS S3
+		"WALG_DISABLE_S3_SSE":              []byte(walgDisableSSE), // disable server side encryption if key is nil
+		"WALG_S3_SSE":                      []byte(walgSSE),        // server side encryption key
+		"BACKUP_SCHEDULE":                  []byte(backupSchedule),
+		"BACKUP_NUM_TO_RETAIN":             []byte(backupNumToRetain),
 	}
 
-	cm := &corev1.ConfigMap{}
+	s := &corev1.Secret{}
 	ns := types.NamespacedName{
-		Name:      operatormanager.PodEnvCMName,
+		Name:      operatormanager.PodEnvSecretName,
 		Namespace: p.ToPeripheralResourceNamespace(),
 	}
-	if err := r.SvcClient.Get(ctx, ns, cm); err != nil {
-		return fmt.Errorf("error while getting the pod environment configmap from service cluster: %w", err)
+	if err := r.SvcClient.Get(ctx, ns, s); err != nil {
+		return fmt.Errorf("error while getting the pod environment secret from service cluster: %w", err)
 	}
-	cm.Data = data
-	if err := r.SvcClient.Update(ctx, cm); err != nil {
-		return fmt.Errorf("error while updating the pod environment configmap in service cluster: %w", err)
+	s.Data = data
+	if err := r.SvcClient.Update(ctx, s); err != nil {
+		return fmt.Errorf("error while updating the pod environment secret in service cluster: %w", err)
 	}
 
 	return nil
@@ -747,4 +772,172 @@ func (r *PostgresReconciler) getBackupConfig(ctx context.Context, ns, name strin
 		return nil, fmt.Errorf("unable to unmarshal backupconfig:%w", err)
 	}
 	return &backupConfig, nil
+}
+
+// createOrUpdateExporterSidecarServices ensures the neccessary services to acces the sidecars exist
+func (r *PostgresReconciler) createOrUpdateExporterSidecarServices(ctx context.Context, namespace string, c *corev1.ConfigMap, in *pg.Postgres) error {
+	log := r.Log.WithValues("namespace", namespace)
+
+	exporterServicePort, error := strconv.ParseInt(c.Data["postgres-exporter-service-port"], 10, 32)
+	if error != nil {
+		// todo log error
+		exporterServicePort = 9187
+	}
+
+	exporterServiceTargetPort, error := strconv.ParseInt(c.Data["postgres-exporter-service-target-port"], 10, 32)
+	if error != nil {
+		// todo log error
+		exporterServiceTargetPort = exporterServicePort
+	}
+
+	pes := &corev1.Service{}
+
+	if err := r.SetName(pes, postgresExporterServiceName); err != nil {
+		return fmt.Errorf("error while setting the name of the postgres-exporter service to %v: %w", namespace, err)
+	}
+	if err := r.SetNamespace(pes, namespace); err != nil {
+		return fmt.Errorf("error while setting the namespace of the postgres-exporter service to %v: %w", namespace, err)
+	}
+	labels := map[string]string{
+		// "application": "spilo", // TODO check if we still need that label, IsOperatorDeletable won't work anymore if we set it.
+		"app": "postgres-exporter",
+	}
+	if err := r.SetLabels(pes, labels); err != nil {
+		return fmt.Errorf("error while setting the labels of the postgres-exporter service to %v: %w", labels, err)
+	}
+	annotations := map[string]string{
+		postgresExporterServiceTenantAnnotationName:    in.Spec.Tenant,
+		postgresExporterServiceProjectIDAnnotationName: in.Spec.ProjectID,
+	}
+	if err := r.SetAnnotations(pes, annotations); err != nil {
+		return fmt.Errorf("error while setting the annotations of the postgres-exporter service to %v: %w", annotations, err)
+	}
+
+	pes.Spec.Ports = []corev1.ServicePort{
+		{
+			Name:       postgresExporterServicePortName,
+			Port:       int32(exporterServicePort),
+			Protocol:   corev1.ProtocolTCP,
+			TargetPort: intstr.FromInt(int(exporterServiceTargetPort)),
+		},
+	}
+	selector := map[string]string{
+		"application": "spilo",
+	}
+	pes.Spec.Selector = selector
+	pes.Spec.Type = corev1.ServiceTypeClusterIP
+
+	// try to fetch any existing postgres-exporter service
+	ns := types.NamespacedName{
+		Namespace: namespace,
+		Name:      postgresExporterServiceName,
+	}
+	old := &corev1.Service{}
+	if err := r.SvcClient.Get(ctx, ns, old); err == nil {
+		// service exists, overwriting it (but using the same clusterip)
+		pes.Spec.ClusterIP = old.Spec.ClusterIP
+		pes.ObjectMeta.ResourceVersion = old.GetObjectMeta().GetResourceVersion()
+		if err := r.SvcClient.Update(ctx, pes); err != nil {
+			return fmt.Errorf("error while updating the postgres-exporter service: %w", err)
+		}
+		log.Info("postgres-exporter service updated")
+		return nil
+	}
+	// todo: handle errors other than `NotFound`
+
+	// local servicemonitor does not exist, creating it
+	if err := r.SvcClient.Create(ctx, pes); err != nil {
+		return fmt.Errorf("error while creating the postgres-exporter service: %w", err)
+	}
+	log.Info("postgres-exporter service created")
+
+	return nil
+}
+
+// createOrUpdateExporterSidecarServiceMonitor ensures the servicemonitors for the sidecars exist
+func (r *PostgresReconciler) createOrUpdateExporterSidecarServiceMonitor(ctx context.Context, namespace string, in *pg.Postgres) error {
+	log := r.Log.WithValues("namespace", namespace)
+
+	pesm := &coreosv1.ServiceMonitor{}
+
+	// TODO what's the correct name?
+	if err := r.SetName(pesm, postgresExporterServiceName); err != nil {
+		return fmt.Errorf("error while setting the name of the postgres-exporter servicemonitor to %v: %w", namespace, err)
+	}
+	if err := r.SetNamespace(pesm, namespace); err != nil {
+		return fmt.Errorf("error while setting the namespace of the postgres-exporter servicemonitor to %v: %w", namespace, err)
+	}
+	labels := map[string]string{
+		"app":     "postgres-exporter",
+		"release": "prometheus",
+	}
+	if err := r.SetLabels(pesm, labels); err != nil {
+		return fmt.Errorf("error while setting the namespace of the postgres-exporter servicemonitor to %v: %w", namespace, err)
+	}
+	annotations := map[string]string{
+		postgresExporterServiceTenantAnnotationName:    in.Spec.Tenant,
+		postgresExporterServiceProjectIDAnnotationName: in.Spec.ProjectID,
+	}
+	if err := r.SetAnnotations(pesm, annotations); err != nil {
+		return fmt.Errorf("error while setting the annotations of the postgres-exporter service monitor to %v: %w", annotations, err)
+	}
+
+	pesm.Spec.Endpoints = []coreosv1.Endpoint{
+		{
+			Port: postgresExporterServicePortName,
+		},
+	}
+	pesm.Spec.NamespaceSelector = coreosv1.NamespaceSelector{
+		MatchNames: []string{namespace},
+	}
+	matchLabels := map[string]string{
+		// TODO use extraced string
+		"app": "postgres-exporter",
+	}
+	pesm.Spec.Selector = metav1.LabelSelector{
+		MatchLabels: matchLabels,
+	}
+
+	// try to fetch any existing postgres-exporter service
+	ns := types.NamespacedName{
+		Namespace: namespace,
+		Name:      postgresExporterServiceName,
+	}
+	old := &coreosv1.ServiceMonitor{}
+	if err := r.SvcClient.Get(ctx, ns, old); err == nil {
+		// Copy the resource version
+		pesm.ObjectMeta.ResourceVersion = old.ObjectMeta.ResourceVersion
+		if err := r.SvcClient.Update(ctx, pesm); err != nil {
+			return fmt.Errorf("error while updating the postgres-exporter servicemonitor: %w", err)
+		}
+		log.Info("postgres-exporter servicemonitor updated")
+		return nil
+	}
+	// todo: handle errors other than `NotFound`
+
+	// local servicemonitor does not exist, creating it
+	if err := r.SvcClient.Create(ctx, pesm); err != nil {
+		return fmt.Errorf("error while creating the postgres-exporter servicemonitor: %w", err)
+	}
+	log.Info("postgres-exporter servicemonitor created")
+
+	return nil
+}
+
+func (r *PostgresReconciler) deleteExporterSidecarService(ctx context.Context, namespace string) error {
+	log := r.Log.WithValues("namespace", namespace)
+
+	s := &corev1.Service{}
+	if err := r.SetName(s, postgresExporterServiceName); err != nil {
+		return fmt.Errorf("error while setting the name of the postgres-exporter service to delete to %v: %w", postgresExporterServiceName, err)
+	}
+	if err := r.SetNamespace(s, namespace); err != nil {
+		return fmt.Errorf("error while setting the namespace of the postgres-exporter service to delete to %v: %w", namespace, err)
+	}
+	if err := r.SvcClient.Delete(ctx, s); err != nil {
+		return fmt.Errorf("error while deleting the postgres-exporter service: %w", err)
+	}
+	log.Info("postgres-exporter service deleted")
+
+	return nil
 }
