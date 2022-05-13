@@ -145,6 +145,7 @@ func main() {
 	// read the (space-separated) list of configured blocked params
 	viper.SetDefault(standbyClustersSourceRangesFlg, "255.255.255.255/32")
 	standbyClusterSourceRanges = viper.GetStringSlice(standbyClustersSourceRangesFlg)
+
 	viper.SetDefault(postgresletNamespaceFlg, "postgreslet-system")
 	postgresletNamespace = viper.GetString(postgresletNamespaceFlg)
 
