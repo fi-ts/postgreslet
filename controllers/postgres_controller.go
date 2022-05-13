@@ -810,6 +810,9 @@ func (r *PostgresReconciler) createOrUpdateNetPol(ctx context.Context, instance 
 			MatchLabels: pgPodMatchingLabels,
 		},
 		Egress: []networkingv1.NetworkPolicyEgressRule{},
+		PolicyTypes: []networkingv1.PolicyType{
+			networkingv1.PolicyTypeEgress,
+		},
 	}
 
 	// pgToPgEgress allows communication to the postgres pods
