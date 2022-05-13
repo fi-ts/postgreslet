@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -818,14 +819,34 @@ func (r *PostgresReconciler) createOrUpdateNetPol(ctx context.Context, instance 
 	// add rule
 	spec.Egress = append(spec.Egress, coreDNSEgress)
 
-	// TODO etcd (if configured)
-	// # etcd
-	// - to:
-	// 	- ipBlock:
-	// 		cidr: 0.0.0.0/0
-	// 	ports:
-	// 	- port: 2379
-	//	protocol: TCP
+	// etcd (if configured)
+	if etcdHost != "" {
+		var etcdPort intstr.IntOrString
+		_, port, err := net.SplitHostPort(etcdHost)
+		if err != nil {
+			etcdPort = intstr.FromString(port)
+		} else {
+			etcdPort = intstr.FromInt(2379)
+		}
+		etcdProtocol := corev1.ProtocolTCP
+		etcdEgress := networkingv1.NetworkPolicyEgressRule{
+			To: []networkingv1.NetworkPolicyPeer{
+				{
+					IPBlock: &networkingv1.IPBlock{
+						CIDR: "0.0.0.0/0",
+					},
+				},
+			},
+			Ports: []networkingv1.NetworkPolicyPort{
+				{
+					Port:     &etcdPort,
+					Protocol: &etcdProtocol,
+				},
+			},
+		}
+		// add rule
+		spec.Egress = append(spec.Egress, etcdEgress)
+	}
 
 	// allows communication to the S3 (and any other port 443...)
 	s3Port := intstr.FromInt(443)
