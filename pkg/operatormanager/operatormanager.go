@@ -116,9 +116,9 @@ func (m *OperatorManager) InstallOrUpdateOperator(ctx context.Context, namespace
 		return fmt.Errorf("error while ensuring the existence of namespace %v: %w", namespace, err)
 	}
 
-	// Add our (initially empty) custom pod environment configmap
+	// Add our (initially empty) custom pod environment secret
 	if err := m.createPodEnvironmentSecret(ctx, namespace); err != nil {
-		return fmt.Errorf("error while creating pod environment configmap %v: %w", namespace, err)
+		return fmt.Errorf("error while creating pod environment secret %v: %w", namespace, err)
 	}
 
 	// Add our sidecars configmap
@@ -238,7 +238,7 @@ func (m *OperatorManager) UninstallOperator(ctx context.Context, namespace strin
 	}
 
 	// delete the pod environment configmap
-	if err := m.deletePodEnvironmentConfigMap(ctx, namespace); client.IgnoreNotFound(err) != nil {
+	if err := m.deletePodEnvironmentSecret(ctx, namespace); client.IgnoreNotFound(err) != nil {
 		return fmt.Errorf("error while deleting pod environment configmap: %w", err)
 	}
 
@@ -391,7 +391,7 @@ func (m *OperatorManager) editConfigMap(cm *corev1.ConfigMap, namespace string, 
 	cm.Data["watched_namespace"] = namespace
 	// TODO don't use the same serviceaccount for operator and databases, see #88
 	cm.Data["pod_service_account_name"] = serviceAccountName
-	// set the reference to our custom pod environment configmap
+	// set the reference to our custom pod environment secret
 	cm.Data["pod_environment_secret"] = PodEnvSecretName
 	// set the list of inherited labels that will be passed on to the pods
 	s := []string{pg.TenantLabelName, pg.ProjectIDLabelName, pg.UIDLabelName, pg.NameLabelName}
@@ -457,7 +457,7 @@ func (m *OperatorManager) createNamespace(ctx context.Context, namespace string)
 	return nil
 }
 
-// createPodEnvironmentSecret creates a new ConfigMap with additional environment variables for the pods
+// createPodEnvironmentSecret creates a new Secret with additional environment variables for the pods
 func (m *OperatorManager) createPodEnvironmentSecret(ctx context.Context, namespace string) error {
 	ns := types.NamespacedName{
 		Namespace: namespace,
@@ -465,7 +465,7 @@ func (m *OperatorManager) createPodEnvironmentSecret(ctx context.Context, namesp
 	}
 	if err := m.Get(ctx, ns, &corev1.Secret{}); err == nil {
 		// secret already exists, nothing to do here
-		// we will update the configmap with the correct S3 config in the postgres controller
+		// we will update the secret with the correct S3 config in the postgres controller
 		m.log.Info("Pod Environment Secret already exists")
 		return nil
 	}
@@ -557,18 +557,18 @@ func (m *OperatorManager) createOrUpdateSidecarsConfigMap(ctx context.Context, n
 	return nil
 }
 
-func (m *OperatorManager) deletePodEnvironmentConfigMap(ctx context.Context, namespace string) error {
-	cm := &corev1.ConfigMap{}
-	if err := m.SetName(cm, PodEnvSecretName); err != nil {
-		return fmt.Errorf("error while setting the name of the Pod Environment ConfigMap to delete to %v: %w", PodEnvSecretName, err)
+func (m *OperatorManager) deletePodEnvironmentSecret(ctx context.Context, namespace string) error {
+	s := &corev1.Secret{}
+	if err := m.SetName(s, PodEnvSecretName); err != nil {
+		return fmt.Errorf("error while setting the name of the Pod Environment Secret to delete to %v: %w", PodEnvSecretName, err)
 	}
-	if err := m.SetNamespace(cm, namespace); err != nil {
-		return fmt.Errorf("error while setting the namespace of the Pod Environment ConfigMap to delete to %v: %w", namespace, err)
+	if err := m.SetNamespace(s, namespace); err != nil {
+		return fmt.Errorf("error while setting the namespace of the Pod Environment Secret to delete to %v: %w", namespace, err)
 	}
-	if err := m.Delete(ctx, cm); err != nil {
-		return fmt.Errorf("error while deleting the Pod Environment ConfigMap: %w", err)
+	if err := m.Delete(ctx, s); err != nil {
+		return fmt.Errorf("error while deleting the Pod Environment Secret: %w", err)
 	}
-	m.log.Info("Pod Environment ConfigMap deleted")
+	m.log.Info("Pod Environment Secret deleted")
 
 	return nil
 }
