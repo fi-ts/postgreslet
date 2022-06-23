@@ -62,6 +62,7 @@ type Options struct {
 	MajorVersionUpgradeMode string
 	PostgresletNamespace    string
 	SidecarsConfigMapName   string
+	PodAntiaffinity         bool
 }
 
 // OperatorManager manages the operator
@@ -412,6 +413,8 @@ func (m *OperatorManager) editConfigMap(cm *corev1.ConfigMap, namespace string, 
 	// we specifically refer to those two users in the cloud-api, so we hardcode them here as well to be on the safe side.
 	cm.Data["super_username"] = "postgres"
 	cm.Data["replication_username"] = "standby"
+
+	cm.Data["enable_pod_antiaffinity"] = strconv.FormatBool(options.PodAntiaffinity)
 }
 
 // ensureCleanMetadata ensures obj has clean metadata
