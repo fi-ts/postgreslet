@@ -57,6 +57,7 @@ const (
 	sidecarsCMNameFlg              = "sidecars-configmap-name"
 	enableNetPolFlg                = "enable-netpol"
 	runAsNonRootFlg                = "run-as-non-root"
+	enablePodAntiaffinityFlg       = "enable-pod-antiaffinity"
 )
 
 var (
@@ -76,7 +77,7 @@ func init() {
 
 func main() {
 	var metricsAddrCtrlMgr, metricsAddrSvcMgr, partitionID, tenant, ctrlClusterKubeconfig, pspName, lbIP, storageClass, postgresImage, etcdHost, operatorImage, majorVersionUpgradeMode, postgresletNamespace, sidecarsCMName string
-	var enableLeaderElection, enableCRDValidation, enableNetPol, runAsNonRoot bool
+	var enableLeaderElection, enableCRDValidation, enableNetPol, runAsNonRoot, enablePodAntiaffinity bool
 	var portRangeStart, portRangeSize int
 	var pgParamBlockList map[string]bool
 	var standbyClusterSourceRanges []string
@@ -159,6 +160,9 @@ func main() {
 	viper.SetDefault(runAsNonRootFlg, false)
 	runAsNonRoot = viper.GetBool(runAsNonRootFlg)
 
+	viper.SetDefault(enablePodAntiaffinityFlg, false)
+	enablePodAntiaffinity = viper.GetBool(enablePodAntiaffinityFlg)
+
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 
 	ctrl.Log.Info("flag",
@@ -184,6 +188,7 @@ func main() {
 		sidecarsCMNameFlg, sidecarsCMName,
 		enableNetPolFlg, enableNetPol,
 		runAsNonRootFlg, runAsNonRoot,
+		enablePodAntiaffinityFlg, enablePodAntiaffinity,
 	)
 
 	svcClusterConf := ctrl.GetConfigOrDie()
@@ -226,6 +231,7 @@ func main() {
 		PostgresletNamespace:    postgresletNamespace,
 		SidecarsConfigMapName:   sidecarsCMName,
 		RunAsNonRoot:            runAsNonRoot,
+		PodAntiaffinity:         enablePodAntiaffinity,
 	}
 	opMgr, err := operatormanager.New(svcClusterConf, "external/svc-postgres-operator.yaml", scheme, ctrl.Log.WithName("OperatorManager"), opMgrOpts)
 	if err != nil {
