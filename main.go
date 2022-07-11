@@ -57,8 +57,6 @@ const (
 	sidecarsCMNameFlg              = "sidecars-configmap-name"
 	enableNetPolFlg                = "enable-netpol"
 	enablePodAntiaffinityFlg       = "enable-pod-antiaffinity"
-	patroniTTLFlg                  = "patroni-ttl"
-	patroniLoopWaitFlg             = "patroni-loop-wait"
 	patroniRetryTimeoutFlg         = "patroni-retry-timeout"
 )
 
@@ -163,14 +161,15 @@ func main() {
 	viper.SetDefault(enablePodAntiaffinityFlg, false)
 	enablePodAntiaffinity = viper.GetBool(enablePodAntiaffinityFlg)
 
-	viper.SetDefault(patroniTTLFlg, databasev1.DefaultPatroniParamValueTTL)
-	patroniTTL = viper.GetUint32(patroniTTLFlg)
+	// hard coded value
+	patroniLoopWait = databasev1.DefaultPatroniParamValueLoopWait
 
-	viper.SetDefault(patroniLoopWaitFlg, databasev1.DefaultPatroniParamValueLoopWait)
-	patroniLoopWait = viper.GetUint32(patroniLoopWaitFlg)
-
+	// user defined value
 	viper.SetDefault(patroniRetryTimeoutFlg, databasev1.DefaultPatroniParamValueRetryTimeout)
 	patroniRetryTimeout = viper.GetUint32(patroniRetryTimeoutFlg)
+
+	// derived value
+	patroniTTL = (2 * patroniRetryTimeout) + patroniLoopWait
 
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 
@@ -197,8 +196,6 @@ func main() {
 		sidecarsCMNameFlg, sidecarsCMName,
 		enableNetPolFlg, enableNetPol,
 		enablePodAntiaffinityFlg, enablePodAntiaffinity,
-		patroniTTLFlg, patroniTTL,
-		patroniLoopWaitFlg, patroniLoopWait,
 		patroniRetryTimeoutFlg, patroniRetryTimeout,
 	)
 

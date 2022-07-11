@@ -63,7 +63,6 @@ const (
 
 	teamIDPrefix = "pg"
 
-	DefaultPatroniParamValueTTL          uint32 = 130
 	DefaultPatroniParamValueLoopWait     uint32 = 10
 	DefaultPatroniParamValueRetryTimeout uint32 = 60
 
