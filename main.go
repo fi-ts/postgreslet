@@ -57,6 +57,9 @@ const (
 	sidecarsCMNameFlg              = "sidecars-configmap-name"
 	enableNetPolFlg                = "enable-netpol"
 	enablePodAntiaffinityFlg       = "enable-pod-antiaffinity"
+	patroniTTLFlg                  = "patroni-ttl"
+	patroniLoopWaitFlg             = "patroni-loop-wait"
+	patroniRetryTimeoutFlg         = "patroni-retry-timeout"
 )
 
 var (
@@ -78,6 +81,7 @@ func main() {
 	var metricsAddrCtrlMgr, metricsAddrSvcMgr, partitionID, tenant, ctrlClusterKubeconfig, pspName, lbIP, storageClass, postgresImage, etcdHost, operatorImage, majorVersionUpgradeMode, postgresletNamespace, sidecarsCMName string
 	var enableLeaderElection, enableCRDValidation, enableNetPol, enablePodAntiaffinity bool
 	var portRangeStart, portRangeSize int
+	var patroniTTL, patroniLoopWait, patroniRetryTimeout uint32
 	var pgParamBlockList map[string]bool
 	var standbyClusterSourceRanges []string
 
@@ -159,6 +163,15 @@ func main() {
 	viper.SetDefault(enablePodAntiaffinityFlg, false)
 	enablePodAntiaffinity = viper.GetBool(enablePodAntiaffinityFlg)
 
+	viper.SetDefault(patroniTTLFlg, databasev1.DefaultPatroniParamValueTTL)
+	patroniTTL = viper.GetUint32(patroniTTLFlg)
+
+	viper.SetDefault(patroniLoopWaitFlg, databasev1.DefaultPatroniParamValueLoopWait)
+	patroniLoopWait = viper.GetUint32(patroniLoopWaitFlg)
+
+	viper.SetDefault(patroniRetryTimeoutFlg, databasev1.DefaultPatroniParamValueRetryTimeout)
+	patroniRetryTimeout = viper.GetUint32(patroniRetryTimeoutFlg)
+
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 
 	ctrl.Log.Info("flag",
@@ -184,6 +197,9 @@ func main() {
 		sidecarsCMNameFlg, sidecarsCMName,
 		enableNetPolFlg, enableNetPol,
 		enablePodAntiaffinityFlg, enablePodAntiaffinity,
+		patroniTTLFlg, patroniTTL,
+		patroniLoopWaitFlg, patroniLoopWait,
+		patroniRetryTimeoutFlg, patroniRetryTimeout,
 	)
 
 	svcClusterConf := ctrl.GetConfigOrDie()
@@ -254,6 +270,9 @@ func main() {
 		SidecarsConfigMapName:       sidecarsCMName,
 		EnableNetPol:                enableNetPol,
 		EtcdHost:                    etcdHost,
+		PatroniTTL:                  patroniTTL,
+		PatroniLoopWait:             patroniLoopWait,
+		PatroniRetryTimeout:         patroniRetryTimeout,
 	}).SetupWithManager(ctrlPlaneClusterMgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Postgres")
 		os.Exit(1)
