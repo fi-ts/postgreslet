@@ -577,6 +577,9 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 			S3SecretAccessKey: rbs.S3SecretKey,
 			S3ForcePathStyle:  pointer.Bool(true),
 		}
+	} else {
+		// if we don't set the clone block, remove it completely
+		z.Spec.Clone = nil
 	}
 
 	// Enable replication (using unstructured json)
