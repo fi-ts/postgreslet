@@ -29,7 +29,9 @@ import (
 	networkingv1 "k8s.io/api/networking/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -696,18 +698,23 @@ func (r *PostgresReconciler) updatePatroniConfig(ctx context.Context, instance *
 
 	r.Log.Info("Sending REST call to Patroni API")
 	pods := &corev1.PodList{}
+
+	roleReq, _ := labels.NewRequirement("spilo-role", selection.In, []string{"master", "standby_leader"})
+	leaderSelector := labels.NewSelector()
+	leaderSelector = leaderSelector.Add(*roleReq)
+
 	opts := []client.ListOption{
 		client.InNamespace(instance.ToPeripheralResourceNamespace()),
-		client.MatchingLabels{"spilo-role": "master"},
+		client.MatchingLabelsSelector{Selector: leaderSelector},
 	}
 	if err := r.SvcClient.List(ctx, pods, opts...); err != nil {
 		r.Log.Info("could not query pods, requeuing")
 		return err
 	}
 	if len(pods.Items) == 0 {
-		r.Log.Info("no master pod ready, requeuing")
+		r.Log.Info("no leader pod ready, requeuing")
 		// TODO return proper error
-		return errors.New("no master pods found")
+		return errors.New("no leader pods found")
 	}
 	podIP := pods.Items[0].Status.PodIP
 	podPort := "8008"
