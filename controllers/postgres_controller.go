@@ -699,7 +699,11 @@ func (r *PostgresReconciler) updatePatroniConfig(ctx context.Context, instance *
 	r.Log.Info("Sending REST call to Patroni API")
 	pods := &corev1.PodList{}
 
-	roleReq, _ := labels.NewRequirement("spilo-role", selection.In, []string{"master", "standby_leader"})
+	roleReq, err := labels.NewRequirement("spilo-role", selection.In, []string{"master", "standby_leader"})
+	if err != nil {
+		r.Log.Info("could not create requirements for label selector to query pods, requeuing")
+		return err
+	}
 	leaderSelector := labels.NewSelector()
 	leaderSelector = leaderSelector.Add(*roleReq)
 
