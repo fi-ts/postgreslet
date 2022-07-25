@@ -739,11 +739,11 @@ func (r *PostgresReconciler) updatePatroniConfig(ctx context.Context, instance *
 			podIP := pod.Status.PodIP
 			if err = r.httpPatchPatroni(ctx, instance, podIP); err != nil {
 				lastErr = err
-				r.Log.Error(err, "failed to update pod")
+				r.Log.Info("failed to update pod")
 			}
 		}
 		if lastErr != nil {
-			r.Log.Error(lastErr, "updating patroni config failed, got one or more errors")
+			r.Log.Info("updating patroni config failed, got one or more errors")
 		}
 		return lastErr
 	}
