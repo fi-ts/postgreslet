@@ -716,11 +716,44 @@ func (r *PostgresReconciler) updatePatroniConfig(ctx context.Context, instance *
 		return err
 	}
 	if len(pods.Items) == 0 {
-		r.Log.Info("no leader pod ready, requeuing")
-		// TODO return proper error
-		return errors.New("no leader pods found")
+		r.Log.Error(errors.New("no leader pods found"), "no leader pod found, selecting all spilo pods as a last resort")
+
+		opts := []client.ListOption{
+			client.InNamespace(instance.ToPeripheralResourceNamespace()),
+			client.MatchingLabels{"application": "spilo"},
+		}
+		if err := r.SvcClient.List(ctx, pods, opts...); err != nil {
+			r.Log.Info("could not query pods, requeuing")
+			return err
+		}
+
+		if len(pods.Items) == 0 {
+			r.Log.Info("no spilo pods found at all, requeueing")
+			return errors.New("no spilo pods found at all")
+		}
+
+		// iterate all spilo pods
+		var lastErr error
+		for _, pod := range pods.Items {
+			pod := pod // pin!
+			podIP := pod.Status.PodIP
+			if err = r.httpPatchPatroni(ctx, instance, podIP); err != nil {
+				lastErr = err
+			}
+		}
+		r.Log.Info("got one or more errors")
+		return lastErr
 	}
 	podIP := pods.Items[0].Status.PodIP
+
+	return r.httpPatchPatroni(ctx, instance, podIP)
+}
+
+func (r *PostgresReconciler) httpPatchPatroni(ctx context.Context, instance *pg.Postgres, podIP string) error {
+	if podIP == "" {
+		return errors.New("podIP must not be empty")
+	}
+
 	podPort := "8008"
 	path := "config"
 
