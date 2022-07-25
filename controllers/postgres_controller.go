@@ -733,7 +733,7 @@ func (r *PostgresReconciler) updatePatroniConfig(ctx context.Context, instance *
 		}
 
 		// iterate all spilo pods
-		var lastErr error
+		var lastErr error = nil
 		for _, pod := range pods.Items {
 			pod := pod // pin!
 			podIP := pod.Status.PodIP
