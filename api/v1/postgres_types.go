@@ -63,6 +63,9 @@ const (
 
 	teamIDPrefix = "pg"
 
+	DefaultPatroniParamValueLoopWait     uint32 = 10
+	DefaultPatroniParamValueRetryTimeout uint32 = 60
+
 	defaultPostgresParamValueTCPKeepAlivesIdle      = "200"
 	defaultPostgresParamValueTCPKeepAlivesInterval  = "30"
 	defaultPostgresParamValueLogFileMode            = "0600"
@@ -482,7 +485,7 @@ func (p *Postgres) ToPeripheralResourceLookupKey() types.NamespacedName {
 	}
 }
 
-func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *corev1.ConfigMap, sc string, pgParamBlockList map[string]bool, rbs *BackupConfig, srcDB *Postgres) (*unstructured.Unstructured, error) {
+func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *corev1.ConfigMap, sc string, pgParamBlockList map[string]bool, rbs *BackupConfig, srcDB *Postgres, patroniTTL, patroniLoopWait, patroniRetryTimeout uint32) (*unstructured.Unstructured, error) {
 	if z == nil {
 		z = &zalando.Postgresql{}
 	}
@@ -515,8 +518,9 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 	z.Spec.Volume.Size = p.Spec.Size.StorageSize
 	z.Spec.Volume.StorageClass = sc
 
-	// TODO make configurable?
-	z.Spec.Patroni.TTL = 130
+	z.Spec.Patroni.TTL = patroniTTL
+	z.Spec.Patroni.LoopWait = patroniLoopWait
+	z.Spec.Patroni.RetryTimeout = patroniRetryTimeout
 	z.Spec.Patroni.SynchronousMode = true
 	z.Spec.Patroni.SynchronousModeStrict = false
 
