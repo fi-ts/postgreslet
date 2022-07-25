@@ -721,8 +721,9 @@ func (r *PostgresReconciler) updatePatroniConfig(ctx context.Context, instance *
 		err = r.updatePatroniConfigOnAllPods(ctx, instance)
 		if err != nil {
 			r.Log.Info("updating patroni config failed, got one or more errors")
+			return err
 		}
-		return err
+		return nil
 	}
 	podIP := pods.Items[0].Status.PodIP
 
