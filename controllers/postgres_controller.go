@@ -716,7 +716,7 @@ func (r *PostgresReconciler) updatePatroniConfig(ctx context.Context, instance *
 		return err
 	}
 	if len(pods.Items) == 0 {
-		r.Log.Error(errors.New("no leader pods found"), "no leader pod found, selecting all spilo pods as a last resort")
+		r.Log.Info("no leader pod found, selecting all spilo pods as a last resort (might be ok if it is still creating)")
 
 		opts := []client.ListOption{
 			client.InNamespace(instance.ToPeripheralResourceNamespace()),
@@ -739,9 +739,10 @@ func (r *PostgresReconciler) updatePatroniConfig(ctx context.Context, instance *
 			podIP := pod.Status.PodIP
 			if err = r.httpPatchPatroni(ctx, instance, podIP); err != nil {
 				lastErr = err
+				r.Log.Error(err, "failed to update pod")
 			}
 		}
-		r.Log.Info("got one or more errors")
+		r.Log.Error(lastErr, "updating patroni config failed, got one or more errors")
 		return lastErr
 	}
 	podIP := pods.Items[0].Status.PodIP
