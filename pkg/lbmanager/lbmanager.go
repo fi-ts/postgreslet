@@ -66,9 +66,9 @@ func (m *LBManager) CreateSvcLBIfNone(ctx context.Context, in *api.Postgres) err
 
 	// update the selector, and only the selector (we do NOT want the change the ip or port here!!!)
 	if in.IsReplicationPrimary() {
-		svc.Spec.Selector["spilo-role"] = "master"
+		svc.Spec.Selector[api.SpiloRoleLabelName] = api.SpiloRoleLabelValueMaster
 	} else {
-		svc.Spec.Selector["spilo-role"] = "standby_leader"
+		svc.Spec.Selector[api.SpiloRoleLabelName] = api.SpiloRoleLabelValueStandbyLeader
 	}
 	if err := m.Update(ctx, svc); err != nil {
 		return fmt.Errorf("failed to update Service of type LoadBalancer: %w", err)
