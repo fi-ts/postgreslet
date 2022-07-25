@@ -334,10 +334,14 @@ func (p *Postgres) ToSvcLB(lbIP string, lbPort int32) *corev1.Service {
 	port.TargetPort = intstr.FromInt(5432)
 	lb.Spec.Ports = []corev1.ServicePort{port}
 
+	spiloRole := "master"
+	if !p.IsReplicationPrimary() {
+		spiloRole = "standby_leader"
+	}
 	lb.Spec.Selector = map[string]string{
 		"application":  "spilo",
 		"cluster-name": p.ToPeripheralResourceName(),
-		"spilo-role":   "master",
+		"spilo-role":   spiloRole,
 		"team":         p.generateTeamID(),
 	}
 
