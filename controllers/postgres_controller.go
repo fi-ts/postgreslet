@@ -718,38 +718,47 @@ func (r *PostgresReconciler) updatePatroniConfig(ctx context.Context, instance *
 	if len(pods.Items) == 0 {
 		r.Log.Info("no leader pod found, selecting all spilo pods as a last resort (might be ok if it is still creating)")
 
-		opts := []client.ListOption{
-			client.InNamespace(instance.ToPeripheralResourceNamespace()),
-			client.MatchingLabels{"application": "spilo"},
-		}
-		if err := r.SvcClient.List(ctx, pods, opts...); err != nil {
-			r.Log.Info("could not query pods, requeuing")
-			return err
-		}
-
-		if len(pods.Items) == 0 {
-			r.Log.Info("no spilo pods found at all, requeueing")
-			return errors.New("no spilo pods found at all")
-		}
-
-		// iterate all spilo pods
-		var lastErr error = nil
-		for _, pod := range pods.Items {
-			pod := pod // pin!
-			podIP := pod.Status.PodIP
-			if err = r.httpPatchPatroni(ctx, instance, podIP); err != nil {
-				lastErr = err
-				r.Log.Info("failed to update pod")
-			}
-		}
-		if lastErr != nil {
+		err = r.updatePatroniConfigOnAllPods(ctx, instance)
+		if err != nil {
 			r.Log.Info("updating patroni config failed, got one or more errors")
 		}
-		return lastErr
+		return err
 	}
 	podIP := pods.Items[0].Status.PodIP
 
 	return r.httpPatchPatroni(ctx, instance, podIP)
+}
+
+func (r *PostgresReconciler) updatePatroniConfigOnAllPods(ctx context.Context, instance *pg.Postgres) error {
+	pods := &corev1.PodList{}
+	opts := []client.ListOption{
+		client.InNamespace(instance.ToPeripheralResourceNamespace()),
+		client.MatchingLabels{"application": "spilo"},
+	}
+	if err := r.SvcClient.List(ctx, pods, opts...); err != nil {
+		r.Log.Info("could not query pods, requeuing")
+		return err
+	}
+
+	if len(pods.Items) == 0 {
+		r.Log.Info("no spilo pods found at all, requeueing")
+		return errors.New("no spilo pods found at all")
+	}
+
+	// iterate all spilo pods
+	var lastErr error
+	for _, pod := range pods.Items {
+		pod := pod // pin!
+		podIP := pod.Status.PodIP
+		if err := r.httpPatchPatroni(ctx, instance, podIP); err != nil {
+			lastErr = err
+			r.Log.Info("failed to update pod")
+		}
+	}
+	if lastErr != nil {
+		r.Log.Info("updating patroni config failed, got one or more errors")
+	}
+	return lastErr
 }
 
 func (r *PostgresReconciler) httpPatchPatroni(ctx context.Context, instance *pg.Postgres, podIP string) error {
