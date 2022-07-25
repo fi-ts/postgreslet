@@ -719,11 +719,59 @@ func (r *PostgresReconciler) updatePatroniConfig(ctx context.Context, instance *
 		return err
 	}
 	if len(pods.Items) == 0 {
-		r.Log.Info("no leader pod ready, requeuing")
-		// TODO return proper error
-		return errors.New("no leader pods found")
+		r.Log.Info("no leader pod found, selecting all spilo pods as a last resort (might be ok if it is still creating)")
+
+		err = r.updatePatroniConfigOnAllPods(ctx, instance)
+		if err != nil {
+			r.Log.Info("updating patroni config failed, got one or more errors")
+			return err
+		}
+		return nil
 	}
 	podIP := pods.Items[0].Status.PodIP
+
+	return r.httpPatchPatroni(ctx, instance, podIP)
+}
+
+func (r *PostgresReconciler) updatePatroniConfigOnAllPods(ctx context.Context, instance *pg.Postgres) error {
+	pods := &corev1.PodList{}
+	opts := []client.ListOption{
+		client.InNamespace(instance.ToPeripheralResourceNamespace()),
+		client.MatchingLabels{"application": "spilo"},
+	}
+	if err := r.SvcClient.List(ctx, pods, opts...); err != nil {
+		r.Log.Info("could not query pods, requeuing")
+		return err
+	}
+
+	if len(pods.Items) == 0 {
+		r.Log.Info("no spilo pods found at all, requeueing")
+		return errors.New("no spilo pods found at all")
+	}
+
+	// iterate all spilo pods
+	var lastErr error
+	for _, pod := range pods.Items {
+		pod := pod // pin!
+		podIP := pod.Status.PodIP
+		if err := r.httpPatchPatroni(ctx, instance, podIP); err != nil {
+			lastErr = err
+			r.Log.Info("failed to update pod")
+		}
+	}
+	if lastErr != nil {
+		r.Log.Info("updating patroni config failed, got one or more errors")
+		return lastErr
+	}
+	r.Log.Info("updating patroni config succeeded")
+	return nil
+}
+
+func (r *PostgresReconciler) httpPatchPatroni(ctx context.Context, instance *pg.Postgres, podIP string) error {
+	if podIP == "" {
+		return errors.New("podIP must not be empty")
+	}
+
 	podPort := "8008"
 	path := "config"
 
@@ -775,12 +823,14 @@ func (r *PostgresReconciler) updatePatroniConfig(ctx context.Context, instance *
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPatch, url, bytes.NewBuffer(jsonReq))
 	if err != nil {
+		r.Log.Error(err, "could not create request")
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
+		r.Log.Error(err, "could not perform request")
 		return err
 	}
 	defer resp.Body.Close()
