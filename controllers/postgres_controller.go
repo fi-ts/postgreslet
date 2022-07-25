@@ -742,7 +742,9 @@ func (r *PostgresReconciler) updatePatroniConfig(ctx context.Context, instance *
 				r.Log.Error(err, "failed to update pod")
 			}
 		}
-		r.Log.Error(lastErr, "updating patroni config failed, got one or more errors")
+		if lastErr != nil {
+			r.Log.Error(lastErr, "updating patroni config failed, got one or more errors")
+		}
 		return lastErr
 	}
 	podIP := pods.Items[0].Status.PodIP
@@ -806,12 +808,14 @@ func (r *PostgresReconciler) httpPatchPatroni(ctx context.Context, instance *pg.
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPatch, url, bytes.NewBuffer(jsonReq))
 	if err != nil {
+		r.Log.Error(err, "could not create request")
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
+		r.Log.Error(err, "could not perform request")
 		return err
 	}
 	defer resp.Body.Close()
