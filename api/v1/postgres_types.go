@@ -61,6 +61,12 @@ const (
 	StandbyKey    = "standby"
 	StandbyMethod = "streaming_host"
 
+	ApplicationLabelName             = "application"
+	ApplicationLabelValue            = "spilo"
+	SpiloRoleLabelName               = "spilo-role"
+	SpiloRoleLabelValueMaster        = "master"
+	SpiloRoleLabelValueStandbyLeader = "standby_leader"
+
 	teamIDPrefix = "pg"
 
 	DefaultPatroniParamValueLoopWait     uint32 = 10
@@ -313,7 +319,7 @@ func (p *Postgres) ToKey() *types.NamespacedName {
 	}
 }
 
-func (p *Postgres) ToSvcLB(lbIP string, lbPort int32) *corev1.Service {
+func (p *Postgres) ToSvcLB(lbIP string, lbPort int32, enableStandbyLeaderSelector bool) *corev1.Service {
 	lb := &corev1.Service{}
 	lb.Spec.Type = "LoadBalancer"
 
@@ -334,11 +340,15 @@ func (p *Postgres) ToSvcLB(lbIP string, lbPort int32) *corev1.Service {
 	port.TargetPort = intstr.FromInt(5432)
 	lb.Spec.Ports = []corev1.ServicePort{port}
 
+	spiloRole := SpiloRoleLabelValueMaster
+	if enableStandbyLeaderSelector && !p.IsReplicationPrimary() {
+		spiloRole = SpiloRoleLabelValueStandbyLeader
+	}
 	lb.Spec.Selector = map[string]string{
-		"application":  "spilo",
-		"cluster-name": p.ToPeripheralResourceName(),
-		"spilo-role":   "master",
-		"team":         p.generateTeamID(),
+		ApplicationLabelName: ApplicationLabelValue,
+		"cluster-name":       p.ToPeripheralResourceName(),
+		SpiloRoleLabelName:   spiloRole,
+		"team":               p.generateTeamID(),
 	}
 
 	if len(lbIP) > 0 {
@@ -404,9 +414,9 @@ func (p *Postgres) ToUserPasswordsSecretListOption() []client.ListOption {
 
 func (p *Postgres) ToUserPasswordSecretMatchingLabels() map[string]string {
 	return map[string]string{
-		"application":  "spilo",
-		"cluster-name": p.ToPeripheralResourceName(),
-		"team":         p.generateTeamID(),
+		ApplicationLabelName: ApplicationLabelValue,
+		"cluster-name":       p.ToPeripheralResourceName(),
+		"team":               p.generateTeamID(),
 	}
 }
 

@@ -702,7 +702,7 @@ func (r *PostgresReconciler) updatePatroniConfig(ctx context.Context, instance *
 	r.Log.Info("Sending REST call to Patroni API")
 	pods := &corev1.PodList{}
 
-	roleReq, err := labels.NewRequirement("spilo-role", selection.In, []string{"master", "standby_leader"})
+	roleReq, err := labels.NewRequirement(pg.SpiloRoleLabelName, selection.In, []string{pg.SpiloRoleLabelValueMaster, pg.SpiloRoleLabelValueStandbyLeader})
 	if err != nil {
 		r.Log.Info("could not create requirements for label selector to query pods, requeuing")
 		return err
@@ -737,7 +737,7 @@ func (r *PostgresReconciler) updatePatroniConfigOnAllPods(ctx context.Context, i
 	pods := &corev1.PodList{}
 	opts := []client.ListOption{
 		client.InNamespace(instance.ToPeripheralResourceNamespace()),
-		client.MatchingLabels{"application": "spilo"},
+		client.MatchingLabels{pg.ApplicationLabelName: pg.ApplicationLabelValue},
 	}
 	if err := r.SvcClient.List(ctx, pods, opts...); err != nil {
 		r.Log.Info("could not query pods, requeuing")
@@ -867,7 +867,7 @@ func (r *PostgresReconciler) createOrUpdateNetPol(ctx context.Context, instance 
 	namespace := instance.ToPeripheralResourceNamespace()
 
 	pgPodMatchingLabels := instance.ToZalandoPostgresqlMatchingLabels()
-	pgPodMatchingLabels["application"] = "spilo"
+	pgPodMatchingLabels[pg.ApplicationLabelName] = pg.ApplicationLabelValue
 
 	spec := networkingv1.NetworkPolicySpec{
 		PodSelector: metav1.LabelSelector{
@@ -1023,7 +1023,7 @@ func (r *PostgresReconciler) createOrUpdateExporterSidecarServices(ctx context.C
 		return fmt.Errorf("error while setting the namespace of the postgres-exporter service to %v: %w", namespace, err)
 	}
 	labels := map[string]string{
-		// "application": "spilo", // TODO check if we still need that label, IsOperatorDeletable won't work anymore if we set it.
+		// pg.ApplicationLabelName: pg.ApplicationLabelValue, // TODO check if we still need that label, IsOperatorDeletable won't work anymore if we set it.
 		"app": "postgres-exporter",
 	}
 	if err := r.SetLabels(pes, labels); err != nil {
@@ -1046,7 +1046,7 @@ func (r *PostgresReconciler) createOrUpdateExporterSidecarServices(ctx context.C
 		},
 	}
 	selector := map[string]string{
-		"application": "spilo",
+		pg.ApplicationLabelName: pg.ApplicationLabelValue,
 	}
 	pes.Spec.Selector = selector
 	pes.Spec.Type = corev1.ServiceTypeClusterIP
