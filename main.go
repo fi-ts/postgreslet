@@ -58,6 +58,7 @@ const (
 	enableNetPolFlg                = "enable-netpol"
 	enablePodAntiaffinityFlg       = "enable-pod-antiaffinity"
 	patroniRetryTimeoutFlg         = "patroni-retry-timeout"
+	enableStandbyLeaderSelectorFlg = "enable-standby-leader-selector"
 )
 
 var (
@@ -77,7 +78,7 @@ func init() {
 
 func main() {
 	var metricsAddrCtrlMgr, metricsAddrSvcMgr, partitionID, tenant, ctrlClusterKubeconfig, pspName, lbIP, storageClass, postgresImage, etcdHost, operatorImage, majorVersionUpgradeMode, postgresletNamespace, sidecarsCMName string
-	var enableLeaderElection, enableCRDValidation, enableNetPol, enablePodAntiaffinity bool
+	var enableLeaderElection, enableCRDValidation, enableNetPol, enablePodAntiaffinity, enableStandbyLeaderSelector bool
 	var portRangeStart, portRangeSize int
 	var patroniTTL, patroniLoopWait, patroniRetryTimeout uint32
 	var pgParamBlockList map[string]bool
@@ -171,6 +172,9 @@ func main() {
 	// derived value
 	patroniTTL = (2 * patroniRetryTimeout) + patroniLoopWait
 
+	viper.SetDefault(enableStandbyLeaderSelectorFlg, true)
+	enableStandbyLeaderSelector = viper.GetBool(enableStandbyLeaderSelectorFlg)
+
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 
 	ctrl.Log.Info("flag",
@@ -197,6 +201,7 @@ func main() {
 		enableNetPolFlg, enableNetPol,
 		enablePodAntiaffinityFlg, enablePodAntiaffinity,
 		patroniRetryTimeoutFlg, patroniRetryTimeout,
+		enableStandbyLeaderSelectorFlg, enableStandbyLeaderSelector,
 	)
 
 	svcClusterConf := ctrl.GetConfigOrDie()
@@ -247,9 +252,10 @@ func main() {
 	}
 
 	var lbMgrOpts lbmanager.Options = lbmanager.Options{
-		LBIP:           lbIP,
-		PortRangeStart: int32(portRangeStart),
-		PortRangeSize:  int32(portRangeSize),
+		LBIP:                        lbIP,
+		PortRangeStart:              int32(portRangeStart),
+		PortRangeSize:               int32(portRangeSize),
+		EnableStandbyLeaderSelector: enableStandbyLeaderSelector,
 	}
 	if err = (&controllers.PostgresReconciler{
 		CtrlClient:                  ctrlPlaneClusterMgr.GetClient(),

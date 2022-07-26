@@ -319,7 +319,7 @@ func (p *Postgres) ToKey() *types.NamespacedName {
 	}
 }
 
-func (p *Postgres) ToSvcLB(lbIP string, lbPort int32) *corev1.Service {
+func (p *Postgres) ToSvcLB(lbIP string, lbPort int32, enableStandbyLeaderSelector bool) *corev1.Service {
 	lb := &corev1.Service{}
 	lb.Spec.Type = "LoadBalancer"
 
@@ -341,7 +341,7 @@ func (p *Postgres) ToSvcLB(lbIP string, lbPort int32) *corev1.Service {
 	lb.Spec.Ports = []corev1.ServicePort{port}
 
 	spiloRole := SpiloRoleLabelValueMaster
-	if !p.IsReplicationPrimary() {
+	if enableStandbyLeaderSelector && !p.IsReplicationPrimary() {
 		spiloRole = SpiloRoleLabelValueStandbyLeader
 	}
 	lb.Spec.Selector = map[string]string{

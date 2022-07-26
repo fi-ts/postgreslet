@@ -12,9 +12,10 @@ import (
 )
 
 type Options struct {
-	LBIP           string
-	PortRangeStart int32
-	PortRangeSize  int32
+	LBIP                        string
+	PortRangeStart              int32
+	PortRangeSize               int32
+	EnableStandbyLeaderSelector bool
 }
 
 // LBManager Responsible for the creation and deletion of externally accessible Services to access the Postgresql clusters managed by the Postgreslet.
@@ -58,9 +59,15 @@ func (m *LBManager) CreateSvcLBIfNone(ctx context.Context, in *api.Postgres) err
 			lbIPToUse = ""
 		}
 
-		if err := m.Create(ctx, in.ToSvcLB(lbIPToUse, nextFreePort)); err != nil {
+		if err := m.Create(ctx, in.ToSvcLB(lbIPToUse, nextFreePort, m.options.EnableStandbyLeaderSelector)); err != nil {
 			return fmt.Errorf("failed to create Service of type LoadBalancer: %w", err)
 		}
+		return nil
+	}
+
+	// check if we should use the new selector
+	if !m.options.EnableStandbyLeaderSelector {
+		// we wouldn't really update anything anyway when the new selector is disabled, so we can return here
 		return nil
 	}
 
@@ -73,6 +80,7 @@ func (m *LBManager) CreateSvcLBIfNone(ctx context.Context, in *api.Postgres) err
 	if err := m.Update(ctx, svc); err != nil {
 		return fmt.Errorf("failed to update Service of type LoadBalancer: %w", err)
 	}
+
 	return nil
 }
 
