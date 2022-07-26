@@ -65,18 +65,13 @@ func (m *LBManager) CreateSvcLBIfNone(ctx context.Context, in *api.Postgres) err
 		return nil
 	}
 
-	// check if we should use the new selector
-	if !m.options.EnableStandbyLeaderSelector {
-		// we wouldn't really update anything anyway when the new selector is disabled, so we can return here
-		return nil
+	// update the selector, and only the selector (we do NOT want the change the ip or port here!!!)
+	if m.options.EnableStandbyLeaderSelector && !in.IsReplicationPrimary() {
+		svc.Spec.Selector[api.SpiloRoleLabelName] = api.SpiloRoleLabelValueStandbyLeader
+	} else {
+		svc.Spec.Selector[api.SpiloRoleLabelName] = api.SpiloRoleLabelValueMaster
 	}
 
-	// update the selector, and only the selector (we do NOT want the change the ip or port here!!!)
-	if in.IsReplicationPrimary() {
-		svc.Spec.Selector[api.SpiloRoleLabelName] = api.SpiloRoleLabelValueMaster
-	} else {
-		svc.Spec.Selector[api.SpiloRoleLabelName] = api.SpiloRoleLabelValueStandbyLeader
-	}
 	if err := m.Update(ctx, svc); err != nil {
 		return fmt.Errorf("failed to update Service of type LoadBalancer: %w", err)
 	}
