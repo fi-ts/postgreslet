@@ -66,10 +66,15 @@ func (m *LBManager) CreateSvcLBIfNone(ctx context.Context, in *api.Postgres) err
 	}
 
 	// update the selector, and only the selector (we do NOT want the change the ip or port here!!!)
-	if m.options.EnableStandbyLeaderSelector && !in.IsReplicationPrimary() {
+	if in.IsReplicationPrimary() {
+		// no brainer: use spilo-role=master
+		svc.Spec.Selector[api.SpiloRoleLabelName] = api.SpiloRoleLabelValueMaster
+	} else if m.options.EnableStandbyLeaderSelector {
+		// Only set this value when we are NOT a primary and the StandbyLeaderSelector is enabled.
 		svc.Spec.Selector[api.SpiloRoleLabelName] = api.SpiloRoleLabelValueStandbyLeader
 	} else {
-		svc.Spec.Selector[api.SpiloRoleLabelName] = api.SpiloRoleLabelValueMaster
+		// Otherwise, just leave it blank and use a selector without the spilo-role
+		delete(svc.Spec.Selector, api.SpiloRoleLabelName)
 	}
 
 	if err := m.Update(ctx, svc); err != nil {

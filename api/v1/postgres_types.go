@@ -340,15 +340,17 @@ func (p *Postgres) ToSvcLB(lbIP string, lbPort int32, enableStandbyLeaderSelecto
 	port.TargetPort = intstr.FromInt(5432)
 	lb.Spec.Ports = []corev1.ServicePort{port}
 
-	spiloRole := SpiloRoleLabelValueMaster
-	if enableStandbyLeaderSelector && !p.IsReplicationPrimary() {
-		spiloRole = SpiloRoleLabelValueStandbyLeader
-	}
 	lb.Spec.Selector = map[string]string{
 		ApplicationLabelName: ApplicationLabelValue,
 		"cluster-name":       p.ToPeripheralResourceName(),
-		SpiloRoleLabelName:   spiloRole,
 		"team":               p.generateTeamID(),
+	}
+	if p.IsReplicationPrimary() {
+		lb.Spec.Selector[SpiloRoleLabelName] = SpiloRoleLabelValueMaster
+	} else if enableStandbyLeaderSelector {
+		// Only set this value when we are NOT a primary and the StandbyLeaderSelector is enabled.
+		// Otherwise, just leave it blank and use a selector without the spilo-role
+		lb.Spec.Selector[SpiloRoleLabelName] = SpiloRoleLabelValueStandbyLeader
 	}
 
 	if len(lbIP) > 0 {
