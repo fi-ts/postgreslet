@@ -507,6 +507,11 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 	z.Labels = p.ToZalandoPostgresqlMatchingLabels()
 
 	z.Spec.NumberOfInstances = p.Spec.NumberOfInstances
+	if !p.IsReplicationPrimary() {
+		// Force single instance mode for Standby
+		// TODO discuss and remove either this comment or this code
+		z.Spec.NumberOfInstances = 1
+	}
 	z.Spec.PostgresqlParam.PgVersion = p.Spec.Version
 
 	// initialize the parameters
