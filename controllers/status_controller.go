@@ -26,10 +26,11 @@ import (
 
 // StatusReconciler reconciles a Postgresql object
 type StatusReconciler struct {
-	SvcClient  client.Client
-	CtrlClient client.Client
-	Log        logr.Logger
-	Scheme     *runtime.Scheme
+	SvcClient           client.Client
+	CtrlClient          client.Client
+	Log                 logr.Logger
+	Scheme              *runtime.Scheme
+	PartitionID, Tenant string
 }
 
 // Reconcile updates the status of the remote Postgres object based on the status of the local zalando object.
@@ -75,6 +76,11 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	if !ownerFound {
 		return ctrl.Result{}, fmt.Errorf("Could not find the owner")
+	}
+
+	// TODO check for partition and abort if we're not managing that owner
+	if !r.isManagedByUs(&owner) {
+		return ctrl.Result{}, nil
 	}
 
 	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
@@ -132,6 +138,19 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	}
 
 	return ctrl.Result{}, nil
+}
+
+func (r *StatusReconciler) isManagedByUs(obj *pg.Postgres) bool {
+	if obj.Spec.PartitionID != r.PartitionID {
+		return false
+	}
+
+	// if this partition is only for one tenant
+	if r.Tenant != "" && obj.Spec.Tenant != r.Tenant {
+		return false
+	}
+
+	return true
 }
 
 // SetupWithManager registers this controller for reconciliation of Postgresql resources

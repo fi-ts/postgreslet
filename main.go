@@ -282,10 +282,12 @@ func main() {
 	}
 
 	if err = (&controllers.StatusReconciler{
-		SvcClient:  svcClusterMgr.GetClient(),
-		CtrlClient: ctrlPlaneClusterMgr.GetClient(),
-		Log:        ctrl.Log.WithName("controllers").WithName("Status"),
-		Scheme:     svcClusterMgr.GetScheme(),
+		SvcClient:   svcClusterMgr.GetClient(),
+		CtrlClient:  ctrlPlaneClusterMgr.GetClient(),
+		Log:         ctrl.Log.WithName("controllers").WithName("Status"),
+		Scheme:      svcClusterMgr.GetScheme(),
+		PartitionID: partitionID,
+		Tenant:      tenant,
 	}).SetupWithManager(svcClusterMgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Status")
 		os.Exit(1)
