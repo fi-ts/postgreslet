@@ -60,6 +60,8 @@ const (
 	// StandbyKey defines the key under which the standby configuration is stored in the CR.  Defined by the postgres-operator/patroni
 	StandbyKey    = "standby"
 	StandbyMethod = "streaming_host"
+	// PartitionIDLabelName Name of the managed-by label
+	PartitionIDLabelName string = "postgres.database.fits.cloud/partition-id"
 
 	ApplicationLabelName             = "application"
 	ApplicationLabelValue            = "spilo"

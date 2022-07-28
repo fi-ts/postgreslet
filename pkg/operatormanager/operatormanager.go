@@ -63,6 +63,7 @@ type Options struct {
 	PostgresletNamespace    string
 	SidecarsConfigMapName   string
 	PodAntiaffinity         bool
+	PartitionID             string
 }
 
 // OperatorManager manages the operator
@@ -439,7 +440,8 @@ func (m *OperatorManager) ensureCleanMetadata(obj runtime.Object) error {
 
 // createNamespace ensures namespace exists
 func (m *OperatorManager) createNamespace(ctx context.Context, namespace string) error {
-	if err := m.Get(ctx, client.ObjectKey{Name: namespace}, &corev1.Namespace{}); err != nil {
+	ns := &corev1.Namespace{}
+	if err := m.Get(ctx, client.ObjectKey{Name: namespace}, ns); err != nil {
 		// errors other than `not found`
 		if !errors.IsNotFound(err) {
 			return fmt.Errorf("error while fetching namespace %v: %w", namespace, err)
@@ -449,12 +451,20 @@ func (m *OperatorManager) createNamespace(ctx context.Context, namespace string)
 		nsObj := &corev1.Namespace{}
 		nsObj.Name = namespace
 		nsObj.ObjectMeta.Labels = map[string]string{
-			pg.ManagedByLabelName: pg.ManagedByLabelValue,
+			pg.ManagedByLabelName:   pg.ManagedByLabelValue,
+			pg.PartitionIDLabelName: m.options.PartitionID,
 		}
 		if err := m.Create(ctx, nsObj); err != nil {
 			return fmt.Errorf("error while creating namespace %v: %w", namespace, err)
 		}
 		m.log.Info("namespace created", "name", namespace)
+	}
+
+	// update partition label (to make sure "old" namespaces have that label as well)
+	ns.ObjectMeta.Labels[pg.PartitionIDLabelName] = m.options.PartitionID
+
+	if err := m.Update(ctx, ns); err != nil {
+		return fmt.Errorf("failed to update labes of namespace: %w", err)
 	}
 
 	return nil
@@ -598,7 +608,8 @@ func (m *OperatorManager) UpdateAllOperators(ctx context.Context) error {
 	// fetch all operators (running or otherwise)
 	m.log.Info("Fetching all managed namespaces")
 	matchingLabels := client.MatchingLabels{
-		pg.ManagedByLabelName: pg.ManagedByLabelValue,
+		pg.ManagedByLabelName:   pg.ManagedByLabelValue,
+		pg.PartitionIDLabelName: m.options.PartitionID,
 	}
 	nsList := &corev1.NamespaceList{}
 	opts := []client.ListOption{
