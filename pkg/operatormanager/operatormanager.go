@@ -605,27 +605,27 @@ func (m *OperatorManager) toObjectKey(obj runtime.Object, namespace string) (cli
 
 // UpdateAllOperators Updates the manifests of all postgres operators managed by the postgreslet
 func (m *OperatorManager) UpdateAllOperators(ctx context.Context) error {
-	// fetch all operators (running or otherwise)
-	m.log.Info("Fetching all managed namespaces")
-	matchingLabels := client.MatchingLabels{
-		pg.ManagedByLabelName:   pg.ManagedByLabelValue,
-		pg.PartitionIDLabelName: m.options.PartitionID,
-	}
-	nsList := &corev1.NamespaceList{}
-	opts := []client.ListOption{
-		matchingLabels,
-	}
-	if err := m.List(ctx, nsList, opts...); err != nil {
-		return client.IgnoreNotFound(err)
-	}
-	// update each namespace
-	for _, ns := range nsList.Items {
-		m.log.Info("Updating postgres operator installation", "namespace", ns.Name)
-		if err := m.InstallOrUpdateOperator(ctx, ns.Name); err != nil {
-			return err
-		}
-	}
+	// // fetch all operators (running or otherwise)
+	// m.log.Info("Fetching all managed namespaces")
+	// matchingLabels := client.MatchingLabels{
+	// 	pg.ManagedByLabelName:   pg.ManagedByLabelValue,
+	// 	pg.PartitionIDLabelName: m.options.PartitionID,
+	// }
+	// nsList := &corev1.NamespaceList{}
+	// opts := []client.ListOption{
+	// 	matchingLabels,
+	// }
+	// if err := m.List(ctx, nsList, opts...); err != nil {
+	// 	return client.IgnoreNotFound(err)
+	// }
+	// // update each namespace
+	// for _, ns := range nsList.Items {
+	// 	m.log.Info("Updating postgres operator installation", "namespace", ns.Name)
+	// 	if err := m.InstallOrUpdateOperator(ctx, ns.Name); err != nil {
+	// 		return err
+	// 	}
+	// }
 
-	m.log.Info("Done updating postgres operators in managed namespaces")
+	// m.log.Info("Done updating postgres operators in managed namespaces")
 	return nil
 }
