@@ -601,7 +601,7 @@ func (m *OperatorManager) deletePodEnvironmentConfigMap(ctx context.Context, nam
 
 // toInstanceMatchingLabels makes the matching labels for the pods of the instances operated by the operator
 func (m *OperatorManager) toInstanceMatchingLabels() *client.MatchingLabels {
-	return &client.MatchingLabels{"application": "spilo"}
+	return &client.MatchingLabels{pg.ApplicationLabelName: pg.ApplicationLabelValue}
 }
 
 // toObjectKey makes ObjectKey from namespace and the name of obj

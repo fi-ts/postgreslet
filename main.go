@@ -58,6 +58,8 @@ const (
 	enableNetPolFlg                = "enable-netpol"
 	runAsNonRootFlg                = "run-as-non-root"
 	enablePodAntiaffinityFlg       = "enable-pod-antiaffinity"
+	patroniRetryTimeoutFlg         = "patroni-retry-timeout"
+	enableStandbyLeaderSelectorFlg = "enable-standby-leader-selector"
 )
 
 var (
@@ -77,8 +79,9 @@ func init() {
 
 func main() {
 	var metricsAddrCtrlMgr, metricsAddrSvcMgr, partitionID, tenant, ctrlClusterKubeconfig, pspName, lbIP, storageClass, postgresImage, etcdHost, operatorImage, majorVersionUpgradeMode, postgresletNamespace, sidecarsCMName string
-	var enableLeaderElection, enableCRDValidation, enableNetPol, runAsNonRoot, enablePodAntiaffinity bool
+	var enableLeaderElection, enableCRDValidation, enableNetPol, runAsNonRoot, enablePodAntiaffinity, enableStandbyLeaderSelector bool
 	var portRangeStart, portRangeSize int
+	var patroniTTL, patroniLoopWait, patroniRetryTimeout uint32
 	var pgParamBlockList map[string]bool
 	var standbyClusterSourceRanges []string
 
@@ -163,6 +166,19 @@ func main() {
 	viper.SetDefault(enablePodAntiaffinityFlg, false)
 	enablePodAntiaffinity = viper.GetBool(enablePodAntiaffinityFlg)
 
+	// hard coded value
+	patroniLoopWait = databasev1.DefaultPatroniParamValueLoopWait
+
+	// user defined value
+	viper.SetDefault(patroniRetryTimeoutFlg, databasev1.DefaultPatroniParamValueRetryTimeout)
+	patroniRetryTimeout = viper.GetUint32(patroniRetryTimeoutFlg)
+
+	// derived value
+	patroniTTL = (2 * patroniRetryTimeout) + patroniLoopWait
+
+	viper.SetDefault(enableStandbyLeaderSelectorFlg, true)
+	enableStandbyLeaderSelector = viper.GetBool(enableStandbyLeaderSelectorFlg)
+
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 
 	ctrl.Log.Info("flag",
@@ -189,6 +205,8 @@ func main() {
 		enableNetPolFlg, enableNetPol,
 		runAsNonRootFlg, runAsNonRoot,
 		enablePodAntiaffinityFlg, enablePodAntiaffinity,
+		patroniRetryTimeoutFlg, patroniRetryTimeout,
+		enableStandbyLeaderSelectorFlg, enableStandbyLeaderSelector,
 	)
 
 	svcClusterConf := ctrl.GetConfigOrDie()
@@ -240,9 +258,10 @@ func main() {
 	}
 
 	var lbMgrOpts lbmanager.Options = lbmanager.Options{
-		LBIP:           lbIP,
-		PortRangeStart: int32(portRangeStart),
-		PortRangeSize:  int32(portRangeSize),
+		LBIP:                        lbIP,
+		PortRangeStart:              int32(portRangeStart),
+		PortRangeSize:               int32(portRangeSize),
+		EnableStandbyLeaderSelector: enableStandbyLeaderSelector,
 	}
 	if err = (&controllers.PostgresReconciler{
 		CtrlClient:                  ctrlPlaneClusterMgr.GetClient(),
@@ -261,6 +280,9 @@ func main() {
 		EnableNetPol:                enableNetPol,
 		EtcdHost:                    etcdHost,
 		RunAsNonRoot:                runAsNonRoot,
+		PatroniTTL:                  patroniTTL,
+		PatroniLoopWait:             patroniLoopWait,
+		PatroniRetryTimeout:         patroniRetryTimeout,
 	}).SetupWithManager(ctrlPlaneClusterMgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Postgres")
 		os.Exit(1)

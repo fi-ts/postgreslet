@@ -29,7 +29,9 @@ import (
 	networkingv1 "k8s.io/api/networking/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -70,6 +72,9 @@ type PostgresReconciler struct {
 	EnableNetPol                bool
 	EtcdHost                    string
 	RunAsNonRoot                bool
+	PatroniTTL                  uint32
+	PatroniLoopWait             uint32
+	PatroniRetryTimeout         uint32
 }
 
 // Reconcile is the entry point for postgres reconciliation.
@@ -246,7 +251,7 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, fmt.Errorf("error while creating sidecars servicemonitor %v: %w", namespace, err)
 	}
 
-	if err := r.createOrUpdateZalandoPostgresql(ctx, instance, log, globalSidecarsCM); err != nil {
+	if err := r.createOrUpdateZalandoPostgresql(ctx, instance, log, globalSidecarsCM, r.PatroniTTL, r.PatroniLoopWait, r.PatroniRetryTimeout); err != nil {
 		r.recorder.Eventf(instance, "Warning", "Error", "failed to create Zalando resource: %v", err)
 		return ctrl.Result{}, fmt.Errorf("failed to create or update zalando postgresql: %w", err)
 	}
@@ -287,7 +292,7 @@ func (r *PostgresReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context, instance *pg.Postgres, log logr.Logger, sidecarsCM *corev1.ConfigMap) error {
+func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context, instance *pg.Postgres, log logr.Logger, sidecarsCM *corev1.ConfigMap, patroniTTL, patroniLoopWait, patroniRetryTimout uint32) error {
 	var restoreBackupConfig *pg.BackupConfig
 	var restoreSouceInstance *pg.Postgres
 	if instance.Spec.PostgresRestore != nil {
@@ -322,7 +327,7 @@ func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context
 			return fmt.Errorf("failed to fetch zalando postgresql: %w", err)
 		}
 
-		u, err := instance.ToUnstructuredZalandoPostgresql(nil, sidecarsCM, r.StorageClass, r.PgParamBlockList, restoreBackupConfig, restoreSouceInstance, r.RunAsNonRoot)
+		u, err := instance.ToUnstructuredZalandoPostgresql(nil, sidecarsCM, r.StorageClass, r.PgParamBlockList, restoreBackupConfig, restoreSouceInstance, r.RunAsNonRoot, patroniTTL, patroniLoopWait, patroniRetryTimout)
 		if err != nil {
 			return fmt.Errorf("failed to convert to unstructured zalando postgresql: %w", err)
 		}
@@ -338,7 +343,7 @@ func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context
 	// Update zalando postgresql
 	mergeFrom := client.MergeFrom(rawZ.DeepCopy())
 
-	u, err := instance.ToUnstructuredZalandoPostgresql(rawZ, sidecarsCM, r.StorageClass, r.PgParamBlockList, restoreBackupConfig, restoreSouceInstance, r.RunAsNonRoot)
+	u, err := instance.ToUnstructuredZalandoPostgresql(rawZ, sidecarsCM, r.StorageClass, r.PgParamBlockList, restoreBackupConfig, restoreSouceInstance, r.RunAsNonRoot, patroniTTL, patroniLoopWait, patroniRetryTimout)
 	if err != nil {
 		return fmt.Errorf("failed to convert to unstructured zalando postgresql: %w", err)
 	}
@@ -697,20 +702,77 @@ func (r *PostgresReconciler) updatePatroniConfig(ctx context.Context, instance *
 
 	r.Log.Info("Sending REST call to Patroni API")
 	pods := &corev1.PodList{}
+
+	roleReq, err := labels.NewRequirement(pg.SpiloRoleLabelName, selection.In, []string{pg.SpiloRoleLabelValueMaster, pg.SpiloRoleLabelValueStandbyLeader})
+	if err != nil {
+		r.Log.Info("could not create requirements for label selector to query pods, requeuing")
+		return err
+	}
+	leaderSelector := labels.NewSelector()
+	leaderSelector = leaderSelector.Add(*roleReq)
+
 	opts := []client.ListOption{
 		client.InNamespace(instance.ToPeripheralResourceNamespace()),
-		client.MatchingLabels{"spilo-role": "master"},
+		client.MatchingLabelsSelector{Selector: leaderSelector},
 	}
 	if err := r.SvcClient.List(ctx, pods, opts...); err != nil {
 		r.Log.Info("could not query pods, requeuing")
 		return err
 	}
 	if len(pods.Items) == 0 {
-		r.Log.Info("no master pod ready, requeuing")
-		// TODO return proper error
-		return errors.New("no master pods found")
+		r.Log.Info("no leader pod found, selecting all spilo pods as a last resort (might be ok if it is still creating)")
+
+		err = r.updatePatroniConfigOnAllPods(ctx, instance)
+		if err != nil {
+			r.Log.Info("updating patroni config failed, got one or more errors")
+			return err
+		}
+		return nil
 	}
 	podIP := pods.Items[0].Status.PodIP
+
+	return r.httpPatchPatroni(ctx, instance, podIP)
+}
+
+func (r *PostgresReconciler) updatePatroniConfigOnAllPods(ctx context.Context, instance *pg.Postgres) error {
+	pods := &corev1.PodList{}
+	opts := []client.ListOption{
+		client.InNamespace(instance.ToPeripheralResourceNamespace()),
+		client.MatchingLabels{pg.ApplicationLabelName: pg.ApplicationLabelValue},
+	}
+	if err := r.SvcClient.List(ctx, pods, opts...); err != nil {
+		r.Log.Info("could not query pods, requeuing")
+		return err
+	}
+
+	if len(pods.Items) == 0 {
+		r.Log.Info("no spilo pods found at all, requeueing")
+		return errors.New("no spilo pods found at all")
+	}
+
+	// iterate all spilo pods
+	var lastErr error
+	for _, pod := range pods.Items {
+		pod := pod // pin!
+		podIP := pod.Status.PodIP
+		if err := r.httpPatchPatroni(ctx, instance, podIP); err != nil {
+			lastErr = err
+			r.Log.Info("failed to update pod")
+		}
+	}
+	if lastErr != nil {
+		r.Log.Info("updating patroni config failed, got one or more errors")
+		return lastErr
+	}
+	r.Log.Info("updating patroni config succeeded")
+	return nil
+}
+
+func (r *PostgresReconciler) httpPatchPatroni(ctx context.Context, instance *pg.Postgres, podIP string) error {
+	if podIP == "" {
+		return errors.New("podIP must not be empty")
+	}
+
 	podPort := "8008"
 	path := "config"
 
@@ -762,12 +824,14 @@ func (r *PostgresReconciler) updatePatroniConfig(ctx context.Context, instance *
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPatch, url, bytes.NewBuffer(jsonReq))
 	if err != nil {
+		r.Log.Error(err, "could not create request")
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
+		r.Log.Error(err, "could not perform request")
 		return err
 	}
 	defer resp.Body.Close()
@@ -804,7 +868,7 @@ func (r *PostgresReconciler) createOrUpdateNetPol(ctx context.Context, instance 
 	namespace := instance.ToPeripheralResourceNamespace()
 
 	pgPodMatchingLabels := instance.ToZalandoPostgresqlMatchingLabels()
-	pgPodMatchingLabels["application"] = "spilo"
+	pgPodMatchingLabels[pg.ApplicationLabelName] = pg.ApplicationLabelValue
 
 	spec := networkingv1.NetworkPolicySpec{
 		PodSelector: metav1.LabelSelector{
@@ -960,7 +1024,7 @@ func (r *PostgresReconciler) createOrUpdateExporterSidecarServices(ctx context.C
 		return fmt.Errorf("error while setting the namespace of the postgres-exporter service to %v: %w", namespace, err)
 	}
 	labels := map[string]string{
-		// "application": "spilo", // TODO check if we still need that label, IsOperatorDeletable won't work anymore if we set it.
+		// pg.ApplicationLabelName: pg.ApplicationLabelValue, // TODO check if we still need that label, IsOperatorDeletable won't work anymore if we set it.
 		"app": "postgres-exporter",
 	}
 	if err := r.SetLabels(pes, labels); err != nil {
@@ -983,7 +1047,7 @@ func (r *PostgresReconciler) createOrUpdateExporterSidecarServices(ctx context.C
 		},
 	}
 	selector := map[string]string{
-		"application": "spilo",
+		pg.ApplicationLabelName: pg.ApplicationLabelValue,
 	}
 	pes.Spec.Selector = selector
 	pes.Spec.Type = corev1.ServiceTypeClusterIP

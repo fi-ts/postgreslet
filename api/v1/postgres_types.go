@@ -61,7 +61,16 @@ const (
 	StandbyKey    = "standby"
 	StandbyMethod = "streaming_host"
 
+	ApplicationLabelName             = "application"
+	ApplicationLabelValue            = "spilo"
+	SpiloRoleLabelName               = "spilo-role"
+	SpiloRoleLabelValueMaster        = "master"
+	SpiloRoleLabelValueStandbyLeader = "standby_leader"
+
 	teamIDPrefix = "pg"
+
+	DefaultPatroniParamValueLoopWait     uint32 = 10
+	DefaultPatroniParamValueRetryTimeout uint32 = 60
 
 	defaultPostgresParamValueTCPKeepAlivesIdle      = "200"
 	defaultPostgresParamValueTCPKeepAlivesInterval  = "30"
@@ -315,7 +324,7 @@ func (p *Postgres) ToKey() *types.NamespacedName {
 	}
 }
 
-func (p *Postgres) ToSvcLB(lbIP string, lbPort int32) *corev1.Service {
+func (p *Postgres) ToSvcLB(lbIP string, lbPort int32, enableStandbyLeaderSelector bool) *corev1.Service {
 	lb := &corev1.Service{}
 	lb.Spec.Type = "LoadBalancer"
 
@@ -336,11 +345,15 @@ func (p *Postgres) ToSvcLB(lbIP string, lbPort int32) *corev1.Service {
 	port.TargetPort = intstr.FromInt(5432)
 	lb.Spec.Ports = []corev1.ServicePort{port}
 
+	spiloRole := SpiloRoleLabelValueMaster
+	if enableStandbyLeaderSelector && !p.IsReplicationPrimary() {
+		spiloRole = SpiloRoleLabelValueStandbyLeader
+	}
 	lb.Spec.Selector = map[string]string{
-		"application":  "spilo",
-		"cluster-name": p.ToPeripheralResourceName(),
-		"spilo-role":   "master",
-		"team":         p.generateTeamID(),
+		ApplicationLabelName: ApplicationLabelValue,
+		"cluster-name":       p.ToPeripheralResourceName(),
+		SpiloRoleLabelName:   spiloRole,
+		"team":               p.generateTeamID(),
 	}
 
 	if len(lbIP) > 0 {
@@ -406,9 +419,9 @@ func (p *Postgres) ToUserPasswordsSecretListOption() []client.ListOption {
 
 func (p *Postgres) ToUserPasswordSecretMatchingLabels() map[string]string {
 	return map[string]string{
-		"application":  "spilo",
-		"cluster-name": p.ToPeripheralResourceName(),
-		"team":         p.generateTeamID(),
+		ApplicationLabelName: ApplicationLabelValue,
+		"cluster-name":       p.ToPeripheralResourceName(),
+		"team":               p.generateTeamID(),
 	}
 }
 
@@ -487,7 +500,7 @@ func (p *Postgres) ToPeripheralResourceLookupKey() types.NamespacedName {
 	}
 }
 
-func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *corev1.ConfigMap, sc string, pgParamBlockList map[string]bool, rbs *BackupConfig, srcDB *Postgres, runAsNonRoot bool) (*unstructured.Unstructured, error) {
+func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *corev1.ConfigMap, sc string, pgParamBlockList map[string]bool, rbs *BackupConfig, srcDB *Postgres, runAsNonRoot bool, patroniTTL, patroniLoopWait, patroniRetryTimeout uint32) (*unstructured.Unstructured, error) {
 	if z == nil {
 		z = &zalando.Postgresql{}
 	}
@@ -520,8 +533,9 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 	z.Spec.Volume.Size = p.Spec.Size.StorageSize
 	z.Spec.Volume.StorageClass = sc
 
-	// TODO make configurable?
-	z.Spec.Patroni.TTL = 130
+	z.Spec.Patroni.TTL = patroniTTL
+	z.Spec.Patroni.LoopWait = patroniLoopWait
+	z.Spec.Patroni.RetryTimeout = patroniRetryTimeout
 	z.Spec.Patroni.SynchronousMode = true
 	z.Spec.Patroni.SynchronousModeStrict = false
 
@@ -582,6 +596,9 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 			S3SecretAccessKey: rbs.S3SecretKey,
 			S3ForcePathStyle:  pointer.Bool(true),
 		}
+	} else {
+		// if we don't set the clone block, remove it completely
+		z.Spec.Clone = nil
 	}
 
 	// Enable replication (using unstructured json)
