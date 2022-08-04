@@ -731,6 +731,9 @@ func (p *Postgres) buildSidecars(c *corev1.ConfigMap) []zalando.Sidecar {
 		}
 	}
 
+	// TODO only use envs here, leave the rest to the postgres-operator configmap?
+	// TODO also set PG_EXPORTER_CONSTANT_LABELS with partitionid and postgres cluster name
+
 	return sidecars
 }
 
