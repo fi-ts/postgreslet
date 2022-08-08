@@ -569,7 +569,7 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 	// skip if the configmap does not exist
 	if c != nil {
 		z.Spec.AdditionalVolumes = p.buildAdditionalVolumes(c)
-		z.Spec.Sidecars = p.buildSidecars(c)
+		_ = p.buildSidecars(c) // TODO temporaily disabled sidecar definition in custom ressource
 	}
 
 	if p.HasSourceRanges() {
