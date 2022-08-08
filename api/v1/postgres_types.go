@@ -569,7 +569,7 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 	// skip if the configmap does not exist
 	if c != nil {
 		z.Spec.AdditionalVolumes = p.buildAdditionalVolumes(c)
-		_ = p.buildSidecars(c) // TODO temporaily disabled
+		z.Spec.Sidecars = p.buildSidecars(c)
 	}
 
 	if p.HasSourceRanges() {
@@ -721,15 +721,15 @@ func (p *Postgres) buildSidecars(c *corev1.ConfigMap) []zalando.Sidecar {
 		return nil
 	}
 
-	// Deal with dynamically assigned name
-	for i := range sidecars {
-		for j := range sidecars[i].Env {
-			if sidecars[i].Env[j].ValueFrom != nil && sidecars[i].Env[j].ValueFrom.SecretKeyRef != nil {
-				sidecars[i].Env[j].ValueFrom.SecretKeyRef.Name = "postgres." + p.ToPeripheralResourceName() + ".credentials"
-				break
-			}
-		}
-	}
+	// // Deal with dynamically assigned name
+	// for i := range sidecars {
+	// 	for j := range sidecars[i].Env {
+	// 		if sidecars[i].Env[j].ValueFrom != nil && sidecars[i].Env[j].ValueFrom.SecretKeyRef != nil {
+	// 			sidecars[i].Env[j].ValueFrom.SecretKeyRef.Name = "postgres." + p.ToPeripheralResourceName() + ".credentials"
+	// 			break
+	// 		}
+	// 	}
+	// }
 
 	// TODO only use envs here, leave the rest to the postgres-operator configmap?
 	// TODO also set PG_EXPORTER_CONSTANT_LABELS with partitionid and postgres cluster name
