@@ -73,7 +73,8 @@ type OperatorManager struct {
 	log  logr.Logger
 	meta.MetadataAccessor
 	*runtime.Scheme
-	options Options
+	options          Options
+	globalSidecarsCM *corev1.ConfigMap
 }
 
 // New creates a new `OperatorManager`
@@ -415,6 +416,12 @@ func (m *OperatorManager) editConfigMap(cm *corev1.ConfigMap, namespace string, 
 	cm.Data["replication_username"] = "standby"
 
 	cm.Data["enable_pod_antiaffinity"] = strconv.FormatBool(options.PodAntiaffinity)
+
+	if sidecarsCM, err := m.getSidecarsCM(); err == nil && sidecarsCM != nil {
+		cm.Data["sidecars"] = sidecarsCM.Data["sidecars"]
+		cm.Data["enable_sidecars"] = strconv.FormatBool(true)
+	}
+
 }
 
 // ensureCleanMetadata ensures obj has clean metadata
@@ -617,4 +624,23 @@ func (m *OperatorManager) UpdateAllOperators(ctx context.Context) error {
 
 	m.log.Info("Done updating postgres operators in managed namespaces")
 	return nil
+}
+
+func (m *OperatorManager) getSidecarsCM() (*corev1.ConfigMap, error) {
+	// return cached version
+	if m.globalSidecarsCM != nil {
+		return m.globalSidecarsCM, nil
+	}
+
+	// try to fetch the global sidecars configmap
+	cns := types.NamespacedName{
+		Namespace: m.options.PostgresletNamespace,
+		Name:      m.options.SidecarsConfigMapName,
+	}
+	m.globalSidecarsCM = &corev1.ConfigMap{}
+	if err := m.Get(context.Background(), cns, m.globalSidecarsCM); err != nil {
+		// configmap with configuration does not exists, nothing we can do here...
+		return nil, fmt.Errorf("could not fetch config for sidecars")
+	}
+	return m.globalSidecarsCM, nil
 }
