@@ -419,6 +419,7 @@ func (m *OperatorManager) editConfigMap(cm *corev1.ConfigMap, namespace string, 
 
 	if sidecarsCM, err := m.getSidecarsCM(); err == nil && sidecarsCM != nil {
 		cm.Data["sidecars"] = sidecarsCM.Data["sidecars"]
+		cm.Data["enable_sidecars"] = strconv.FormatBool(true)
 	}
 
 }
