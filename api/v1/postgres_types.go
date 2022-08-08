@@ -568,8 +568,8 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 
 	// skip if the configmap does not exist
 	if c != nil {
-		z.Spec.AdditionalVolumes = p.buildAdditionalVolumes(c)
-		_ = p.buildSidecars(c) // TODO temporaily disabled sidecar definition in custom ressource
+		_ = p.buildAdditionalVolumes(c) // TODO temporarily disable additional volumes as well
+		_ = p.buildSidecars(c)          // TODO temporaily disabled sidecar definition in custom ressource
 	}
 
 	if p.HasSourceRanges() {
@@ -717,9 +717,9 @@ func (p *Postgres) buildSidecars(c *corev1.ConfigMap) []zalando.Sidecar {
 
 	// Unmarshal yaml-string of exporter
 	sidecars := []zalando.Sidecar{}
-	if err := yaml.Unmarshal([]byte(c.Data["sidecars"]), &sidecars); err != nil {
-		return nil
-	}
+	// if err := yaml.Unmarshal([]byte(c.Data["sidecars"]), &sidecars); err != nil {
+	// 	return nil
+	// }
 
 	// // Deal with dynamically assigned name
 	// for i := range sidecars {
