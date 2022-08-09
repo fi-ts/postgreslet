@@ -374,6 +374,9 @@ func (m *OperatorManager) createNewClientObject(ctx context.Context, obj client.
 					ReadOnlyRootFilesystem:   pointer.Bool(true),
 					AllowPrivilegeEscalation: pointer.Bool(false),
 				}
+			} else {
+				// Unset
+				v.Spec.Template.Spec.Containers[0].SecurityContext = nil
 			}
 		}
 		err = m.Get(ctx, key, &appsv1.Deployment{})
@@ -435,6 +438,9 @@ func (m *OperatorManager) editConfigMap(cm *corev1.ConfigMap, namespace string, 
 		// Required by cron which needs setuid. Without this parameter, certification rotation & backups will not be done
 		cm.Data["spilo_allow_privilege_escalation"] = "true"
 		cm.Data["spilo_privileged"] = "false"
+	} else {
+		cm.Data["spilo_allow_privilege_escalation"] = "true"
+		cm.Data["spilo_privileged"] = "true"
 	}
 
 	cm.Data["enable_pod_antiaffinity"] = strconv.FormatBool(options.PodAntiaffinity)

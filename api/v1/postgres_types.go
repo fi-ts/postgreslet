@@ -621,6 +621,10 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 		// Fix uid/gid for the spilo user
 		z.Spec.SpiloRunAsUser = pointer.Int64(spiloRunAsUser)
 		z.Spec.SpiloRunAsGroup = pointer.Int64(spiloRunAsGroup)
+	} else {
+		// Unset
+		z.Spec.SpiloRunAsUser = nil
+		z.Spec.SpiloRunAsGroup = nil
 	}
 
 	jsonZ, err := runtime.DefaultUnstructuredConverter.ToUnstructured(z)
