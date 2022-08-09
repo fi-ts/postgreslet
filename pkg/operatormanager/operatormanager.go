@@ -433,15 +433,10 @@ func (m *OperatorManager) editConfigMap(cm *corev1.ConfigMap, namespace string, 
 	cm.Data["super_username"] = "postgres"
 	cm.Data["replication_username"] = "standby"
 
-	if m.options.RunAsNonRoot {
-		// From the docs (https://postgres-operator.readthedocs.io/en/latest/reference/operator_parameters/):
-		// Required by cron which needs setuid. Without this parameter, certification rotation & backups will not be done
-		cm.Data["spilo_allow_privilege_escalation"] = "true"
-		cm.Data["spilo_privileged"] = "false"
-	} else {
-		cm.Data["spilo_allow_privilege_escalation"] = "true"
-		cm.Data["spilo_privileged"] = "true"
-	}
+	// From the docs (https://postgres-operator.readthedocs.io/en/latest/reference/operator_parameters/):
+	// Required by cron which needs setuid. Without this parameter, certification rotation & backups will not be done
+	cm.Data["spilo_allow_privilege_escalation"] = "true"
+	cm.Data["spilo_privileged"] = "false"
 
 	cm.Data["enable_pod_antiaffinity"] = strconv.FormatBool(options.PodAntiaffinity)
 }
