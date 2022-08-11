@@ -451,8 +451,7 @@ func (m *OperatorManager) createNamespace(ctx context.Context, namespace string)
 		nsObj := &corev1.Namespace{}
 		nsObj.Name = namespace
 		nsObj.ObjectMeta.Labels = map[string]string{
-			pg.ManagedByLabelName:   pg.ManagedByLabelValue,
-			pg.PartitionIDLabelName: m.options.PartitionID,
+			pg.ManagedByLabelName: pg.ManagedByLabelValue,
 		}
 		if err := m.Create(ctx, nsObj); err != nil {
 			return fmt.Errorf("error while creating namespace %v: %w", namespace, err)
