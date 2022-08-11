@@ -77,7 +77,7 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	}
 
 	if !ownerFound {
-		return ctrl.Result{}, fmt.Errorf("Could not find the owner")
+		return ctrl.Result{}, fmt.Errorf("could not find the owner")
 	}
 
 	// TODO move that check up to the Zalando CR so we don't need to fetch the remote Postgres CR
@@ -189,7 +189,7 @@ func (r *StatusReconciler) createOrUpdateSecret(ctx context.Context, in *pg.Post
 func deriveOwnerData(instance *zalando.Postgresql) (types.UID, error) {
 	value, ok := instance.ObjectMeta.Labels[pg.UIDLabelName]
 	if !ok {
-		return "", fmt.Errorf("Could not derive owner reference")
+		return "", fmt.Errorf("could not derive owner reference")
 	}
 	ownerUID := types.UID(value)
 	return ownerUID, nil
