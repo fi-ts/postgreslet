@@ -296,7 +296,7 @@ func main() {
 	ctx := context.Background()
 
 	// update all existing operators to the current version
-	if err := opMgr.UpdateAllOperators(ctx); err != nil {
+	if err := opMgr.UpdateAllManagedOperators(ctx); err != nil {
 		setupLog.Error(err, "error updating the postgres operators")
 	}
 

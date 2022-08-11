@@ -17,6 +17,7 @@ import (
 
 	pg "github.com/fi-ts/postgreslet/api/v1"
 	"github.com/go-logr/logr"
+	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -440,8 +441,7 @@ func (m *OperatorManager) ensureCleanMetadata(obj runtime.Object) error {
 
 // createNamespace ensures namespace exists
 func (m *OperatorManager) createNamespace(ctx context.Context, namespace string) error {
-	ns := &corev1.Namespace{}
-	if err := m.Get(ctx, client.ObjectKey{Name: namespace}, ns); err != nil {
+	if err := m.Get(ctx, client.ObjectKey{Name: namespace}, &corev1.Namespace{}); err != nil {
 		// errors other than `not found`
 		if !errors.IsNotFound(err) {
 			return fmt.Errorf("error while fetching namespace %v: %w", namespace, err)
@@ -458,13 +458,6 @@ func (m *OperatorManager) createNamespace(ctx context.Context, namespace string)
 			return fmt.Errorf("error while creating namespace %v: %w", namespace, err)
 		}
 		m.log.Info("namespace created", "name", namespace)
-	}
-
-	// update partition label (to make sure "old" namespaces have that label as well)
-	ns.ObjectMeta.Labels[pg.PartitionIDLabelName] = m.options.PartitionID
-
-	if err := m.Update(ctx, ns); err != nil {
-		return fmt.Errorf("failed to update labes of namespace: %w", err)
 	}
 
 	return nil
@@ -603,29 +596,29 @@ func (m *OperatorManager) toObjectKey(obj runtime.Object, namespace string) (cli
 	}, nil
 }
 
-// UpdateAllOperators Updates the manifests of all postgres operators managed by the postgreslet
-func (m *OperatorManager) UpdateAllOperators(ctx context.Context) error {
-	// // fetch all operators (running or otherwise)
-	// m.log.Info("Fetching all managed namespaces")
-	// matchingLabels := client.MatchingLabels{
-	// 	pg.ManagedByLabelName:   pg.ManagedByLabelValue,
-	// 	pg.PartitionIDLabelName: m.options.PartitionID,
-	// }
-	// nsList := &corev1.NamespaceList{}
-	// opts := []client.ListOption{
-	// 	matchingLabels,
-	// }
-	// if err := m.List(ctx, nsList, opts...); err != nil {
-	// 	return client.IgnoreNotFound(err)
-	// }
-	// // update each namespace
-	// for _, ns := range nsList.Items {
-	// 	m.log.Info("Updating postgres operator installation", "namespace", ns.Name)
-	// 	if err := m.InstallOrUpdateOperator(ctx, ns.Name); err != nil {
-	// 		return err
-	// 	}
-	// }
+// UpdateAllManagedOperators Updates the manifests of all postgres operators managed by this postgreslet
+func (m *OperatorManager) UpdateAllManagedOperators(ctx context.Context) error {
+	// fetch postgresql custom ressource (running or otherwise)
+	m.log.Info("Fetching all zalando custom ressources managed by this postgreslet")
+	matchingLabels := client.MatchingLabels{
+		pg.ManagedByLabelName:   pg.ManagedByLabelValue,
+		pg.PartitionIDLabelName: m.options.PartitionID,
+	}
+	zList := &zalando.PostgresqlList{}
+	opts := []client.ListOption{
+		matchingLabels,
+	}
+	if err := m.List(ctx, zList, opts...); err != nil {
+		return client.IgnoreNotFound(err)
+	}
+	// update each namespace
+	for _, z := range zList.Items {
+		m.log.Info("Updating postgres operator installation", "namespace", z.Namespace)
+		if err := m.InstallOrUpdateOperator(ctx, z.Namespace); err != nil {
+			return err
+		}
+	}
 
-	// m.log.Info("Done updating postgres operators in managed namespaces")
+	m.log.Info("Done updating postgres operators in managed namespaces")
 	return nil
 }
