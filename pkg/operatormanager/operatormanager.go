@@ -601,7 +601,6 @@ func (m *OperatorManager) UpdateAllManagedOperators(ctx context.Context) error {
 	// fetch postgresql custom ressource (running or otherwise)
 	m.log.Info("Fetching all zalando custom ressources managed by this postgreslet")
 	matchingLabels := client.MatchingLabels{
-		pg.ManagedByLabelName:   pg.ManagedByLabelValue,
 		pg.PartitionIDLabelName: m.options.PartitionID,
 	}
 	zList := &zalando.PostgresqlList{}
