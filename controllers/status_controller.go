@@ -50,6 +50,8 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	}
 	log.Info("Got status update", "PostgresClusterStatus", instance.Status.PostgresClusterStatus)
 
+	// TODO isZalandoCRManagedByUs using the "postgres.database.fits.cloud/partition-id" label (see https://github.com/fi-ts/postgreslet/pull/401)
+
 	log.Info("fetching all owners")
 	owners := &pg.PostgresList{}
 	if err := r.CtrlClient.List(ctx, owners); err != nil {
@@ -78,7 +80,7 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{}, fmt.Errorf("Could not find the owner")
 	}
 
-	// TODO check for partition and abort if we're not managing that owner
+	// TODO move that check up to the Zalando CR so we don't need to fetch the remote Postgres CR
 	if !r.isManagedByUs(&owner) {
 		return ctrl.Result{}, nil
 	}
