@@ -26,6 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
+	"k8s.io/utils/pointer"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -47,6 +48,9 @@ const (
 	SidecarsCMExporterQueriesKey string = "queries.yaml"
 
 	localSidecarsCMName = "postgres-sidecars-configmap"
+
+	// operatorRunAsUser the uid to use when running the operator image
+	operatorRunAsUser int64 = 1000
 )
 
 // operatorPodMatchingLabels is for listing operator pods
@@ -62,6 +66,7 @@ type Options struct {
 	MajorVersionUpgradeMode string
 	PostgresletNamespace    string
 	SidecarsConfigMapName   string
+	RunAsNonRoot            bool
 	PodAntiaffinity         bool
 }
 
@@ -356,9 +361,23 @@ func (m *OperatorManager) createNewClientObject(ctx context.Context, obj client.
 		m.log.Info("handling Deployment")
 		if len(v.Spec.Template.Spec.Containers) != 1 {
 			m.log.Info("Unexpected number of containers in deployment, ignoring.")
-		} else if m.options.OperatorImage != "" {
-			m.log.Info("Patching operator image", "image", m.options.OperatorImage)
-			v.Spec.Template.Spec.Containers[0].Image = m.options.OperatorImage
+		} else {
+			if m.options.OperatorImage != "" {
+				m.log.Info("Patching operator image", "image", m.options.OperatorImage)
+				v.Spec.Template.Spec.Containers[0].Image = m.options.OperatorImage
+			}
+
+			if m.options.RunAsNonRoot {
+				v.Spec.Template.Spec.Containers[0].SecurityContext = &corev1.SecurityContext{
+					RunAsUser:                pointer.Int64(operatorRunAsUser),
+					RunAsNonRoot:             pointer.Bool(true),
+					ReadOnlyRootFilesystem:   pointer.Bool(true),
+					AllowPrivilegeEscalation: pointer.Bool(false),
+				}
+			} else {
+				// Unset
+				v.Spec.Template.Spec.Containers[0].SecurityContext = nil
+			}
 		}
 		err = m.Get(ctx, key, &appsv1.Deployment{})
 	default:
@@ -413,6 +432,11 @@ func (m *OperatorManager) editConfigMap(cm *corev1.ConfigMap, namespace string, 
 	// we specifically refer to those two users in the cloud-api, so we hardcode them here as well to be on the safe side.
 	cm.Data["super_username"] = "postgres"
 	cm.Data["replication_username"] = "standby"
+
+	// From the docs (https://postgres-operator.readthedocs.io/en/latest/reference/operator_parameters/):
+	// Required by cron which needs setuid. Without this parameter, certification rotation & backups will not be done
+	cm.Data["spilo_allow_privilege_escalation"] = "true"
+	cm.Data["spilo_privileged"] = "false"
 
 	cm.Data["enable_pod_antiaffinity"] = strconv.FormatBool(options.PodAntiaffinity)
 }

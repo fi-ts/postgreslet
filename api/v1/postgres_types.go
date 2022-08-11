@@ -78,6 +78,11 @@ const (
 	defaultPostgresParamValueSSLMinProtocolVersion  = "TLSv1.2"
 	defaultPostgresParamValueSSLPreferServerCiphers = "on"
 	defaultPostgresParamValueSSLCiphers             = "ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384"
+
+	// spiloRunAsUser the uid to use when running the spilo (postgres) image
+	spiloRunAsUser int64 = 101
+	// spiloRunAsGroup the gid to use when running the spilo (postgres) image
+	spiloRunAsGroup int64 = 101
 )
 
 var (
@@ -495,7 +500,7 @@ func (p *Postgres) ToPeripheralResourceLookupKey() types.NamespacedName {
 	}
 }
 
-func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *corev1.ConfigMap, sc string, pgParamBlockList map[string]bool, rbs *BackupConfig, srcDB *Postgres, patroniTTL, patroniLoopWait, patroniRetryTimeout uint32) (*unstructured.Unstructured, error) {
+func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *corev1.ConfigMap, sc string, pgParamBlockList map[string]bool, rbs *BackupConfig, srcDB *Postgres, runAsNonRoot bool, patroniTTL, patroniLoopWait, patroniRetryTimeout uint32) (*unstructured.Unstructured, error) {
 	if z == nil {
 		z = &zalando.Postgresql{}
 	}
@@ -610,6 +615,16 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 			S3WalPath:              "",
 			StandbyApplicationName: p.ObjectMeta.Name,
 		}
+	}
+
+	if runAsNonRoot {
+		// Fix uid/gid for the spilo user
+		z.Spec.SpiloRunAsUser = pointer.Int64(spiloRunAsUser)
+		z.Spec.SpiloRunAsGroup = pointer.Int64(spiloRunAsGroup)
+	} else {
+		// Unset
+		z.Spec.SpiloRunAsUser = nil
+		z.Spec.SpiloRunAsGroup = nil
 	}
 
 	jsonZ, err := runtime.DefaultUnstructuredConverter.ToUnstructured(z)

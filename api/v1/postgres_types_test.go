@@ -229,6 +229,7 @@ func TestPostgresRestoreTimestamp_ToUnstructuredZalandoPostgresql(t *testing.T) 
 		pgParamBlockList map[string]bool
 		rbs              *BackupConfig
 		srcDB            *Postgres
+		runAsNonRoot     bool
 		want             string
 		wantErr          bool
 	}{
@@ -257,8 +258,9 @@ func TestPostgresRestoreTimestamp_ToUnstructuredZalandoPostgresql(t *testing.T) 
 					Description: "description",
 				},
 			},
-			want:    time.Now().Format(time.RFC3339), // I know this is not perfect, let's just hope we always finish within the same second...
-			wantErr: false,
+			runAsNonRoot: false,
+			want:         time.Now().Format(time.RFC3339), // I know this is not perfect, let's just hope we always finish within the same second...
+			wantErr:      false,
 		},
 		{
 			name: "undefined timestamp initialized with current time",
@@ -283,8 +285,9 @@ func TestPostgresRestoreTimestamp_ToUnstructuredZalandoPostgresql(t *testing.T) 
 					Description: "description",
 				},
 			},
-			want:    time.Now().Format(time.RFC3339), // I know this is not perfect, let's just hope we always finish within the same second...
-			wantErr: false,
+			runAsNonRoot: false,
+			want:         time.Now().Format(time.RFC3339), // I know this is not perfect, let's just hope we always finish within the same second...
+			wantErr:      false,
 		},
 		{
 			name: "given timestamp is passed along",
@@ -311,8 +314,9 @@ func TestPostgresRestoreTimestamp_ToUnstructuredZalandoPostgresql(t *testing.T) 
 					Description: "description",
 				},
 			},
-			want:    "invalid but whatever",
-			wantErr: false,
+			runAsNonRoot: false,
+			want:         "invalid but whatever",
+			wantErr:      false,
 		},
 		{
 			name: "fail on purpose",
@@ -339,8 +343,9 @@ func TestPostgresRestoreTimestamp_ToUnstructuredZalandoPostgresql(t *testing.T) 
 					Description: "description",
 				},
 			},
-			want:    "oranges",
-			wantErr: true,
+			runAsNonRoot: false,
+			want:         "oranges",
+			wantErr:      true,
 		},
 	}
 	for _, tt := range tests {
@@ -349,7 +354,7 @@ func TestPostgresRestoreTimestamp_ToUnstructuredZalandoPostgresql(t *testing.T) 
 			p := &Postgres{
 				Spec: tt.spec,
 			}
-			got, _ := p.ToUnstructuredZalandoPostgresql(nil, tt.c, tt.sc, tt.pgParamBlockList, tt.rbs, tt.srcDB, 130, 10, 60)
+			got, _ := p.ToUnstructuredZalandoPostgresql(nil, tt.c, tt.sc, tt.pgParamBlockList, tt.rbs, tt.srcDB, tt.runAsNonRoot, 130, 10, 60)
 
 			jsonZ, err := runtime.DefaultUnstructuredConverter.ToUnstructured(got)
 			if err != nil {

@@ -56,6 +56,7 @@ const (
 	postgresletNamespaceFlg        = "postgreslet-namespace"
 	sidecarsCMNameFlg              = "sidecars-configmap-name"
 	enableNetPolFlg                = "enable-netpol"
+	runAsNonRootFlg                = "run-as-non-root"
 	enablePodAntiaffinityFlg       = "enable-pod-antiaffinity"
 	patroniRetryTimeoutFlg         = "patroni-retry-timeout"
 	enableStandbyLeaderSelectorFlg = "enable-standby-leader-selector"
@@ -78,7 +79,7 @@ func init() {
 
 func main() {
 	var metricsAddrCtrlMgr, metricsAddrSvcMgr, partitionID, tenant, ctrlClusterKubeconfig, pspName, lbIP, storageClass, postgresImage, etcdHost, operatorImage, majorVersionUpgradeMode, postgresletNamespace, sidecarsCMName string
-	var enableLeaderElection, enableCRDValidation, enableNetPol, enablePodAntiaffinity, enableStandbyLeaderSelector bool
+	var enableLeaderElection, enableCRDValidation, enableNetPol, runAsNonRoot, enablePodAntiaffinity, enableStandbyLeaderSelector bool
 	var portRangeStart, portRangeSize int
 	var patroniTTL, patroniLoopWait, patroniRetryTimeout uint32
 	var pgParamBlockList map[string]bool
@@ -159,6 +160,9 @@ func main() {
 	viper.SetDefault(enableNetPolFlg, false)
 	enableNetPol = viper.GetBool(enableNetPolFlg)
 
+	viper.SetDefault(runAsNonRootFlg, false)
+	runAsNonRoot = viper.GetBool(runAsNonRootFlg)
+
 	viper.SetDefault(enablePodAntiaffinityFlg, false)
 	enablePodAntiaffinity = viper.GetBool(enablePodAntiaffinityFlg)
 
@@ -199,6 +203,7 @@ func main() {
 		postgresletNamespaceFlg, postgresletNamespace,
 		sidecarsCMNameFlg, sidecarsCMName,
 		enableNetPolFlg, enableNetPol,
+		runAsNonRootFlg, runAsNonRoot,
 		enablePodAntiaffinityFlg, enablePodAntiaffinity,
 		patroniRetryTimeoutFlg, patroniRetryTimeout,
 		enableStandbyLeaderSelectorFlg, enableStandbyLeaderSelector,
@@ -243,6 +248,7 @@ func main() {
 		MajorVersionUpgradeMode: majorVersionUpgradeMode,
 		PostgresletNamespace:    postgresletNamespace,
 		SidecarsConfigMapName:   sidecarsCMName,
+		RunAsNonRoot:            runAsNonRoot,
 		PodAntiaffinity:         enablePodAntiaffinity,
 	}
 	opMgr, err := operatormanager.New(svcClusterConf, "external/svc-postgres-operator.yaml", scheme, ctrl.Log.WithName("OperatorManager"), opMgrOpts)
@@ -273,6 +279,7 @@ func main() {
 		SidecarsConfigMapName:       sidecarsCMName,
 		EnableNetPol:                enableNetPol,
 		EtcdHost:                    etcdHost,
+		RunAsNonRoot:                runAsNonRoot,
 		PatroniTTL:                  patroniTTL,
 		PatroniLoopWait:             patroniLoopWait,
 		PatroniRetryTimeout:         patroniRetryTimeout,
