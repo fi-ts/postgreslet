@@ -787,8 +787,6 @@ func setDefaultPostgresParams(parameters map[string]string, version string) {
 	// Postgres 12 and up
 	if v >= 12 {
 		parameters["ssl_min_protocol_version"] = defaultPostgresParamValueSSLMinProtocolVersion
-	} else {
-		// NOOP
 	}
 	// Postgres 13 and up
 	if v >= 13 {
