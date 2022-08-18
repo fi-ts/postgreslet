@@ -63,7 +63,7 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	log.Info("fetching owner")
 	ownerNs := types.NamespacedName{
-		Namespace: "cloud-extension-postgres", // TODO make configurable
+		Namespace: "metal-extension-postgres", // TODO make configurable
 		Name:      derivedOwnerName,
 	}
 	owner := &pg.Postgres{}
