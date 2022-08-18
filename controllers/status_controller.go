@@ -56,37 +56,24 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	log.Info("Got status update", "PostgresClusterStatus", instance.Status.PostgresClusterStatus)
 
-	log.Info("fetching all owners")
-	owners := &pg.PostgresList{}
-	if err := r.CtrlClient.List(ctx, owners); err != nil {
-		log.Info("error fetching all owners")
-		return ctrl.Result{}, err
-	}
-
-	derivedOwnerUID, err := deriveOwnerData(instance)
+	derivedOwnerName, err := deriveOwnerName(instance)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
-	var owner pg.Postgres
-	ownerFound := false
-	for _, o := range owners.Items {
-		if o.UID != derivedOwnerUID {
-			continue
-		}
 
-		log.Info("Found owner", "owner", o.UID)
-		owner = o
-		ownerFound = true
-		break
+	log.Info("fetching owner")
+	ownerNs := types.NamespacedName{
+		Namespace: "cloud-extension-postgres", // TODO make configurable
+		Name:      derivedOwnerName,
 	}
-
-	if !ownerFound {
+	owner := &pg.Postgres{}
+	if err := r.CtrlClient.Get(ctx, ownerNs, owner); err != nil {
 		return ctrl.Result{}, fmt.Errorf("could not find the owner")
 	}
 
 	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		// get a fresh copy of the owner object
-		if err := r.CtrlClient.Get(ctx, types.NamespacedName{Name: owner.Name, Namespace: owner.Namespace}, &owner); err != nil {
+		if err := r.CtrlClient.Get(ctx, types.NamespacedName{Name: owner.Name, Namespace: owner.Namespace}, owner); err != nil {
 			return err
 		}
 		// update the status of the remote object
@@ -95,7 +82,7 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		owner.Status.ChildName = instance.ObjectMeta.Name
 
 		log.Info("Updating owner", "owner", owner.UID)
-		if err := r.CtrlClient.Status().Update(ctx, &owner); err != nil {
+		if err := r.CtrlClient.Status().Update(ctx, owner); err != nil {
 			log.Error(err, "failed to update owner object")
 			return err
 		}
@@ -111,7 +98,7 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		owner.Status.Socket.IP = lb.Spec.LoadBalancerIP
 		owner.Status.Socket.Port = lb.Spec.Ports[0].Port
 
-		if err := r.CtrlClient.Status().Update(ctx, &owner); err != nil {
+		if err := r.CtrlClient.Status().Update(ctx, owner); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to update lbSocket of Postgres: %w", err)
 		}
 		log.Info("postgres status socket updated")
@@ -134,7 +121,7 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	// TODO: #176 delete the secrets in the end as well
 
-	if err := r.createOrUpdateSecret(ctx, &owner, secrets, log); err != nil {
+	if err := r.createOrUpdateSecret(ctx, owner, secrets, log); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -185,11 +172,10 @@ func (r *StatusReconciler) createOrUpdateSecret(ctx context.Context, in *pg.Post
 }
 
 // Extract the UID of the owner object by reading the value of a certain label
-func deriveOwnerData(instance *zalando.Postgresql) (types.UID, error) {
-	value, ok := instance.ObjectMeta.Labels[pg.UIDLabelName]
+func deriveOwnerName(instance *zalando.Postgresql) (string, error) {
+	value, ok := instance.ObjectMeta.Labels[pg.NameLabelName]
 	if !ok {
 		return "", fmt.Errorf("could not derive owner reference")
 	}
-	ownerUID := types.UID(value)
-	return ownerUID, nil
+	return value, nil
 }
