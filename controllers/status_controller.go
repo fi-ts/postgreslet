@@ -26,11 +26,11 @@ import (
 
 // StatusReconciler reconciles a Postgresql object
 type StatusReconciler struct {
-	SvcClient           client.Client
-	CtrlClient          client.Client
-	Log                 logr.Logger
-	Scheme              *runtime.Scheme
-	PartitionID, Tenant string
+	SvcClient                                  client.Client
+	CtrlClient                                 client.Client
+	Log                                        logr.Logger
+	Scheme                                     *runtime.Scheme
+	PartitionID, Tenant, ControlPlaneNamespace string
 }
 
 // Reconcile updates the status of the remote Postgres object based on the status of the local zalando object.
@@ -63,7 +63,7 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	log.Info("fetching owner")
 	ownerNs := types.NamespacedName{
-		Namespace: "metal-extension-postgres", // TODO make configurable
+		Namespace: r.ControlPlaneNamespace,
 		Name:      derivedOwnerName,
 	}
 	owner := &pg.Postgres{}
