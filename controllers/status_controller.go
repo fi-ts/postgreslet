@@ -51,11 +51,6 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{}, nil
 	}
 
-	if !r.isManagedByUs(instance) {
-		log.Info("object should be managed by another postgreslet, ignored.")
-		return ctrl.Result{}, nil
-	}
-
 	log.Info("Got status update", "PostgresClusterStatus", instance.Status.PostgresClusterStatus)
 
 	derivedOwnerName, err := deriveOwnerName(instance)
@@ -128,19 +123,6 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	}
 
 	return ctrl.Result{}, nil
-}
-
-func (r *StatusReconciler) isManagedByUs(instance *zalando.Postgresql) bool {
-	if instance.Labels[pg.PartitionIDLabelName] != r.PartitionID {
-		return false
-	}
-
-	// if this partition is only for one tenant
-	if r.Tenant != "" && instance.Labels[pg.TenantLabelName] != r.Tenant {
-		return false
-	}
-
-	return true
 }
 
 // SetupWithManager registers this controller for reconciliation of Postgresql resources
