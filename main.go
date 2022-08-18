@@ -244,6 +244,7 @@ func main() {
 		PostgresletNamespace:    postgresletNamespace,
 		SidecarsConfigMapName:   sidecarsCMName,
 		PodAntiaffinity:         enablePodAntiaffinity,
+		PartitionID:             partitionID,
 	}
 	opMgr, err := operatormanager.New(svcClusterConf, "external/svc-postgres-operator.yaml", scheme, ctrl.Log.WithName("OperatorManager"), opMgrOpts)
 	if err != nil {
@@ -297,7 +298,7 @@ func main() {
 	ctx := context.Background()
 
 	// update all existing operators to the current version
-	if err := opMgr.UpdateAllOperators(ctx); err != nil {
+	if err := opMgr.UpdateAllManagedOperators(ctx); err != nil {
 		setupLog.Error(err, "error updating the postgres operators")
 	}
 
