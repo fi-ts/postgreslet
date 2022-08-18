@@ -48,9 +48,13 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		log.Info("status changed to Deleted")
 		return ctrl.Result{}, nil
 	}
-	log.Info("Got status update", "PostgresClusterStatus", instance.Status.PostgresClusterStatus)
 
-	// TODO isZalandoCRManagedByUs using the "postgres.database.fits.cloud/partition-id" label (see https://github.com/fi-ts/postgreslet/pull/401)
+	if !r.isManagedByUs(instance) {
+		log.Info("object should be managed by another postgreslet, ignored.")
+		return ctrl.Result{}, nil
+	}
+
+	log.Info("Got status update", "PostgresClusterStatus", instance.Status.PostgresClusterStatus)
 
 	log.Info("fetching all owners")
 	owners := &pg.PostgresList{}
@@ -78,11 +82,6 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	if !ownerFound {
 		return ctrl.Result{}, fmt.Errorf("could not find the owner")
-	}
-
-	// TODO move that check up to the Zalando CR so we don't need to fetch the remote Postgres CR
-	if !r.isManagedByUs(&owner) {
-		return ctrl.Result{}, nil
 	}
 
 	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
@@ -142,13 +141,13 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	return ctrl.Result{}, nil
 }
 
-func (r *StatusReconciler) isManagedByUs(obj *pg.Postgres) bool {
-	if obj.Spec.PartitionID != r.PartitionID {
+func (r *StatusReconciler) isManagedByUs(instance *zalando.Postgresql) bool {
+	if instance.Labels[pg.PartitionIDLabelName] != r.PartitionID {
 		return false
 	}
 
 	// if this partition is only for one tenant
-	if r.Tenant != "" && obj.Spec.Tenant != r.Tenant {
+	if r.Tenant != "" && instance.Labels[pg.TenantLabelName] != r.Tenant {
 		return false
 	}
 
