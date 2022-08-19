@@ -505,9 +505,6 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 	z.Namespace = p.ToPeripheralResourceNamespace()
 	z.Name = p.ToPeripheralResourceName()
 	z.Labels = p.ToZalandoPostgresqlMatchingLabels()
-	// Add the newly introduced label only here, not in  p.ToZalandoPostgresqlMatchingLabels() (so that the selectors using  p.ToZalandoPostgresqlMatchingLabels() will still work untill all postgres ressources have that new label)
-	// TODO once all the custom ressources have that new label, move this part to p.ToZalandoPostgresqlMatchingLabels()
-	z.Labels[PartitionIDLabelName] = p.Spec.PartitionID
 
 	z.Spec.NumberOfInstances = p.Spec.NumberOfInstances
 	z.Spec.PostgresqlParam.PgVersion = p.Spec.Version
