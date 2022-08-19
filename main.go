@@ -293,7 +293,6 @@ func main() {
 		Log:                   ctrl.Log.WithName("controllers").WithName("Status"),
 		Scheme:                svcClusterMgr.GetScheme(),
 		PartitionID:           partitionID,
-		Tenant:                tenant,
 		ControlPlaneNamespace: controlPlaneNamespace,
 	}).SetupWithManager(svcClusterMgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Status")

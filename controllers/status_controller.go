@@ -28,11 +28,11 @@ import (
 
 // StatusReconciler reconciles a Postgresql object
 type StatusReconciler struct {
-	SvcClient                                  client.Client
-	CtrlClient                                 client.Client
-	Log                                        logr.Logger
-	Scheme                                     *runtime.Scheme
-	PartitionID, Tenant, ControlPlaneNamespace string
+	SvcClient                          client.Client
+	CtrlClient                         client.Client
+	Log                                logr.Logger
+	Scheme                             *runtime.Scheme
+	PartitionID, ControlPlaneNamespace string
 }
 
 // Reconcile updates the status of the remote Postgres object based on the status of the local zalando object.
