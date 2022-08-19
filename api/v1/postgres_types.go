@@ -60,6 +60,8 @@ const (
 	// StandbyKey defines the key under which the standby configuration is stored in the CR.  Defined by the postgres-operator/patroni
 	StandbyKey    = "standby"
 	StandbyMethod = "streaming_host"
+	// PartitionIDLabelName Name of the managed-by label
+	PartitionIDLabelName string = "postgres.database.fits.cloud/partition-id"
 
 	ApplicationLabelName             = "application"
 	ApplicationLabelValue            = "spilo"
@@ -503,6 +505,9 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 	z.Namespace = p.ToPeripheralResourceNamespace()
 	z.Name = p.ToPeripheralResourceName()
 	z.Labels = p.ToZalandoPostgresqlMatchingLabels()
+	// Add the newly introduced label only here, not in  p.ToZalandoPostgresqlMatchingLabels() (so that the selectors using  p.ToZalandoPostgresqlMatchingLabels() will still work untill all postgres resources have that new label)
+	// TODO once all the custom resources have that new label, move this part to p.ToZalandoPostgresqlMatchingLabels()
+	z.Labels[PartitionIDLabelName] = p.Spec.PartitionID
 
 	z.Spec.NumberOfInstances = p.Spec.NumberOfInstances
 	z.Spec.PostgresqlParam.PgVersion = p.Spec.Version
