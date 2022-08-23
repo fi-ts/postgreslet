@@ -204,10 +204,10 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		}
 	}
 
-	// Make sure the standby secrets exist, if neccessary
-	if err := r.ensureStandbySecrets(ctx, instance); err != nil {
-		r.recorder.Eventf(instance, "Warning", "Error", "failed to create standby secrets: %v", err)
-		return ctrl.Result{}, fmt.Errorf("error while creating standby secrets: %w", err)
+	// Make sure the postgres secrets exist, if neccessary
+	if err := r.ensurePostgresSecrets(ctx, instance); err != nil {
+		r.recorder.Eventf(instance, "Warning", "Error", "failed to create postgres secrets: %v", err)
+		return ctrl.Result{}, fmt.Errorf("error while creating postgres secrets: %w", err)
 	}
 
 	if instance.IsReplicationPrimary() {
@@ -628,6 +628,20 @@ func (r *PostgresReconciler) getZPostgresqlByLabels(ctx context.Context, matchin
 	return zpl.Items, nil
 }
 
+func (r *PostgresReconciler) ensurePostgresSecrets(ctx context.Context, instance *pg.Postgres) error {
+
+	if err := r.ensureCloneSecrets(ctx, instance); err != nil {
+		return err
+	}
+
+	if err := r.ensureStandbySecrets(ctx, instance); err != nil {
+		return err
+	}
+
+	return nil
+
+}
+
 func (r *PostgresReconciler) ensureStandbySecrets(ctx context.Context, instance *pg.Postgres) error {
 	if instance.IsReplicationPrimary() {
 		// nothing is configured, or we are the leader. nothing to do.
@@ -640,7 +654,7 @@ func (r *PostgresReconciler) ensureStandbySecrets(ctx context.Context, instance 
 	}
 
 	// Check if secrets exist local in SERVICE Cluster
-	localStandbySecretName := "standby." + instance.ToPeripheralResourceName() + ".credentials"
+	localStandbySecretName := operatormanager.PostgresConfigReplicationUsername + "." + instance.ToPeripheralResourceName() + ".credentials"
 	localSecretNamespace := instance.ToPeripheralResourceNamespace()
 	localStandbySecret := &corev1.Secret{}
 	r.Log.Info("checking for local standby secret", "namespace", localSecretNamespace, "name", localStandbySecretName)
@@ -670,6 +684,78 @@ func (r *PostgresReconciler) ensureStandbySecrets(ctx context.Context, instance 
 
 	// copy ALL secrets...
 	for username := range remoteSecret.Data {
+		r.Log.Info("creating local secret", "username", username)
+
+		currentSecretName := strings.ReplaceAll(username, "_", "-") + "." + instance.ToPeripheralResourceName() + ".credentials"
+		postgresSecret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      currentSecretName,
+				Namespace: localSecretNamespace,
+				Labels:    map[string]string(instance.ToZalandoPostgresqlMatchingLabels()),
+			},
+			Data: map[string][]byte{
+				"username": []byte(username),
+				"password": remoteSecret.Data[username],
+			},
+		}
+
+		if err := r.SvcClient.Create(ctx, postgresSecret); err != nil {
+			return fmt.Errorf("error while creating local secrets in service cluster: %w", err)
+		}
+		r.Log.Info("created local secret", "secret", postgresSecret)
+	}
+
+	return nil
+
+}
+
+func (r *PostgresReconciler) ensureCloneSecrets(ctx context.Context, instance *pg.Postgres) error {
+	if instance.Spec.PostgresRestore == nil {
+		// not a clone. nothing to do.
+		return nil
+	}
+
+	//  Check if instance.Spec.PostgresConnectionInfo.ConnectionSecretName is defined
+	if instance.Spec.PostgresRestore.SourcePostgresID == "" {
+		return errors.New("SourcePostgresID not configured")
+	}
+
+	// Check if secrets exist local in SERVICE Cluster
+	localStandbySecretName := operatormanager.PostresConfigSuperUsername + "." + instance.ToPeripheralResourceName() + ".credentials"
+	localSecretNamespace := instance.ToPeripheralResourceNamespace()
+	localStandbySecret := &corev1.Secret{}
+	r.Log.Info("checking for local postgres secret", "namespace", localSecretNamespace, "name", localStandbySecretName)
+	err := r.SvcClient.Get(ctx, types.NamespacedName{Namespace: localSecretNamespace, Name: localStandbySecretName}, localStandbySecret)
+
+	if err == nil {
+		r.Log.Info("local postgres secret found, no action needed")
+		return nil
+	}
+
+	// we got an error other than not found, so we cannot continue!
+	if !apierrors.IsNotFound(err) {
+		return fmt.Errorf("error while fetching local stadnby secret from service cluster: %w", err)
+	}
+
+	r.Log.Info("no local standby secret found, continuing to create one")
+
+	// Check if secrets exist in remote CONTROL Cluster
+	remoteSecretName := strings.Replace(instance.ToUserPasswordsSecretName(), instance.Name, instance.Spec.PostgresRestore.SourcePostgresID, 1) // TODO this is hacky-wacky...
+	remoteSecretNamespace := instance.ObjectMeta.Namespace
+	remoteSecret := &corev1.Secret{}
+	r.Log.Info("fetching remote postgres secret", "namespace", remoteSecretNamespace, "name", remoteSecretName)
+	if err := r.CtrlClient.Get(ctx, types.NamespacedName{Namespace: remoteSecretNamespace, Name: remoteSecretName}, remoteSecret); err != nil {
+		// we cannot read the secret given in the configuration, so we cannot continue!
+		return fmt.Errorf("error while fetching remote postgres secret from control plane: %w", err)
+	}
+
+	// copy ALL secrets...
+	for username := range remoteSecret.Data {
+		// do not copy standby user (to prevent old standby intances from connecting once a clone took over its sources ip/port)
+		if username == operatormanager.PostgresConfigReplicationUsername {
+			continue
+		}
+
 		r.Log.Info("creating local secret", "username", username)
 
 		currentSecretName := strings.ReplaceAll(username, "_", "-") + "." + instance.ToPeripheralResourceName() + ".credentials"
