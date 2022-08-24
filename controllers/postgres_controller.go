@@ -306,7 +306,7 @@ func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context
 		}
 		src := &pg.Postgres{}
 		if err := r.CtrlClient.Get(ctx, srcNs, src); err != nil {
-			r.recorder.Eventf(instance, "Warning", "Error", "failed to get resource: %v", err)
+			r.recorder.Eventf(instance, "Warning", "Error", "failed to get source postgres for restore: %v", err)
 			return err
 		}
 		log.Info("source for restore fetched", "postgres", instance)
