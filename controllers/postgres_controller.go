@@ -753,7 +753,6 @@ func (r *PostgresReconciler) copySecrets(ctx context.Context, sourceSecret types
 		if err := r.SvcClient.Create(ctx, postgresSecret); err != nil {
 			return fmt.Errorf("error while creating local secrets in service cluster: %w", err)
 		}
-		r.Log.Info("created local secret", "secret", postgresSecret)
 	}
 
 	return nil
