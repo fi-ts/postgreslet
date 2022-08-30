@@ -8,6 +8,7 @@ package v1
 
 import (
 	"fmt"
+	"net/netip"
 	"reflect"
 	"strconv"
 	"strings"
@@ -17,7 +18,6 @@ import (
 
 	firewall "github.com/metal-stack/firewall-controller/api/v1"
 	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
-	"inet.af/netaddr"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -288,7 +288,7 @@ func (p *Postgres) ToCWNP(port int) (*firewall.ClusterwideNetworkPolicy, error) 
 	ipblocks := []networkingv1.IPBlock{}
 	if p.HasSourceRanges() {
 		for _, src := range p.Spec.AccessList.SourceRanges {
-			parsedSrc, err := netaddr.ParseIPPrefix(src)
+			parsedSrc, err := netip.ParsePrefix(src)
 			if err != nil {
 				return nil, fmt.Errorf("unable to parse source range %s: %w", src, err)
 			}
@@ -810,7 +810,7 @@ func (p *Postgres) ToStandbyClusterIngressCWNP(sourceCIDRs []string) (*firewall.
 	//
 	standbyClusterIngressIPBlocks := []networkingv1.IPBlock{}
 	for _, cidr := range sourceCIDRs {
-		remoteServiceClusterCIDR, err := netaddr.ParseIPPrefix(cidr)
+		remoteServiceClusterCIDR, err := netip.ParsePrefix(cidr)
 		if err != nil {
 			return nil, fmt.Errorf("unable to parse standby host ip %s: %w", p.Spec.PostgresConnection.ConnectionIP, err)
 		}
@@ -837,7 +837,7 @@ func (p *Postgres) ToStandbyClusterIngressCWNP(sourceCIDRs []string) (*firewall.
 func (p *Postgres) ToStandbyClusterEgressCWNP() (*firewall.ClusterwideNetworkPolicy, error) {
 	standbyClusterEgressIPBlocks := []networkingv1.IPBlock{}
 	if p.Spec.PostgresConnection.ConnectionIP != "" {
-		remoteServiceClusterCIDR, err := netaddr.ParseIPPrefix(p.Spec.PostgresConnection.ConnectionIP + "/32")
+		remoteServiceClusterCIDR, err := netip.ParsePrefix(p.Spec.PostgresConnection.ConnectionIP + "/32")
 		if err != nil {
 			return nil, fmt.Errorf("unable to parse standby host ip %s: %w", p.Spec.PostgresConnection.ConnectionIP, err)
 		}
