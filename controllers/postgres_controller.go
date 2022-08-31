@@ -747,7 +747,7 @@ func (r *PostgresReconciler) checkAndUpdatePatroniReplicationConfig(ctx context.
 			return requeueImmediately, r.httpPatchPatroni(ctx, instance, leaderIP)
 		}
 		if instance.Spec.PostgresConnection.SynchronousReplication {
-			if *resp.SynchronousNodesAdditional != instance.Spec.PostgresConnection.ConnectedPostgresID {
+			if resp.SynchronousNodesAdditional == nil || *resp.SynchronousNodesAdditional != instance.Spec.PostgresConnection.ConnectedPostgresID {
 				r.Log.Info("synchronous_nodes_additional mistmatch, updating and requeing", "response", resp)
 				return requeueImmediately, r.httpPatchPatroni(ctx, instance, leaderIP)
 			}
