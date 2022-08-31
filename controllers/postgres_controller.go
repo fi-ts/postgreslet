@@ -932,6 +932,8 @@ func (r *PostgresReconciler) httpGetPatroniConfig(ctx context.Context, podIP str
 		return nil, err
 	}
 
+	r.Log.Info("Got config", "response", jsonResp)
+
 	return &jsonResp, err
 }
 
