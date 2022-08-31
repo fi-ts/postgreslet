@@ -90,6 +90,7 @@ type PatroniConfigRequest struct {
 }
 
 // Reconcile is the entry point for postgres reconciliation.
+// +kubebuilder:rbac:groups=database.fits.cloud,resources=postgres,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=database.fits.cloud,resources=postgres/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=acid.zalan.do,resources=postgresqls,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=acid.zalan.do,resources=postgresqls/status,verbs=get;list;watch
