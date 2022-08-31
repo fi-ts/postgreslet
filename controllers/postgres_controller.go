@@ -876,7 +876,7 @@ func (r *PostgresReconciler) httpGetPatroniConfig(ctx context.Context, instance 
 	httpClient := &http.Client{}
 	url := "http://" + podIP + ":" + podPort + "/" + path
 
-	req, err := http.NewRequest("GET", url, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		r.Log.Error(err, "could not create request")
 		return nil, err
