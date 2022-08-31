@@ -18,6 +18,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-logr/logr"
 	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
@@ -227,7 +228,7 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	if immediateRequeue {
 		// if a config change was performed that requires a while to settle in, we simply requeue
 		// on the next reconciliation loop, the config should be correct already so we can continue with the rest
-		return requeue, patroniErr
+		return ctrl.Result{Requeue: true, RequeueAfter: 10 * time.Second}, patroniErr
 	}
 
 	// create standby egress rule first, so the standby can actually connect to the primary
