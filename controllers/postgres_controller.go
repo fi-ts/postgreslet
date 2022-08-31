@@ -786,6 +786,7 @@ func (r *PostgresReconciler) checkAndUpdatePatroniReplicationConfig(ctx context.
 		}
 	}
 
+	r.Log.Info("replication config from Patroni API up to date")
 	return continueWithReconciliation, nil
 }
 
