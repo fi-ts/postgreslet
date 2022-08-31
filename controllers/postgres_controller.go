@@ -737,7 +737,7 @@ func (r *PostgresReconciler) checkAndUpdatePatroniReplicationConfig(ctx context.
 	leaderIP := leaderPods.Items[0].Status.PodIP
 
 	var resp *PatroniConfigRequest
-	resp, err = r.httpGetPatroniConfig(ctx, instance, leaderIP)
+	resp, err = r.httpGetPatroniConfig(ctx, leaderIP)
 	if err != nil {
 		return continueWithReconciliation, err
 	}
@@ -865,7 +865,7 @@ func (r *PostgresReconciler) httpPatchPatroni(ctx context.Context, instance *pg.
 	return nil
 }
 
-func (r *PostgresReconciler) httpGetPatroniConfig(ctx context.Context, instance *pg.Postgres, podIP string) (*PatroniConfigRequest, error) {
+func (r *PostgresReconciler) httpGetPatroniConfig(ctx context.Context, podIP string) (*PatroniConfigRequest, error) {
 	if podIP == "" {
 		return nil, errors.New("podIP must not be empty")
 	}
