@@ -751,26 +751,33 @@ func (r *PostgresReconciler) checkAndUpdatePatroniReplicationConfig(ctx context.
 		}
 	} else {
 		if resp.StandbyCluster == nil {
+			r.Log.Info("updating and requeing, got %v", resp)
 			return requeueImmediately, r.httpPatchPatroni(ctx, instance, leaderIP)
 		}
 		if resp.StandbyCluster.CreateReplicaMethods == nil {
 			// TODO check for actual content instead of nil
+			r.Log.Info("updating and requeing, got %v", resp)
 			return requeueImmediately, r.httpPatchPatroni(ctx, instance, leaderIP)
 		}
 		if resp.StandbyCluster.Host != instance.Spec.PostgresConnection.ConnectionIP {
+			r.Log.Info("updating and requeing, got %v", resp)
 			return requeueImmediately, r.httpPatchPatroni(ctx, instance, leaderIP)
 		}
 		if resp.StandbyCluster.Port != int(instance.Spec.PostgresConnection.ConnectionPort) {
+			r.Log.Info("updating and requeing, got %v", resp)
 			return requeueImmediately, r.httpPatchPatroni(ctx, instance, leaderIP)
 		}
 		if resp.StandbyCluster.ApplicationName != instance.ObjectMeta.Name {
+			r.Log.Info("updating and requeing, got %v", resp)
 			return requeueImmediately, r.httpPatchPatroni(ctx, instance, leaderIP)
 		}
 
 		if resp.SynchronousNodesAdditional == nil {
+			r.Log.Info("updating and requeing, got %v", resp)
 			return requeueImmediately, r.httpPatchPatroni(ctx, instance, leaderIP)
 		}
 		if resp.SynchronousNodesAdditional != pointer.String(instance.Spec.PostgresConnection.ConnectedPostgresID) {
+			r.Log.Info("updating and requeing, got %v", resp)
 			return requeueImmediately, r.httpPatchPatroni(ctx, instance, leaderIP)
 		}
 	}
