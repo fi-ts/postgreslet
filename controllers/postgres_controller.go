@@ -745,10 +745,18 @@ func (r *PostgresReconciler) checkAndUpdatePatroniReplicationConfig(ctx context.
 		if resp.StandbyCluster != nil {
 			return requeueImmediately, r.httpPatchPatroni(ctx, instance, leaderIP)
 		}
-
-		if resp.SynchronousNodesAdditional != nil {
-			return requeueImmediately, r.httpPatchPatroni(ctx, instance, leaderIP)
+		if instance.Spec.PostgresConnection.SynchronousReplication {
+			// enable sync replication
+			if resp.SynchronousNodesAdditional != pointer.String(instance.Spec.PostgresConnection.ConnectedPostgresID) {
+				return requeueImmediately, r.httpPatchPatroni(ctx, instance, leaderIP)
+			}
+		} else {
+			// disable sync replication
+			if resp.SynchronousNodesAdditional != nil {
+				return requeueImmediately, r.httpPatchPatroni(ctx, instance, leaderIP)
+			}
 		}
+
 	} else {
 		if resp.StandbyCluster == nil {
 			r.Log.Info("updating and requeing", "response", resp)
@@ -772,11 +780,7 @@ func (r *PostgresReconciler) checkAndUpdatePatroniReplicationConfig(ctx context.
 			return requeueImmediately, r.httpPatchPatroni(ctx, instance, leaderIP)
 		}
 
-		if resp.SynchronousNodesAdditional == nil {
-			r.Log.Info("updating and requeing", "response", resp)
-			return requeueImmediately, r.httpPatchPatroni(ctx, instance, leaderIP)
-		}
-		if resp.SynchronousNodesAdditional != pointer.String(instance.Spec.PostgresConnection.ConnectedPostgresID) {
+		if resp.SynchronousNodesAdditional != nil {
 			r.Log.Info("updating and requeing", "response", resp)
 			return requeueImmediately, r.httpPatchPatroni(ctx, instance, leaderIP)
 		}
