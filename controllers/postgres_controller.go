@@ -222,8 +222,11 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, fmt.Errorf("error while creating standby secrets: %w", err)
 	}
 
-	immediateRequeue, patroniErr := r.checkAndUpdatePatroniConfig(ctx, instance)
+	// check (and update if neccessary) the current patroni replication config.
+	immediateRequeue, patroniErr := r.checkAndUpdatePatroniReplicationConfig(ctx, instance)
 	if immediateRequeue {
+		// if a config change was performed that requires a while to settle in, we simply requeue
+		// on the next reconciliation loop, the config should be correct already so we can continue with the rest
 		return requeue, patroniErr
 	}
 
@@ -279,9 +282,9 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, fmt.Errorf("unable to create or update ingress ClusterwideNetworkPolicy: %w", err)
 	}
 
-	// this is done down here to make sure the rest of the resource updates are performed anyway
+	// when an error occurred while updating the patroni config, requeue here
+	// this is done down here to make sure the rest of the resource updates were performed
 	if patroniErr != nil {
-		// when an error occurred while updating the patroni config, requeue here
 		return requeue, patroniErr
 	}
 
@@ -700,10 +703,10 @@ func (r *PostgresReconciler) ensureStandbySecrets(ctx context.Context, instance 
 
 }
 
-func (r *PostgresReconciler) checkAndUpdatePatroniConfig(ctx context.Context, instance *pg.Postgres) (bool, error) {
+func (r *PostgresReconciler) checkAndUpdatePatroniReplicationConfig(ctx context.Context, instance *pg.Postgres) (bool, error) {
 
-	var requeueImmediately = true
-	var continueWithReconciliation = false
+	const requeueImmediately = true
+	const continueWithReconciliation = false
 
 	// If there is no connected postgres, no need to tinker with patroni directly
 	if instance.Spec.PostgresConnection == nil {
@@ -714,54 +717,34 @@ func (r *PostgresReconciler) checkAndUpdatePatroniConfig(ctx context.Context, in
 	// Also, there should only be one instance running anyway, and that instance might have the role master or standby_leader, so we just patch them all.
 	if !instance.IsReplicationPrimary() {
 		// send PATCH immediately
-		return continueWithReconciliation, r.updatePatroniConfigOnAllPods(ctx, instance)
+		return continueWithReconciliation, r.updatePatroniReplicationConfigOnAllPods(ctx, instance)
 	}
 
 	// r.Log.Info("Reading config from Patroni API")
 
 	// Get the leader pod
-	leaderPods := &corev1.PodList{}
-	roleReq, err := labels.NewRequirement(pg.SpiloRoleLabelName, selection.In, []string{pg.SpiloRoleLabelValueMaster, pg.SpiloRoleLabelValueStandbyLeader})
+	leaderPods, err := r.findLeaderPods(ctx, instance)
 	if err != nil {
-		r.Log.Info("could not create requirements for label selector to query pods, requeuing")
-		return requeueImmediately, err
-	}
-	leaderSelector := labels.NewSelector().Add(*roleReq)
-	opts := []client.ListOption{
-		client.InNamespace(instance.ToPeripheralResourceNamespace()),
-		client.MatchingLabelsSelector{Selector: leaderSelector},
-	}
-	if err := r.SvcClient.List(ctx, leaderPods, opts...); err != nil {
 		r.Log.Info("could not query pods, requeuing")
 		return requeueImmediately, err
 	}
 
-	if len(leaderPods.Items) == 0 {
-		r.Log.Info("no leader pod found, selecting all spilo pods as a last resort (might be ok if it is still creating)")
-
-		err = r.updatePatroniConfigOnAllPods(ctx, instance)
-		if err != nil {
-			r.Log.Info("updating patroni config failed, got one or more errors")
-			// TODO requeue or continue here?
-			return continueWithReconciliation, err
-		}
+	if len(leaderPods.Items) != 1 {
+		r.Log.Info("expected exactly one leader pod, selecting all spilo pods as a last resort (might be ok if it is still creating)")
 		// To make sure any updates to the Zalando postgresql manifest are written, we do not requeue in this case
-		return continueWithReconciliation, nil
+		return continueWithReconciliation, r.updatePatroniReplicationConfigOnAllPods(ctx, instance)
 	}
 	leaderIP := leaderPods.Items[0].Status.PodIP
 
-	// TODO check config. If in wrong state, make the call and return *reconcile.Result
-	// TODO what happens, when the call fails consistently? We will not be able to change any settings via Postgreslet then, as the createOrUpdateZalandoPostgrseql will not be called...
 	var resp *PatroniConfigRequest
-	if resp, err = r.httpGetPatroniConfig(ctx, instance, leaderIP); err != nil {
+	resp, err = r.httpGetPatroniConfig(ctx, instance, leaderIP)
+	if err != nil {
 		return continueWithReconciliation, err
 	}
-
 	if resp == nil {
-		return requeueImmediately, r.httpPatchPatroni(ctx, instance, leaderIP)
+		return continueWithReconciliation, r.httpPatchPatroni(ctx, instance, leaderIP)
 	}
 
-	// if instance.IsReplicationPrimary() {
 	if resp.StandbyCluster != nil {
 		return requeueImmediately, r.httpPatchPatroni(ctx, instance, leaderIP)
 	}
@@ -769,36 +752,26 @@ func (r *PostgresReconciler) checkAndUpdatePatroniConfig(ctx context.Context, in
 	if resp.SynchronousNodesAdditional != nil {
 		return requeueImmediately, r.httpPatchPatroni(ctx, instance, leaderIP)
 	}
-	// } else {
-	// 	if resp.StandbyCluster == nil {
-	// 		return requeueImmediately, r.httpPatchPatroni(ctx, instance, leaderIP)
-	// 	}
-	// 	if resp.StandbyCluster.CreateReplicaMethods == nil {
-	// 		// TODO check for actual content instead of nil
-	// 		return requeueImmediately, r.httpPatchPatroni(ctx, instance, leaderIP)
-	// 	}
-	// 	if resp.StandbyCluster.Host != instance.Spec.PostgresConnection.ConnectionIP {
-	// 		return requeueImmediately, r.httpPatchPatroni(ctx, instance, leaderIP)
-	// 	}
-	// 	if resp.StandbyCluster.Port != int(instance.Spec.PostgresConnection.ConnectionPort) {
-	// 		return requeueImmediately, r.httpPatchPatroni(ctx, instance, leaderIP)
-	// 	}
-	// 	if resp.StandbyCluster.ApplicationName != instance.ObjectMeta.Name {
-	// 		return requeueImmediately, r.httpPatchPatroni(ctx, instance, leaderIP)
-	// 	}
-
-	// 	if resp.SynchronousNodesAdditional == nil {
-	// 		return requeueImmediately, r.httpPatchPatroni(ctx, instance, leaderIP)
-	// 	}
-	// 	if resp.SynchronousNodesAdditional != pointer.String(instance.Spec.PostgresConnection.ConnectedPostgresID) {
-	// 		return requeueImmediately, r.httpPatchPatroni(ctx, instance, leaderIP)
-	// 	}
-	// }
 
 	return continueWithReconciliation, nil
 }
 
-func (r *PostgresReconciler) updatePatroniConfigOnAllPods(ctx context.Context, instance *pg.Postgres) error {
+func (r *PostgresReconciler) findLeaderPods(ctx context.Context, instance *pg.Postgres) (*corev1.PodList, error) {
+	leaderPods := &corev1.PodList{}
+	roleReq, err := labels.NewRequirement(pg.SpiloRoleLabelName, selection.In, []string{pg.SpiloRoleLabelValueMaster, pg.SpiloRoleLabelValueStandbyLeader})
+	if err != nil {
+		r.Log.Info("could not create requirements for label selector to query pods, requeuing")
+		return leaderPods, err
+	}
+	leaderSelector := labels.NewSelector().Add(*roleReq)
+	opts := []client.ListOption{
+		client.InNamespace(instance.ToPeripheralResourceNamespace()),
+		client.MatchingLabelsSelector{Selector: leaderSelector},
+	}
+	return leaderPods, r.SvcClient.List(ctx, leaderPods, opts...)
+}
+
+func (r *PostgresReconciler) updatePatroniReplicationConfigOnAllPods(ctx context.Context, instance *pg.Postgres) error {
 	pods := &corev1.PodList{}
 	opts := []client.ListOption{
 		client.InNamespace(instance.ToPeripheralResourceNamespace()),
