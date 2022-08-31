@@ -743,45 +743,45 @@ func (r *PostgresReconciler) checkAndUpdatePatroniReplicationConfig(ctx context.
 
 	if instance.IsReplicationPrimary() {
 		if resp.StandbyCluster != nil {
+			r.Log.Info("standby_cluster mistmatch, updating and requeing", "response", resp)
 			return requeueImmediately, r.httpPatchPatroni(ctx, instance, leaderIP)
 		}
 		if instance.Spec.PostgresConnection.SynchronousReplication {
-			// enable sync replication
-			if resp.SynchronousNodesAdditional != pointer.String(instance.Spec.PostgresConnection.ConnectedPostgresID) {
+			if *resp.SynchronousNodesAdditional != instance.Spec.PostgresConnection.ConnectedPostgresID {
+				r.Log.Info("synchronous_nodes_additional mistmatch, updating and requeing", "response", resp)
 				return requeueImmediately, r.httpPatchPatroni(ctx, instance, leaderIP)
 			}
 		} else {
-			// disable sync replication
 			if resp.SynchronousNodesAdditional != nil {
+				r.Log.Info("synchronous_nodes_additional mistmatch, updating and requeing", "response", resp)
 				return requeueImmediately, r.httpPatchPatroni(ctx, instance, leaderIP)
 			}
 		}
 
 	} else {
 		if resp.StandbyCluster == nil {
-			r.Log.Info("updating and requeing", "response", resp)
+			r.Log.Info("standby_cluster mismatch, updating and requeing", "response", resp)
 			return requeueImmediately, r.httpPatchPatroni(ctx, instance, leaderIP)
 		}
 		if resp.StandbyCluster.CreateReplicaMethods == nil {
-			// TODO check for actual content instead of nil
-			r.Log.Info("updating and requeing", "response", resp)
+			r.Log.Info("create_replica_methods mismatch, updating and requeing", "response", resp)
 			return requeueImmediately, r.httpPatchPatroni(ctx, instance, leaderIP)
 		}
 		if resp.StandbyCluster.Host != instance.Spec.PostgresConnection.ConnectionIP {
-			r.Log.Info("updating and requeing", "response", resp)
+			r.Log.Info("host mismatch, updating and requeing", "response", resp)
 			return requeueImmediately, r.httpPatchPatroni(ctx, instance, leaderIP)
 		}
 		if resp.StandbyCluster.Port != int(instance.Spec.PostgresConnection.ConnectionPort) {
-			r.Log.Info("updating and requeing", "response", resp)
+			r.Log.Info("port mismatch, updating and requeing", "response", resp)
 			return requeueImmediately, r.httpPatchPatroni(ctx, instance, leaderIP)
 		}
 		if resp.StandbyCluster.ApplicationName != instance.ObjectMeta.Name {
-			r.Log.Info("updating and requeing", "response", resp)
+			r.Log.Info("application_name mismatch, updating and requeing", "response", resp)
 			return requeueImmediately, r.httpPatchPatroni(ctx, instance, leaderIP)
 		}
 
 		if resp.SynchronousNodesAdditional != nil {
-			r.Log.Info("updating and requeing", "response", resp)
+			r.Log.Info("synchronous_nodes_additional mistmatch, updating and requeing", "response", resp)
 			return requeueImmediately, r.httpPatchPatroni(ctx, instance, leaderIP)
 		}
 	}
