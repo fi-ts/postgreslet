@@ -224,12 +224,16 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	}
 
 	// check (and update if neccessary) the current patroni replication config.
-	immediateRequeue, patroniErr := r.checkAndUpdatePatroniReplicationConfig(ctx, instance)
-	if immediateRequeue {
-		// if a config change was performed that requires a while to settle in, we simply requeue
-		// on the next reconciliation loop, the config should be correct already so we can continue with the rest
-		log.Info("Requeueing after patroni replication config change")
-		return ctrl.Result{Requeue: true, RequeueAfter: 10 * time.Second}, patroniErr
+	var patroniErr error
+	// for primary databases, do that call before updating the custom ressource
+	if instance.IsReplicationPrimary() {
+		immediateRequeue, patroniErr := r.checkAndUpdatePatroniReplicationConfig(ctx, instance)
+		if immediateRequeue {
+			// if a config change was performed that requires a while to settle in, we simply requeue
+			// on the next reconciliation loop, the config should be correct already so we can continue with the rest
+			log.Info("Requeueing after patroni replication config change")
+			return ctrl.Result{Requeue: true, RequeueAfter: 10 * time.Second}, patroniErr
+		}
 	}
 
 	// create standby egress rule first, so the standby can actually connect to the primary
@@ -282,6 +286,17 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	if err := r.createOrUpdateIngressCWNP(ctx, instance, int(port)); err != nil {
 		r.recorder.Event(instance, "Warning", "Error", "failed to create or update ingress ClusterwideNetworkPolicy")
 		return ctrl.Result{}, fmt.Errorf("unable to create or update ingress ClusterwideNetworkPolicy: %w", err)
+	}
+
+	// for standby databases, do that call after updating the custom ressource
+	if !instance.IsReplicationPrimary() {
+		immediateRequeue, patroniErr := r.checkAndUpdatePatroniReplicationConfig(ctx, instance)
+		if immediateRequeue {
+			// if a config change was performed that requires a while to settle in, we simply requeue
+			// on the next reconciliation loop, the config should be correct already so we can continue with the rest
+			log.Info("Requeueing after patroni replication config change")
+			return ctrl.Result{Requeue: true, RequeueAfter: 10 * time.Second}, patroniErr
+		}
 	}
 
 	// when an error occurred while updating the patroni config, requeue here
@@ -786,6 +801,7 @@ func (r *PostgresReconciler) checkAndUpdatePatroniReplicationConfig(ctx context.
 		}
 	}
 
+	r.Log.Info("replication config from Patroni API up to date")
 	return continueWithReconciliation, nil
 }
 
