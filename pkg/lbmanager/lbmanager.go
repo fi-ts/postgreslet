@@ -67,21 +67,22 @@ func (m *LBManager) CreateSvcLBIfNone(ctx context.Context, in *api.Postgres) err
 	}
 
 	// update the selector, and only the selector (we do NOT want the change the ip or port here!!!)
+	// remove any existing spilo-role from selection
+	delete(svc.Spec.Selector, api.SpiloRoleLabelName)
+	// remove any existing pod name selector
+	delete(svc.Spec.Selector, api.StatefulsetPodNameLabelName)
+	// now update the selector according to the config
 	if in.IsReplicationPrimary() {
 		// no brainer: use spilo-role=master
 		svc.Spec.Selector[api.SpiloRoleLabelName] = api.SpiloRoleLabelValueMaster
 	} else {
 		if m.options.EnableStandbyLeaderSelector {
-			// remove any existing pod name selector
-			delete(svc.Spec.Selector, api.StatefulsetPodNameLabelName)
 			// use spilo-role=standby_leader
 			svc.Spec.Selector[api.SpiloRoleLabelName] = api.SpiloRoleLabelValueStandbyLeader
 		} else if m.options.EnableLegacyStandbySelector {
 			// use spilo-role=master
 			svc.Spec.Selector[api.SpiloRoleLabelName] = api.SpiloRoleLabelValueMaster
 		} else {
-			// remove any existing spilo-role from selection
-			delete(svc.Spec.Selector, api.SpiloRoleLabelName)
 			// select the first pod of the statefulset instead
 			svc.Spec.Selector[api.StatefulsetPodNameLabelName] = in.ToPeripheralResourceName() + "-0"
 		}
