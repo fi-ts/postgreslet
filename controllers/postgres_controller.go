@@ -91,6 +91,12 @@ type PatroniConfig struct {
 	SynchronousNodesAdditional *string                `json:"synchronous_nodes_additional"`
 }
 
+type PatroniPodStatus struct {
+	APIURL string `json:"api_url"`
+	State  string `json:"state"`
+	Role   string `json:"role"`
+}
+
 // Reconcile is the entry point for postgres reconciliation.
 // +kubebuilder:rbac:groups=database.fits.cloud,resources=postgres,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=database.fits.cloud,resources=postgres/status,verbs=get;update;patch
@@ -731,64 +737,100 @@ func (r *PostgresReconciler) checkAndUpdatePatroniReplicationConfig(ctx context.
 		// To make sure any updates to the Zalando postgresql manifest are written, we do not requeue in this case
 		return continueWithReconciliation, r.updatePatroniReplicationConfigOnAllPods(ctx, instance)
 	}
-	leaderIP := leaderPods.Items[0].Status.PodIP
+
+	apiURL, err := r.readAPIURL(&leaderPods.Items[0])
+	if err != nil {
+		// TODO guessAPI or reconcile?
+		// If there is no annotation, there is probably no running patroni api either. but this is called AFTER selecting by the spilo-role labels, so this should not happen anyway?
+		// I guess keeping it as a fallback seems reasonable, especially since we would, if the call to the api fails, reconcile anyway.
+		// return continueWithReconciliation, err
+		apiURL = r.guessAPIURL(&leaderPods.Items[0])
+	}
 
 	var resp *PatroniConfig
-	resp, err = r.httpGetPatroniConfig(ctx, leaderIP)
+	resp, err = r.httpGetPatroniConfig(ctx, apiURL)
 	if err != nil {
 		return continueWithReconciliation, err
 	}
 	if resp == nil {
-		return continueWithReconciliation, r.httpPatchPatroni(ctx, instance, leaderIP)
+		return continueWithReconciliation, r.httpPatchPatroni(ctx, instance, apiURL)
 	}
 
 	if instance.IsReplicationPrimary() {
 		if resp.StandbyCluster != nil {
 			r.Log.Info("standby_cluster mistmatch, updating and requeing", "response", resp)
-			return requeueImmediately, r.httpPatchPatroni(ctx, instance, leaderIP)
+			return requeueImmediately, r.httpPatchPatroni(ctx, instance, apiURL)
 		}
 		if instance.Spec.PostgresConnection.SynchronousReplication {
 			if resp.SynchronousNodesAdditional == nil || *resp.SynchronousNodesAdditional != instance.Spec.PostgresConnection.ConnectedPostgresID {
 				r.Log.Info("synchronous_nodes_additional mistmatch, updating and requeing", "response", resp)
-				return requeueImmediately, r.httpPatchPatroni(ctx, instance, leaderIP)
+				return requeueImmediately, r.httpPatchPatroni(ctx, instance, apiURL)
 			}
 		} else {
 			if resp.SynchronousNodesAdditional != nil {
 				r.Log.Info("synchronous_nodes_additional mistmatch, updating and requeing", "response", resp)
-				return requeueImmediately, r.httpPatchPatroni(ctx, instance, leaderIP)
+				return requeueImmediately, r.httpPatchPatroni(ctx, instance, apiURL)
 			}
 		}
 
 	} else {
 		if resp.StandbyCluster == nil {
 			r.Log.Info("standby_cluster mismatch, updating and requeing", "response", resp)
-			return requeueImmediately, r.httpPatchPatroni(ctx, instance, leaderIP)
+			return requeueImmediately, r.httpPatchPatroni(ctx, instance, apiURL)
 		}
 		if resp.StandbyCluster.CreateReplicaMethods == nil {
 			r.Log.Info("create_replica_methods mismatch, updating and requeing", "response", resp)
-			return requeueImmediately, r.httpPatchPatroni(ctx, instance, leaderIP)
+			return requeueImmediately, r.httpPatchPatroni(ctx, instance, apiURL)
 		}
 		if resp.StandbyCluster.Host != instance.Spec.PostgresConnection.ConnectionIP {
 			r.Log.Info("host mismatch, updating and requeing", "response", resp)
-			return requeueImmediately, r.httpPatchPatroni(ctx, instance, leaderIP)
+			return requeueImmediately, r.httpPatchPatroni(ctx, instance, apiURL)
 		}
 		if resp.StandbyCluster.Port != int(instance.Spec.PostgresConnection.ConnectionPort) {
 			r.Log.Info("port mismatch, updating and requeing", "response", resp)
-			return requeueImmediately, r.httpPatchPatroni(ctx, instance, leaderIP)
+			return requeueImmediately, r.httpPatchPatroni(ctx, instance, apiURL)
 		}
 		if resp.StandbyCluster.ApplicationName != instance.ObjectMeta.Name {
 			r.Log.Info("application_name mismatch, updating and requeing", "response", resp)
-			return requeueImmediately, r.httpPatchPatroni(ctx, instance, leaderIP)
+			return requeueImmediately, r.httpPatchPatroni(ctx, instance, apiURL)
 		}
 
 		if resp.SynchronousNodesAdditional != nil {
 			r.Log.Info("synchronous_nodes_additional mistmatch, updating and requeing", "response", resp)
-			return requeueImmediately, r.httpPatchPatroni(ctx, instance, leaderIP)
+			return requeueImmediately, r.httpPatchPatroni(ctx, instance, apiURL)
 		}
 	}
 
 	r.Log.Info("replication config from Patroni API up to date")
 	return continueWithReconciliation, nil
+}
+
+func (r *PostgresReconciler) readAPIURL(pod *corev1.Pod) (string, error) {
+	value, ok := pod.Annotations["status"]
+	if !ok {
+		return "", fmt.Errorf("could not find patroni pod status annotation")
+	}
+
+	var status PatroniPodStatus
+	err := json.Unmarshal([]byte(value), &status)
+	if err != nil {
+		r.Log.Error(err, "could not parse patroni pod status annotation")
+		return "", err
+	}
+
+	return status.APIURL, nil
+}
+
+func (r *PostgresReconciler) guessAPIURL(pod *corev1.Pod) string {
+	if pod == nil {
+		return ""
+	}
+
+	if pod.Status.PodIP == "" {
+		return ""
+	}
+
+	return "http://" + pod.Status.PodIP + ":8080/config"
 }
 
 func (r *PostgresReconciler) findLeaderPods(ctx context.Context, instance *pg.Postgres) (*corev1.PodList, error) {
@@ -826,8 +868,8 @@ func (r *PostgresReconciler) updatePatroniReplicationConfigOnAllPods(ctx context
 	var lastErr error
 	for _, pod := range pods.Items {
 		pod := pod // pin!
-		podIP := pod.Status.PodIP
-		if err := r.httpPatchPatroni(ctx, instance, podIP); err != nil {
+		url := r.guessAPIURL(&pod)
+		if err := r.httpPatchPatroni(ctx, instance, url); err != nil {
 			lastErr = err
 			r.Log.Info("failed to update pod")
 		}
@@ -840,13 +882,10 @@ func (r *PostgresReconciler) updatePatroniReplicationConfigOnAllPods(ctx context
 	return nil
 }
 
-func (r *PostgresReconciler) httpPatchPatroni(ctx context.Context, instance *pg.Postgres, podIP string) error {
-	if podIP == "" {
-		return errors.New("podIP must not be empty")
+func (r *PostgresReconciler) httpPatchPatroni(ctx context.Context, instance *pg.Postgres, url string) error {
+	if url == "" {
+		return errors.New("url must not be empty")
 	}
-
-	podPort := "8008"
-	path := "config"
 
 	r.Log.Info("Preparing request")
 	var request PatroniConfig
@@ -881,7 +920,6 @@ func (r *PostgresReconciler) httpPatchPatroni(ctx context.Context, instance *pg.
 	}
 
 	httpClient := &http.Client{}
-	url := "http://" + podIP + ":" + podPort + "/" + path
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPatch, url, bytes.NewBuffer(jsonReq))
 	if err != nil {
