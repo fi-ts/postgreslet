@@ -78,12 +78,40 @@ func init() {
 }
 
 func main() {
-	var metricsAddrCtrlMgr, metricsAddrSvcMgr, partitionID, tenant, ctrlClusterKubeconfig, pspName, lbIP, storageClass, postgresImage, etcdHost, operatorImage, majorVersionUpgradeMode, postgresletNamespace, sidecarsCMName, controlPlaneNamespace string
-	var enableLeaderElection, enableCRDValidation, enableNetPol, enablePodAntiaffinity, enableStandbyLeaderSelector bool
-	var portRangeStart, portRangeSize int
-	var patroniTTL, patroniLoopWait, patroniRetryTimeout uint32
-	var pgParamBlockList map[string]bool
-	var standbyClusterSourceRanges []string
+	var (
+		metricsAddrCtrlMgr      string
+		metricsAddrSvcMgr       string
+		partitionID             string
+		tenant                  string
+		ctrlClusterKubeconfig   string
+		pspName                 string
+		lbIP                    string
+		storageClass            string
+		postgresImage           string
+		etcdHost                string
+		operatorImage           string
+		majorVersionUpgradeMode string
+		postgresletNamespace    string
+		sidecarsCMName          string
+		controlPlaneNamespace   string
+
+		enableLeaderElection        bool
+		enableCRDValidation         bool
+		enableNetPol                bool
+		enablePodAntiaffinity       bool
+		enableStandbyLeaderSelector bool
+
+		portRangeStart int
+		portRangeSize  int
+
+		patroniTTL          uint32
+		patroniLoopWait     uint32
+		patroniRetryTimeout uint32
+
+		pgParamBlockList map[string]bool
+
+		standbyClusterSourceRanges []string
+	)
 
 	// TODO enable Prefix and update helm chart
 	// viper.SetEnvPrefix(envPrefix)
