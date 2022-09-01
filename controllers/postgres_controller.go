@@ -85,7 +85,7 @@ type PatroniStandbyCluster struct {
 	Port                 int      `json:"port"`
 	ApplicationName      string   `json:"application_name"`
 }
-type PatroniConfigRequest struct {
+type PatroniConfig struct {
 	StandbyCluster             *PatroniStandbyCluster `json:"standby_cluster"`
 	SynchronousNodesAdditional *string                `json:"synchronous_nodes_additional"`
 }
@@ -716,7 +716,7 @@ func (r *PostgresReconciler) checkAndUpdatePatroniReplicationConfig(ctx context.
 		return continueWithReconciliation, nil
 	}
 
-	r.Log.Info("Checking config from Patroni API")
+	r.Log.Info("Checking replication config from Patroni API")
 
 	// Get the leader pod
 	leaderPods, err := r.findLeaderPods(ctx, instance)
@@ -732,7 +732,7 @@ func (r *PostgresReconciler) checkAndUpdatePatroniReplicationConfig(ctx context.
 	}
 	leaderIP := leaderPods.Items[0].Status.PodIP
 
-	var resp *PatroniConfigRequest
+	var resp *PatroniConfig
 	resp, err = r.httpGetPatroniConfig(ctx, leaderIP)
 	if err != nil {
 		return continueWithReconciliation, err
@@ -848,9 +848,9 @@ func (r *PostgresReconciler) httpPatchPatroni(ctx context.Context, instance *pg.
 	path := "config"
 
 	r.Log.Info("Preparing request")
-	var request PatroniConfigRequest
+	var request PatroniConfig
 	if instance.IsReplicationPrimary() {
-		request = PatroniConfigRequest{
+		request = PatroniConfig{
 			StandbyCluster: nil,
 		}
 		if instance.Spec.PostgresConnection.SynchronousReplication {
@@ -862,7 +862,7 @@ func (r *PostgresReconciler) httpPatchPatroni(ctx context.Context, instance *pg.
 		}
 	} else {
 		// TODO check values first
-		request = PatroniConfigRequest{
+		request = PatroniConfig{
 			StandbyCluster: &PatroniStandbyCluster{
 				CreateReplicaMethods: []string{"basebackup_fast_xlog"},
 				Host:                 instance.Spec.PostgresConnection.ConnectionIP,
@@ -899,7 +899,7 @@ func (r *PostgresReconciler) httpPatchPatroni(ctx context.Context, instance *pg.
 	return nil
 }
 
-func (r *PostgresReconciler) httpGetPatroniConfig(ctx context.Context, podIP string) (*PatroniConfigRequest, error) {
+func (r *PostgresReconciler) httpGetPatroniConfig(ctx context.Context, podIP string) (*PatroniConfig, error) {
 	if podIP == "" {
 		return nil, errors.New("podIP must not be empty")
 	}
@@ -930,7 +930,7 @@ func (r *PostgresReconciler) httpGetPatroniConfig(ctx context.Context, podIP str
 		r.Log.Info("could not read body")
 		return nil, err
 	}
-	var jsonResp PatroniConfigRequest
+	var jsonResp PatroniConfig
 	err = json.Unmarshal(body, &jsonResp)
 	if err != nil {
 		r.Log.Info("could not parse config")
