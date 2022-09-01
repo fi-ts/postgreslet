@@ -68,6 +68,7 @@ const (
 	SpiloRoleLabelName               = "spilo-role"
 	SpiloRoleLabelValueMaster        = "master"
 	SpiloRoleLabelValueStandbyLeader = "standby_leader"
+	StatefulsetPodNameLabelName      = "statefulset.kubernetes.io/pod-name"
 
 	teamIDPrefix = "pg"
 
