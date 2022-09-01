@@ -225,12 +225,12 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	}
 
 	// check (and update if neccessary) the current patroni replication config.
-	immediateRequeue, patroniErr := r.checkAndUpdatePatroniReplicationConfig(ctx, instance)
+	immediateRequeue, patroniConfigChangeErr := r.checkAndUpdatePatroniReplicationConfig(ctx, instance)
 	if immediateRequeue {
 		// if a config change was performed that requires a while to settle in, we simply requeue
 		// on the next reconciliation loop, the config should be correct already so we can continue with the rest
 		log.Info("Requeueing after patroni replication config change")
-		return ctrl.Result{Requeue: true, RequeueAfter: r.ReplicationChangeRequeueDuration}, patroniErr
+		return ctrl.Result{Requeue: true, RequeueAfter: r.ReplicationChangeRequeueDuration}, patroniConfigChangeErr
 	}
 
 	// create standby egress rule first, so the standby can actually connect to the primary
@@ -287,9 +287,9 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 
 	// when an error occurred while updating the patroni config, requeue here
 	// this is done down here to make sure the rest of the resource updates were performed
-	if patroniErr != nil {
+	if patroniConfigChangeErr != nil {
 		log.Info("Requeueing after modifying patroni replication config failed")
-		return ctrl.Result{Requeue: true, RequeueAfter: 10 * time.Second}, patroniErr
+		return ctrl.Result{Requeue: true, RequeueAfter: 10 * time.Second}, patroniConfigChangeErr
 	}
 
 	r.recorder.Event(instance, "Normal", "Reconciled", "postgres up to date")
