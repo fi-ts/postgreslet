@@ -351,7 +351,6 @@ func (p *Postgres) ToSvcLB(lbIP string, lbPort int32, enableStandbyLeaderSelecto
 		lb.Spec.Selector[SpiloRoleLabelName] = SpiloRoleLabelValueMaster
 	} else if enableStandbyLeaderSelector {
 		// Only set this value when we are NOT a primary and the StandbyLeaderSelector is enabled.
-		// Otherwise, just leave it blank and use a selector without the spilo-role
 		lb.Spec.Selector[SpiloRoleLabelName] = SpiloRoleLabelValueStandbyLeader
 	} else {
 		// regular standby, no new standby_leader selector
