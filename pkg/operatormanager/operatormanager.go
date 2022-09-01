@@ -17,6 +17,7 @@ import (
 
 	pg "github.com/fi-ts/postgreslet/api/v1"
 	"github.com/go-logr/logr"
+	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -63,6 +64,7 @@ type Options struct {
 	PostgresletNamespace    string
 	SidecarsConfigMapName   string
 	PodAntiaffinity         bool
+	PartitionID             string
 }
 
 // OperatorManager manages the operator
@@ -593,24 +595,24 @@ func (m *OperatorManager) toObjectKey(obj runtime.Object, namespace string) (cli
 	}, nil
 }
 
-// UpdateAllOperators Updates the manifests of all postgres operators managed by the postgreslet
-func (m *OperatorManager) UpdateAllOperators(ctx context.Context) error {
-	// fetch all operators (running or otherwise)
-	m.log.Info("Fetching all managed namespaces")
+// UpdateAllManagedOperators Updates the manifests of all postgres operators managed by this postgreslet
+func (m *OperatorManager) UpdateAllManagedOperators(ctx context.Context) error {
+	// fetch postgresql custom ressource (running or otherwise)
+	m.log.Info("Fetching all zalando custom ressources managed by this postgreslet")
 	matchingLabels := client.MatchingLabels{
-		pg.ManagedByLabelName: pg.ManagedByLabelValue,
+		pg.PartitionIDLabelName: m.options.PartitionID,
 	}
-	nsList := &corev1.NamespaceList{}
+	zList := &zalando.PostgresqlList{}
 	opts := []client.ListOption{
 		matchingLabels,
 	}
-	if err := m.List(ctx, nsList, opts...); err != nil {
+	if err := m.List(ctx, zList, opts...); err != nil {
 		return client.IgnoreNotFound(err)
 	}
 	// update each namespace
-	for _, ns := range nsList.Items {
-		m.log.Info("Updating postgres operator installation", "namespace", ns.Name)
-		if err := m.InstallOrUpdateOperator(ctx, ns.Name); err != nil {
+	for _, z := range zList.Items {
+		m.log.Info("Updating postgres operator installation", "namespace", z.Namespace)
+		if err := m.InstallOrUpdateOperator(ctx, z.Namespace); err != nil {
 			return err
 		}
 	}

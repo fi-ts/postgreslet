@@ -8,6 +8,7 @@ package v1
 
 import (
 	"fmt"
+	"net/netip"
 	"reflect"
 	"strconv"
 	"strings"
@@ -17,7 +18,6 @@ import (
 
 	firewall "github.com/metal-stack/firewall-controller/api/v1"
 	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
-	"inet.af/netaddr"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -60,6 +60,8 @@ const (
 	// StandbyKey defines the key under which the standby configuration is stored in the CR.  Defined by the postgres-operator/patroni
 	StandbyKey    = "standby"
 	StandbyMethod = "streaming_host"
+	// PartitionIDLabelName Name of the managed-by label
+	PartitionIDLabelName string = "postgres.database.fits.cloud/partition-id"
 
 	ApplicationLabelName             = "application"
 	ApplicationLabelValue            = "spilo"
@@ -286,7 +288,7 @@ func (p *Postgres) ToCWNP(port int) (*firewall.ClusterwideNetworkPolicy, error) 
 	ipblocks := []networkingv1.IPBlock{}
 	if p.HasSourceRanges() {
 		for _, src := range p.Spec.AccessList.SourceRanges {
-			parsedSrc, err := netaddr.ParseIPPrefix(src)
+			parsedSrc, err := netip.ParsePrefix(src)
 			if err != nil {
 				return nil, fmt.Errorf("unable to parse source range %s: %w", src, err)
 			}
@@ -505,6 +507,9 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 	z.Namespace = p.ToPeripheralResourceNamespace()
 	z.Name = p.ToPeripheralResourceName()
 	z.Labels = p.ToZalandoPostgresqlMatchingLabels()
+	// Add the newly introduced label only here, not in  p.ToZalandoPostgresqlMatchingLabels() (so that the selectors using  p.ToZalandoPostgresqlMatchingLabels() will still work untill all postgres resources have that new label)
+	// TODO once all the custom resources have that new label, move this part to p.ToZalandoPostgresqlMatchingLabels()
+	z.Labels[PartitionIDLabelName] = p.Spec.PartitionID
 
 	z.Spec.NumberOfInstances = p.Spec.NumberOfInstances
 	if !p.IsReplicationPrimary() {
@@ -553,7 +558,7 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 
 	// Create database owner
 	z.Spec.Users = make(map[string]zalando.UserFlags)
-	z.Spec.Users[ownerName] = zalando.UserFlags{"superuser", "createdb"}
+	z.Spec.Users[ownerName] = zalando.UserFlags{"createdb", "createrole"}
 
 	// Create default database
 	z.Spec.Databases = make(map[string]string)
@@ -812,7 +817,7 @@ func (p *Postgres) ToStandbyClusterIngressCWNP(sourceCIDRs []string) (*firewall.
 	//
 	standbyClusterIngressIPBlocks := []networkingv1.IPBlock{}
 	for _, cidr := range sourceCIDRs {
-		remoteServiceClusterCIDR, err := netaddr.ParseIPPrefix(cidr)
+		remoteServiceClusterCIDR, err := netip.ParsePrefix(cidr)
 		if err != nil {
 			return nil, fmt.Errorf("unable to parse standby host ip %s: %w", p.Spec.PostgresConnection.ConnectionIP, err)
 		}
@@ -839,7 +844,7 @@ func (p *Postgres) ToStandbyClusterIngressCWNP(sourceCIDRs []string) (*firewall.
 func (p *Postgres) ToStandbyClusterEgressCWNP() (*firewall.ClusterwideNetworkPolicy, error) {
 	standbyClusterEgressIPBlocks := []networkingv1.IPBlock{}
 	if p.Spec.PostgresConnection.ConnectionIP != "" {
-		remoteServiceClusterCIDR, err := netaddr.ParseIPPrefix(p.Spec.PostgresConnection.ConnectionIP + "/32")
+		remoteServiceClusterCIDR, err := netip.ParsePrefix(p.Spec.PostgresConnection.ConnectionIP + "/32")
 		if err != nil {
 			return nil, fmt.Errorf("unable to parse standby host ip %s: %w", p.Spec.PostgresConnection.ConnectionIP, err)
 		}

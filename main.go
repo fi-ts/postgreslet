@@ -59,6 +59,7 @@ const (
 	enablePodAntiaffinityFlg       = "enable-pod-antiaffinity"
 	patroniRetryTimeoutFlg         = "patroni-retry-timeout"
 	enableStandbyLeaderSelectorFlg = "enable-standby-leader-selector"
+	ControlPlaneNamespaceFlg       = "control-plane-namespace"
 )
 
 var (
@@ -77,7 +78,7 @@ func init() {
 }
 
 func main() {
-	var metricsAddrCtrlMgr, metricsAddrSvcMgr, partitionID, tenant, ctrlClusterKubeconfig, pspName, lbIP, storageClass, postgresImage, etcdHost, operatorImage, majorVersionUpgradeMode, postgresletNamespace, sidecarsCMName string
+	var metricsAddrCtrlMgr, metricsAddrSvcMgr, partitionID, tenant, ctrlClusterKubeconfig, pspName, lbIP, storageClass, postgresImage, etcdHost, operatorImage, majorVersionUpgradeMode, postgresletNamespace, sidecarsCMName, controlPlaneNamespace string
 	var enableLeaderElection, enableCRDValidation, enableNetPol, enablePodAntiaffinity, enableStandbyLeaderSelector bool
 	var portRangeStart, portRangeSize int
 	var patroniTTL, patroniLoopWait, patroniRetryTimeout uint32
@@ -175,6 +176,9 @@ func main() {
 	viper.SetDefault(enableStandbyLeaderSelectorFlg, true)
 	enableStandbyLeaderSelector = viper.GetBool(enableStandbyLeaderSelectorFlg)
 
+	viper.SetDefault(ControlPlaneNamespaceFlg, "metal-extension-postgres")
+	controlPlaneNamespace = viper.GetString(ControlPlaneNamespaceFlg)
+
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 
 	ctrl.Log.Info("flag",
@@ -202,6 +206,7 @@ func main() {
 		enablePodAntiaffinityFlg, enablePodAntiaffinity,
 		patroniRetryTimeoutFlg, patroniRetryTimeout,
 		enableStandbyLeaderSelectorFlg, enableStandbyLeaderSelector,
+		ControlPlaneNamespaceFlg, controlPlaneNamespace,
 	)
 
 	svcClusterConf := ctrl.GetConfigOrDie()
@@ -244,6 +249,7 @@ func main() {
 		PostgresletNamespace:    postgresletNamespace,
 		SidecarsConfigMapName:   sidecarsCMName,
 		PodAntiaffinity:         enablePodAntiaffinity,
+		PartitionID:             partitionID,
 	}
 	opMgr, err := operatormanager.New(svcClusterConf, "external/svc-postgres-operator.yaml", scheme, ctrl.Log.WithName("OperatorManager"), opMgrOpts)
 	if err != nil {
@@ -282,10 +288,12 @@ func main() {
 	}
 
 	if err = (&controllers.StatusReconciler{
-		SvcClient:  svcClusterMgr.GetClient(),
-		CtrlClient: ctrlPlaneClusterMgr.GetClient(),
-		Log:        ctrl.Log.WithName("controllers").WithName("Status"),
-		Scheme:     svcClusterMgr.GetScheme(),
+		SvcClient:             svcClusterMgr.GetClient(),
+		CtrlClient:            ctrlPlaneClusterMgr.GetClient(),
+		Log:                   ctrl.Log.WithName("controllers").WithName("Status"),
+		Scheme:                svcClusterMgr.GetScheme(),
+		PartitionID:           partitionID,
+		ControlPlaneNamespace: controlPlaneNamespace,
 	}).SetupWithManager(svcClusterMgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Status")
 		os.Exit(1)
@@ -295,7 +303,7 @@ func main() {
 	ctx := context.Background()
 
 	// update all existing operators to the current version
-	if err := opMgr.UpdateAllOperators(ctx); err != nil {
+	if err := opMgr.UpdateAllManagedOperators(ctx); err != nil {
 		setupLog.Error(err, "error updating the postgres operators")
 	}
 

@@ -37,6 +37,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	pg "github.com/fi-ts/postgreslet/api/v1"
 	"github.com/fi-ts/postgreslet/pkg/lbmanager"
@@ -288,6 +289,7 @@ func (r *PostgresReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.recorder = mgr.GetEventRecorderFor("PostgresController")
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&pg.Postgres{}).
+		WithEventFilter(predicate.GenerationChangedPredicate{}).
 		Complete(r)
 }
 
@@ -304,7 +306,7 @@ func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context
 		}
 		src := &pg.Postgres{}
 		if err := r.CtrlClient.Get(ctx, srcNs, src); err != nil {
-			r.recorder.Eventf(instance, "Warning", "Error", "failed to get resource: %v", err)
+			r.recorder.Eventf(instance, "Warning", "Error", "failed to get source postgres for restore: %v", err)
 			return err
 		}
 		log.Info("source for restore fetched", "postgres", instance)
