@@ -60,6 +60,7 @@ const (
 	patroniRetryTimeoutFlg         = "patroni-retry-timeout"
 	enableStandbyLeaderSelectorFlg = "enable-standby-leader-selector"
 	ControlPlaneNamespaceFlg       = "control-plane-namespace"
+	enableLegacyStandbySelectorFlg = "enable-legacy-standby-selector"
 )
 
 var (
@@ -79,7 +80,7 @@ func init() {
 
 func main() {
 	var metricsAddrCtrlMgr, metricsAddrSvcMgr, partitionID, tenant, ctrlClusterKubeconfig, pspName, lbIP, storageClass, postgresImage, etcdHost, operatorImage, majorVersionUpgradeMode, postgresletNamespace, sidecarsCMName, controlPlaneNamespace string
-	var enableLeaderElection, enableCRDValidation, enableNetPol, enablePodAntiaffinity, enableStandbyLeaderSelector bool
+	var enableLeaderElection, enableCRDValidation, enableNetPol, enablePodAntiaffinity, enableStandbyLeaderSelector, enableLegacyStandbySelector bool
 	var portRangeStart, portRangeSize int
 	var patroniTTL, patroniLoopWait, patroniRetryTimeout uint32
 	var pgParamBlockList map[string]bool
@@ -179,6 +180,9 @@ func main() {
 	viper.SetDefault(ControlPlaneNamespaceFlg, "metal-extension-postgres")
 	controlPlaneNamespace = viper.GetString(ControlPlaneNamespaceFlg)
 
+	viper.SetDefault(enableLegacyStandbySelectorFlg, false)
+	enableLegacyStandbySelector = viper.GetBool(enableLegacyStandbySelectorFlg)
+
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 
 	ctrl.Log.Info("flag",
@@ -207,6 +211,7 @@ func main() {
 		patroniRetryTimeoutFlg, patroniRetryTimeout,
 		enableStandbyLeaderSelectorFlg, enableStandbyLeaderSelector,
 		ControlPlaneNamespaceFlg, controlPlaneNamespace,
+		enableLegacyStandbySelectorFlg, enableLegacyStandbySelector,
 	)
 
 	svcClusterConf := ctrl.GetConfigOrDie()
@@ -262,6 +267,7 @@ func main() {
 		PortRangeStart:              int32(portRangeStart),
 		PortRangeSize:               int32(portRangeSize),
 		EnableStandbyLeaderSelector: enableStandbyLeaderSelector,
+		EnableLegacyStandbySelector: enableLegacyStandbySelector,
 	}
 	if err = (&controllers.PostgresReconciler{
 		CtrlClient:                  ctrlPlaneClusterMgr.GetClient(),

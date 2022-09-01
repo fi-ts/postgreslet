@@ -16,6 +16,7 @@ type Options struct {
 	PortRangeStart              int32
 	PortRangeSize               int32
 	EnableStandbyLeaderSelector bool
+	EnableLegacyStandbySelector bool
 }
 
 // LBManager Responsible for the creation and deletion of externally accessible Services to access the Postgresql clusters managed by the Postgreslet.
@@ -59,7 +60,7 @@ func (m *LBManager) CreateSvcLBIfNone(ctx context.Context, in *api.Postgres) err
 			lbIPToUse = ""
 		}
 
-		if err := m.Create(ctx, in.ToSvcLB(lbIPToUse, nextFreePort, m.options.EnableStandbyLeaderSelector)); err != nil {
+		if err := m.Create(ctx, in.ToSvcLB(lbIPToUse, nextFreePort, m.options.EnableStandbyLeaderSelector, m.options.EnableLegacyStandbySelector)); err != nil {
 			return fmt.Errorf("failed to create Service of type LoadBalancer: %w", err)
 		}
 		return nil
@@ -69,12 +70,19 @@ func (m *LBManager) CreateSvcLBIfNone(ctx context.Context, in *api.Postgres) err
 	if in.IsReplicationPrimary() {
 		// no brainer: use spilo-role=master
 		svc.Spec.Selector[api.SpiloRoleLabelName] = api.SpiloRoleLabelValueMaster
-	} else if m.options.EnableStandbyLeaderSelector {
-		// Only set this value when we are NOT a primary and the StandbyLeaderSelector is enabled.
-		svc.Spec.Selector[api.SpiloRoleLabelName] = api.SpiloRoleLabelValueStandbyLeader
 	} else {
-		// Otherwise, just leave it blank and use a selector without the spilo-role
-		delete(svc.Spec.Selector, api.SpiloRoleLabelName)
+		if m.options.EnableStandbyLeaderSelector {
+			// use spilo-role=standby_leader
+			svc.Spec.Selector[api.SpiloRoleLabelName] = api.SpiloRoleLabelValueStandbyLeader
+		} else if m.options.EnableLegacyStandbySelector {
+			// use spilo-role=master
+			svc.Spec.Selector[api.SpiloRoleLabelName] = api.SpiloRoleLabelValueMaster
+		} else {
+			// remove any existing spilo-role from selection
+			delete(svc.Spec.Selector, api.SpiloRoleLabelName)
+			// select the first pod of the statefulset instead
+			svc.Spec.Selector["statefulset.kubernetes.io/pod-name"] = in.ToPeripheralResourceName() + "-0"
+		}
 	}
 
 	if err := m.Update(ctx, svc); err != nil {
