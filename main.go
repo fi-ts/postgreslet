@@ -80,7 +80,8 @@ func init() {
 
 func main() {
 	var metricsAddrCtrlMgr, metricsAddrSvcMgr, partitionID, tenant, ctrlClusterKubeconfig, pspName, lbIP, storageClass, postgresImage, etcdHost, operatorImage, majorVersionUpgradeMode, postgresletNamespace, sidecarsCMName, controlPlaneNamespace string
-	var enableLeaderElection, enableCRDValidation, enableNetPol, enablePodAntiaffinity, enableStandbyLeaderSelector, enableLegacyStandbySelector bool
+	var enableLeaderElection, enableCRDValidation, enableNetPol, enablePodAntiaffinity, enableStandbyLeaderSelector bool
+	var enableLegacyStandbySelector bool
 	var portRangeStart, portRangeSize int
 	var patroniTTL, patroniLoopWait, patroniRetryTimeout uint32
 	var pgParamBlockList map[string]bool
