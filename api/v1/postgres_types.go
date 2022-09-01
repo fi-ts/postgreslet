@@ -358,7 +358,7 @@ func (p *Postgres) ToSvcLB(lbIP string, lbPort int32, enableStandbyLeaderSelecto
 			lb.Spec.Selector[SpiloRoleLabelName] = SpiloRoleLabelValueMaster
 		} else {
 			// select the first pod in the statefulset
-			lb.Spec.Selector["statefulset.kubernetes.io/pod-name"] = p.ToPeripheralResourceName() + "-0"
+			lb.Spec.Selector[StatefulsetPodNameLabelName] = p.ToPeripheralResourceName() + "-0"
 		}
 	}
 
