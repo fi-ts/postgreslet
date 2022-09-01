@@ -820,6 +820,8 @@ func (r *PostgresReconciler) updatePatroniReplicationConfigOnAllPods(ctx context
 	if len(pods.Items) == 0 {
 		r.Log.Info("no spilo pods found at all, requeueing")
 		return errors.New("no spilo pods found at all")
+	} else if len(pods.Items) < int(instance.Spec.NumberOfInstances) {
+		r.Log.Info("expected %d pods, but only found %d (might be ok if it is still creating)", instance.Spec.NumberOfInstances, len(pods.Items))
 	}
 
 	// iterate all spilo pods
