@@ -67,16 +67,17 @@ type PostgresReconciler struct {
 	PartitionID, Tenant, StorageClass string
 	*operatormanager.OperatorManager
 	*lbmanager.LBManager
-	recorder                    record.EventRecorder
-	PgParamBlockList            map[string]bool
-	StandbyClustersSourceRanges []string
-	PostgresletNamespace        string
-	SidecarsConfigMapName       string
-	EnableNetPol                bool
-	EtcdHost                    string
-	PatroniTTL                  uint32
-	PatroniLoopWait             uint32
-	PatroniRetryTimeout         uint32
+	recorder                         record.EventRecorder
+	PgParamBlockList                 map[string]bool
+	StandbyClustersSourceRanges      []string
+	PostgresletNamespace             string
+	SidecarsConfigMapName            string
+	EnableNetPol                     bool
+	EtcdHost                         string
+	PatroniTTL                       uint32
+	PatroniLoopWait                  uint32
+	PatroniRetryTimeout              uint32
+	ReplicationChangeRequeueDuration time.Duration
 }
 
 type PatroniStandbyCluster struct {
@@ -229,7 +230,7 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		// if a config change was performed that requires a while to settle in, we simply requeue
 		// on the next reconciliation loop, the config should be correct already so we can continue with the rest
 		log.Info("Requeueing after patroni replication config change")
-		return ctrl.Result{Requeue: true, RequeueAfter: 10 * time.Second}, patroniErr
+		return ctrl.Result{Requeue: true, RequeueAfter: r.ReplicationChangeRequeueDuration}, patroniErr
 	}
 
 	// create standby egress rule first, so the standby can actually connect to the primary

@@ -12,6 +12,7 @@ import (
 	"net"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/metal-stack/v"
 	coreosv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
@@ -35,31 +36,32 @@ import (
 
 const (
 	// envPrefix               = "pg"
-	metricsAddrSvcMgrFlg           = "metrics-addr-svc-mgr"
-	metricsAddrCtrlMgrFlg          = "metrics-addr-ctrl-mgr"
-	enableLeaderElectionFlg        = "enable-leader-election"
-	partitionIDFlg                 = "partition-id"
-	tenantFlg                      = "tenant"
-	ctrlPlaneKubeConfifgFlg        = "controlplane-kubeconfig"
-	loadBalancerIPFlg              = "load-balancer-ip"
-	portRangeStartFlg              = "port-range-start"
-	portRangeSizeFlg               = "port-range-size"
-	customPSPNameFlg               = "custom-psp-name"
-	storageClassFlg                = "storage-class"
-	postgresImageFlg               = "postgres-image"
-	etcdHostFlg                    = "etcd-host"
-	crdValidationFlg               = "enable-crd-validation"
-	operatorImageFlg               = "operator-image"
-	pgParamBlockListFlg            = "postgres-param-blocklist"
-	majorVersionUpgradeModeFlg     = "major-version-upgrade-mode"
-	standbyClustersSourceRangesFlg = "standby-clusters-source-ranges"
-	postgresletNamespaceFlg        = "postgreslet-namespace"
-	sidecarsCMNameFlg              = "sidecars-configmap-name"
-	enableNetPolFlg                = "enable-netpol"
-	enablePodAntiaffinityFlg       = "enable-pod-antiaffinity"
-	patroniRetryTimeoutFlg         = "patroni-retry-timeout"
-	enableStandbyLeaderSelectorFlg = "enable-standby-leader-selector"
-	ControlPlaneNamespaceFlg       = "control-plane-namespace"
+	metricsAddrSvcMgrFlg            = "metrics-addr-svc-mgr"
+	metricsAddrCtrlMgrFlg           = "metrics-addr-ctrl-mgr"
+	enableLeaderElectionFlg         = "enable-leader-election"
+	partitionIDFlg                  = "partition-id"
+	tenantFlg                       = "tenant"
+	ctrlPlaneKubeConfifgFlg         = "controlplane-kubeconfig"
+	loadBalancerIPFlg               = "load-balancer-ip"
+	portRangeStartFlg               = "port-range-start"
+	portRangeSizeFlg                = "port-range-size"
+	customPSPNameFlg                = "custom-psp-name"
+	storageClassFlg                 = "storage-class"
+	postgresImageFlg                = "postgres-image"
+	etcdHostFlg                     = "etcd-host"
+	crdValidationFlg                = "enable-crd-validation"
+	operatorImageFlg                = "operator-image"
+	pgParamBlockListFlg             = "postgres-param-blocklist"
+	majorVersionUpgradeModeFlg      = "major-version-upgrade-mode"
+	standbyClustersSourceRangesFlg  = "standby-clusters-source-ranges"
+	postgresletNamespaceFlg         = "postgreslet-namespace"
+	sidecarsCMNameFlg               = "sidecars-configmap-name"
+	enableNetPolFlg                 = "enable-netpol"
+	enablePodAntiaffinityFlg        = "enable-pod-antiaffinity"
+	patroniRetryTimeoutFlg          = "patroni-retry-timeout"
+	enableStandbyLeaderSelectorFlg  = "enable-standby-leader-selector"
+	ControlPlaneNamespaceFlg        = "control-plane-namespace"
+	replicationChangeRequeueTimeFlg = "replication-change-requeue-time-in-seconds"
 )
 
 var (
@@ -101,8 +103,9 @@ func main() {
 		enablePodAntiaffinity       bool
 		enableStandbyLeaderSelector bool
 
-		portRangeStart int
-		portRangeSize  int
+		portRangeStart                        int
+		portRangeSize                         int
+		replicationChangeRequeueTimeInSeconds int
 
 		patroniTTL          uint32
 		patroniLoopWait     uint32
@@ -207,6 +210,10 @@ func main() {
 	viper.SetDefault(ControlPlaneNamespaceFlg, "metal-extension-postgres")
 	controlPlaneNamespace = viper.GetString(ControlPlaneNamespaceFlg)
 
+	viper.SetDefault(replicationChangeRequeueTimeFlg, 10)
+	replicationChangeRequeueTimeInSeconds = viper.GetInt(replicationChangeRequeueTimeFlg)
+	replicationChangeRequeueDuration := time.Duration(replicationChangeRequeueTimeInSeconds) * time.Second
+
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 
 	ctrl.Log.Info("flag",
@@ -235,6 +242,7 @@ func main() {
 		patroniRetryTimeoutFlg, patroniRetryTimeout,
 		enableStandbyLeaderSelectorFlg, enableStandbyLeaderSelector,
 		ControlPlaneNamespaceFlg, controlPlaneNamespace,
+		replicationChangeRequeueTimeFlg, replicationChangeRequeueTimeInSeconds,
 	)
 
 	svcClusterConf := ctrl.GetConfigOrDie()
@@ -292,24 +300,25 @@ func main() {
 		EnableStandbyLeaderSelector: enableStandbyLeaderSelector,
 	}
 	if err = (&controllers.PostgresReconciler{
-		CtrlClient:                  ctrlPlaneClusterMgr.GetClient(),
-		SvcClient:                   svcClusterMgr.GetClient(),
-		Log:                         ctrl.Log.WithName("controllers").WithName("Postgres"),
-		Scheme:                      ctrlPlaneClusterMgr.GetScheme(),
-		PartitionID:                 partitionID,
-		Tenant:                      tenant,
-		StorageClass:                storageClass,
-		OperatorManager:             opMgr,
-		LBManager:                   lbmanager.New(svcClusterMgr.GetClient(), lbMgrOpts),
-		PgParamBlockList:            pgParamBlockList,
-		StandbyClustersSourceRanges: standbyClusterSourceRanges,
-		PostgresletNamespace:        postgresletNamespace,
-		SidecarsConfigMapName:       sidecarsCMName,
-		EnableNetPol:                enableNetPol,
-		EtcdHost:                    etcdHost,
-		PatroniTTL:                  patroniTTL,
-		PatroniLoopWait:             patroniLoopWait,
-		PatroniRetryTimeout:         patroniRetryTimeout,
+		CtrlClient:                       ctrlPlaneClusterMgr.GetClient(),
+		SvcClient:                        svcClusterMgr.GetClient(),
+		Log:                              ctrl.Log.WithName("controllers").WithName("Postgres"),
+		Scheme:                           ctrlPlaneClusterMgr.GetScheme(),
+		PartitionID:                      partitionID,
+		Tenant:                           tenant,
+		StorageClass:                     storageClass,
+		OperatorManager:                  opMgr,
+		LBManager:                        lbmanager.New(svcClusterMgr.GetClient(), lbMgrOpts),
+		PgParamBlockList:                 pgParamBlockList,
+		StandbyClustersSourceRanges:      standbyClusterSourceRanges,
+		PostgresletNamespace:             postgresletNamespace,
+		SidecarsConfigMapName:            sidecarsCMName,
+		EnableNetPol:                     enableNetPol,
+		EtcdHost:                         etcdHost,
+		PatroniTTL:                       patroniTTL,
+		PatroniLoopWait:                  patroniLoopWait,
+		PatroniRetryTimeout:              patroniRetryTimeout,
+		ReplicationChangeRequeueDuration: replicationChangeRequeueDuration,
 	}).SetupWithManager(ctrlPlaneClusterMgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Postgres")
 		os.Exit(1)
