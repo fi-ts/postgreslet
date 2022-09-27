@@ -25,6 +25,7 @@ import (
 
 	databasev1 "github.com/fi-ts/postgreslet/api/v1"
 	"github.com/fi-ts/postgreslet/controllers"
+	"github.com/fi-ts/postgreslet/pkg/etcdmanager"
 	"github.com/fi-ts/postgreslet/pkg/lbmanager"
 	"github.com/fi-ts/postgreslet/pkg/operatormanager"
 	firewall "github.com/metal-stack/firewall-controller/api/v1"
@@ -60,6 +61,7 @@ const (
 	patroniRetryTimeoutFlg         = "patroni-retry-timeout"
 	enableStandbyLeaderSelectorFlg = "enable-standby-leader-selector"
 	ControlPlaneNamespaceFlg       = "control-plane-namespace"
+	enableEtcdFlg                  = "enable-etcd"
 )
 
 var (
@@ -100,6 +102,7 @@ func main() {
 		enableNetPol                bool
 		enablePodAntiaffinity       bool
 		enableStandbyLeaderSelector bool
+		enableEtcd                  bool
 
 		portRangeStart int
 		portRangeSize  int
@@ -207,6 +210,9 @@ func main() {
 	viper.SetDefault(ControlPlaneNamespaceFlg, "metal-extension-postgres")
 	controlPlaneNamespace = viper.GetString(ControlPlaneNamespaceFlg)
 
+	viper.SetDefault(enableEtcdFlg, false)
+	enableEtcd = viper.GetBool(enableEtcdFlg)
+
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 
 	ctrl.Log.Info("flag",
@@ -235,6 +241,7 @@ func main() {
 		patroniRetryTimeoutFlg, patroniRetryTimeout,
 		enableStandbyLeaderSelectorFlg, enableStandbyLeaderSelector,
 		ControlPlaneNamespaceFlg, controlPlaneNamespace,
+		enableEtcdFlg, enableEtcd,
 	)
 
 	svcClusterConf := ctrl.GetConfigOrDie()
@@ -265,6 +272,23 @@ func main() {
 	if err != nil {
 		setupLog.Error(err, "unable to start control plane cluster manager")
 		os.Exit(1)
+	}
+
+	var etcdMgrOpts etcdmanager.Options = etcdmanager.Options{
+		EtcdImage:            postgresImage,
+		PostgresletNamespace: postgresletNamespace,
+		PartitionID:          partitionID,
+	}
+	etcdMgr, err := etcdmanager.New(svcClusterConf, "external/svc-etcd.yaml", scheme, ctrl.Log.WithName("EtcdManager"), etcdMgrOpts)
+	if err != nil {
+		setupLog.Error(err, "unable to create `OperatorManager`")
+		os.Exit(1)
+	}
+	if enableEtcd {
+
+		etcdMgr.InstallOrUpdateEtcd()
+	} else {
+		// TODO remove
 	}
 
 	var opMgrOpts operatormanager.Options = operatormanager.Options{
