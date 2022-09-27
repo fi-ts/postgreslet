@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"os"
 
+	pg "github.com/fi-ts/postgreslet/api/v1"
 	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -25,9 +26,11 @@ import (
 
 // Options
 type Options struct {
-	EtcdImage            string
-	PostgresletNamespace string
-	PartitionID          string
+	EtcdImage              string
+	EtcdBackupSidecarImage string
+	PostgresletNamespace   string
+	PartitionID            string
+	SecretKeyRefName       string
 }
 
 // OperatorManager manages the operator
@@ -128,12 +131,74 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 		err = m.Get(ctx, key, &corev1.ConfigMap{})
 	case *appsv1.StatefulSet:
 		m.log.Info("handling StatefulSet")
-		// TODO etcdImage
-		// TODO backupSidecarImage
-		// TODO secretKeyRef.name
-		// TODO partition label
-		// TODO name (incl. partition, e.g. "etcd-"+m.options.PartitionID)
-		err = m.Get(ctx, key, &appsv1.StatefulSet{})
+
+		got := appsv1.StatefulSet{}
+		err = m.Get(ctx, key, &got)
+		if err == nil {
+			// Copy the ResourceVersion
+			v.ObjectMeta.ResourceVersion = got.ObjectMeta.ResourceVersion
+		}
+
+		instanceName := "etcd-" + m.options.PartitionID
+		v.ObjectMeta.Name = instanceName
+
+		for _, container := range v.Spec.Template.Spec.Containers {
+			container := container
+
+			// Patch EtcdImage
+			if m.options.EtcdImage != "" {
+				container.Image = m.options.EtcdImage
+			}
+
+			// Patch Env
+			for _, env := range container.Env {
+				env := env
+				switch env.Name {
+				// case "ETCD_ADVERTISE_CLIENT_URLS": // TODO
+				// case "ETCD_INITIAL_ADVERTISE_PEER_URLS": // TODO
+				case "BACKUP_RESTORE_SIDECAR_S3_BUCKET_NAME":
+					if env.ValueFrom != nil && env.ValueFrom.SecretKeyRef != nil {
+						env.ValueFrom.SecretKeyRef.Name = m.options.SecretKeyRefName
+					}
+				case "BACKUP_RESTORE_SIDECAR_S3_ENDPOINT":
+					if env.ValueFrom != nil && env.ValueFrom.SecretKeyRef != nil {
+						env.ValueFrom.SecretKeyRef.Name = m.options.SecretKeyRefName
+					}
+				case "BACKUP_RESTORE_SIDECAR_S3_REGION":
+					if env.ValueFrom != nil && env.ValueFrom.SecretKeyRef != nil {
+						env.ValueFrom.SecretKeyRef.Name = m.options.SecretKeyRefName
+					}
+				case "BACKUP_RESTORE_SIDECAR_S3_ACCESS_KEY":
+					if env.ValueFrom != nil && env.ValueFrom.SecretKeyRef != nil {
+						env.ValueFrom.SecretKeyRef.Name = m.options.SecretKeyRefName
+					}
+				case "BACKUP_RESTORE_SIDECAR_S3_SECRET_KEY":
+					if env.ValueFrom != nil && env.ValueFrom.SecretKeyRef != nil {
+						env.ValueFrom.SecretKeyRef.Name = m.options.SecretKeyRefName
+					}
+				}
+			}
+		}
+
+		// Patch EtcdBackupSidecarImage
+		if m.options.EtcdBackupSidecarImage != "" {
+			for _, initContainer := range v.Spec.Template.Spec.InitContainers {
+				initContainer := initContainer
+				initContainer.Image = m.options.EtcdBackupSidecarImage
+			}
+		}
+
+		// Add partition ID label
+		v.ObjectMeta.Labels[pg.PartitionIDLabelName] = m.options.PartitionID
+		v.Spec.Template.ObjectMeta.Labels[pg.PartitionIDLabelName] = m.options.PartitionID
+		v.Spec.Template.ObjectMeta.Labels["instance"] = instanceName
+
+		// spec.selector.matchLabels
+		v.Spec.Selector.MatchLabels[pg.PartitionIDLabelName] = m.options.PartitionID
+
+		// spec.serviceName
+		v.Spec.ServiceName = instanceName + "-client"
+
 	case *corev1.Service:
 		m.log.Info("handling Service")
 		got := corev1.Service{}

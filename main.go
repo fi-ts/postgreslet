@@ -62,6 +62,9 @@ const (
 	enableStandbyLeaderSelectorFlg = "enable-standby-leader-selector"
 	ControlPlaneNamespaceFlg       = "control-plane-namespace"
 	enableEtcdFlg                  = "enable-etcd"
+	etcdImageFlg                   = "etcd-image"
+	etcdBackupSidecarImageFlg      = "etcd-backup-sidecar-image"
+	etcdBackupSecretNameFlg        = "etcd-backup-secret-name"
 )
 
 var (
@@ -96,6 +99,9 @@ func main() {
 		postgresletNamespace    string
 		sidecarsCMName          string
 		controlPlaneNamespace   string
+		etcdImage               string
+		etcdBackupSidecarImage  string
+		etcdBackupSecretName    string
 
 		enableLeaderElection        bool
 		enableCRDValidation         bool
@@ -213,6 +219,13 @@ func main() {
 	viper.SetDefault(enableEtcdFlg, false)
 	enableEtcd = viper.GetBool(enableEtcdFlg)
 
+	viper.SetDefault(etcdImageFlg, "localhost:5400/etcd") // TODO remove
+	etcdImage = viper.GetString(etcdImageFlg)
+	viper.SetDefault(etcdBackupSidecarImageFlg, "localhost:5400/etcdSidecar") // TODO remove
+	etcdBackupSidecarImage = viper.GetString(etcdBackupSidecarImageFlg)
+	viper.SetDefault(etcdBackupSecretNameFlg, "secretKeyRef") // TODO remove
+	etcdBackupSecretName = viper.GetString(etcdBackupSecretNameFlg)
+
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 
 	ctrl.Log.Info("flag",
@@ -242,6 +255,9 @@ func main() {
 		enableStandbyLeaderSelectorFlg, enableStandbyLeaderSelector,
 		ControlPlaneNamespaceFlg, controlPlaneNamespace,
 		enableEtcdFlg, enableEtcd,
+		etcdImageFlg, etcdImage,
+		etcdBackupSidecarImageFlg, etcdBackupSidecarImage,
+		etcdBackupSecretNameFlg, etcdBackupSecretName,
 	)
 
 	svcClusterConf := ctrl.GetConfigOrDie()
@@ -275,9 +291,11 @@ func main() {
 	}
 
 	var etcdMgrOpts etcdmanager.Options = etcdmanager.Options{
-		EtcdImage:            postgresImage,
-		PostgresletNamespace: postgresletNamespace,
-		PartitionID:          partitionID,
+		EtcdImage:              etcdImage,
+		EtcdBackupSidecarImage: etcdBackupSidecarImage,
+		SecretKeyRefName:       etcdBackupSecretName,
+		PostgresletNamespace:   postgresletNamespace,
+		PartitionID:            partitionID,
 	}
 	etcdMgr, err := etcdmanager.New(svcClusterConf, "external/svc-etcd.yaml", scheme, ctrl.Log.WithName("EtcdManager"), etcdMgrOpts)
 	if err != nil {
