@@ -64,7 +64,7 @@ const (
 	enableEtcdFlg                  = "enable-etcd"
 	etcdImageFlg                   = "etcd-image"
 	etcdBackupSidecarImageFlg      = "etcd-backup-sidecar-image"
-	etcdBackupSecretNameFlg        = "etcd-backup-secret-name"
+	etcdBackupSecretNameFlg        = "etcd-backup-secret-name" // nolint
 )
 
 var (
