@@ -281,13 +281,15 @@ func main() {
 	}
 	etcdMgr, err := etcdmanager.New(svcClusterConf, "external/svc-etcd.yaml", scheme, ctrl.Log.WithName("EtcdManager"), etcdMgrOpts)
 	if err != nil {
-		setupLog.Error(err, "unable to create `OperatorManager`")
+		setupLog.Error(err, "unable to create `EtcdManager`")
 		os.Exit(1)
 	}
 	if enableEtcd {
-
-		etcdMgr.InstallOrUpdateEtcd()
-	} else {
+		if etcdMgr.InstallOrUpdateEtcd() != nil {
+			setupLog.Error(err, "unable to deploy etcd")
+			os.Exit(1)
+		}
+		// } else {
 		// TODO remove
 	}
 
