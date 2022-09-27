@@ -63,7 +63,7 @@ func New(confRest *rest.Config, fileName string, scheme *runtime.Scheme, log log
 		return nil, fmt.Errorf("error while converting bytes to a list of yamls: %w", err)
 	}
 
-	log.Info("new `OperatorManager` created")
+	log.Info("new `EtcdManager` created")
 	return &EtcdManager{
 		MetadataAccessor: meta.NewAccessor(),
 		Client:           client,
@@ -133,6 +133,7 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 		// TODO secretKeyRef.name
 		// TODO partition label
 		// TODO name (incl. partition, e.g. "etcd-"+m.options.PartitionID)
+		err = m.Get(ctx, key, &appsv1.StatefulSet{})
 	case *corev1.Service:
 		m.log.Info("handling Service")
 		got := corev1.Service{}
