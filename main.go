@@ -223,7 +223,7 @@ func main() {
 	etcdImage = viper.GetString(etcdImageFlg)
 	viper.SetDefault(etcdBackupSidecarImageFlg, "localhost:5400/etcdSidecar") // TODO remove
 	etcdBackupSidecarImage = viper.GetString(etcdBackupSidecarImageFlg)
-	viper.SetDefault(etcdBackupSecretNameFlg, "secretKeyRef") // TODO remove
+	viper.SetDefault(etcdBackupSecretNameFlg, "etcd-backup-restore-s3-config") // TODO remove
 	etcdBackupSecretName = viper.GetString(etcdBackupSecretNameFlg)
 
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
