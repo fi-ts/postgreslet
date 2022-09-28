@@ -132,24 +132,30 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 	case *appsv1.StatefulSet:
 		m.log.Info("handling StatefulSet")
 
+		m.log.Info("Trying to get existing StatefulSet")
 		got := appsv1.StatefulSet{}
 		err = m.Get(ctx, key, &got)
 		if err == nil {
 			// Copy the ResourceVersion
+			m.log.Info("Copying existing resource version")
 			v.ObjectMeta.ResourceVersion = got.ObjectMeta.ResourceVersion
 		}
 
+		m.log.Info("Updating name")
 		instanceName := "etcd-" + m.options.PartitionID
 		v.ObjectMeta.Name = instanceName
 
+		m.log.Info("Updating containers")
 		for _, container := range v.Spec.Template.Spec.Containers {
 			container := container
 
 			// Patch EtcdImage
 			if m.options.EtcdImage != "" {
+				m.log.Info("Updating etcd image")
 				container.Image = m.options.EtcdImage
 			}
 
+			m.log.Info("Updating envs")
 			// Patch Env
 			for _, env := range container.Env {
 				env := env
@@ -182,20 +188,24 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 
 		// Patch EtcdBackupSidecarImage
 		if m.options.EtcdBackupSidecarImage != "" {
+			m.log.Info("Updating initContainers")
 			for _, initContainer := range v.Spec.Template.Spec.InitContainers {
 				initContainer := initContainer
 				initContainer.Image = m.options.EtcdBackupSidecarImage
 			}
 		}
 
+		m.log.Info("Updating labels")
 		// Add partition ID label
 		v.ObjectMeta.Labels[pg.PartitionIDLabelName] = m.options.PartitionID
 		v.Spec.Template.ObjectMeta.Labels[pg.PartitionIDLabelName] = m.options.PartitionID
 		v.Spec.Template.ObjectMeta.Labels["instance"] = instanceName
 
+		m.log.Info("Updating selector")
 		// spec.selector.matchLabels
 		v.Spec.Selector.MatchLabels[pg.PartitionIDLabelName] = m.options.PartitionID
 
+		m.log.Info("Updating serviceName")
 		// spec.serviceName
 		v.Spec.ServiceName = instanceName + "-client"
 
