@@ -204,6 +204,7 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 		m.log.Info("Updating selector")
 		// spec.selector.matchLabels
 		v.Spec.Selector.MatchLabels[pg.PartitionIDLabelName] = m.options.PartitionID
+		v.Spec.Selector.MatchLabels["instance"] = instanceName
 
 		m.log.Info("Updating serviceName")
 		// spec.serviceName
