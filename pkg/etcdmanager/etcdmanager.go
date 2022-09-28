@@ -146,18 +146,18 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 		v.ObjectMeta.Name = instanceName
 
 		m.log.Info("Updating containers")
-		for _, container := range v.Spec.Template.Spec.Containers {
-			container := container
+		for i := range v.Spec.Template.Spec.Containers {
+			i := i
 
 			// Patch EtcdImage
 			if m.options.EtcdImage != "" {
 				m.log.Info("Updating etcd image")
-				container.Image = m.options.EtcdImage
+				v.Spec.Template.Spec.Containers[i].Image = m.options.EtcdImage
 			}
 
 			m.log.Info("Updating envs")
 			// Patch Env
-			for _, env := range container.Env {
+			for _, env := range v.Spec.Template.Spec.Containers[i].Env {
 				env := env
 				switch env.Name {
 				// case "ETCD_ADVERTISE_CLIENT_URLS": // TODO
@@ -189,9 +189,9 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 		// Patch EtcdBackupSidecarImage
 		if m.options.EtcdBackupSidecarImage != "" {
 			m.log.Info("Updating initContainers")
-			for _, initContainer := range v.Spec.Template.Spec.InitContainers {
-				initContainer := initContainer
-				initContainer.Image = m.options.EtcdBackupSidecarImage
+			for i := range v.Spec.Template.Spec.InitContainers {
+				i := i
+				v.Spec.Template.Spec.InitContainers[i].Image = m.options.EtcdBackupSidecarImage
 			}
 		}
 
