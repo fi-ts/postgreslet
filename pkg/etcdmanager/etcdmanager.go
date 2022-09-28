@@ -132,9 +132,15 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 	case *appsv1.StatefulSet:
 		m.log.Info("handling StatefulSet")
 
-		m.log.Info("Trying to get existing StatefulSet")
+		instanceName := "etcd-" + m.options.PartitionID
+		renamedSts := client.ObjectKey{
+			Namespace: namespace,
+			Name:      instanceName,
+		}
+
+		m.log.Info("Trying to get existing StatefulSet", "NamespacedName", renamedSts)
 		got := appsv1.StatefulSet{}
-		err = m.Get(ctx, key, &got)
+		err = m.Get(ctx, renamedSts, &got)
 		if err == nil {
 			// Copy the ResourceVersion
 			m.log.Info("Copying existing resource version")
@@ -142,7 +148,7 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 		}
 
 		m.log.Info("Updating name")
-		instanceName := "etcd-" + m.options.PartitionID
+
 		v.ObjectMeta.Name = instanceName
 
 		m.log.Info("Updating containers")
