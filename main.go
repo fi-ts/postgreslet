@@ -219,9 +219,7 @@ func main() {
 	viper.SetDefault(enableEtcdFlg, false)
 	enableEtcd = viper.GetBool(enableEtcdFlg)
 
-	viper.SetDefault(etcdImageFlg, "localhost:5400/etcd") // TODO remove
 	etcdImage = viper.GetString(etcdImageFlg)
-	viper.SetDefault(etcdBackupSidecarImageFlg, "localhost:5400/etcdSidecar") // TODO remove
 	etcdBackupSidecarImage = viper.GetString(etcdBackupSidecarImageFlg)
 	viper.SetDefault(etcdBackupSecretNameFlg, "etcd-backup-restore-s3-config") // TODO remove
 	etcdBackupSecretName = viper.GetString(etcdBackupSecretNameFlg)
