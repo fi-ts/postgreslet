@@ -138,6 +138,9 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 		m.log.Info("handling ServiceAccount")
 		m.log.Info("Updating name")
 		v.ObjectMeta.Name = saName
+
+		// Use the updated name to get the resource
+		key.Name = saName
 		err = m.Get(ctx, key, &corev1.ServiceAccount{})
 
 	case *rbacv1.Role:
@@ -162,6 +165,8 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 			v.Rules[i].ResourceNames = []string{m.options.PSPName}
 		}
 
+		// Use the updated name to get the resource
+		key.Name = roleName
 		err = m.Get(ctx, key, &rbacv1.Role{})
 
 	case *rbacv1.RoleBinding:
@@ -181,7 +186,8 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 			}
 		}
 
-		// Fetch the RoleBinding
+		// Use the updated name to get the resource
+		key.Name = rbName
 		err = m.Get(ctx, key, &rbacv1.RoleBinding{})
 
 	case *corev1.ConfigMap:
@@ -192,29 +198,12 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 
 		m.editConfigMap(v, namespace, m.options)
 
-		renamedCM := client.ObjectKey{
-			Namespace: namespace,
-			Name:      cmName,
-		}
-		err = m.Get(ctx, renamedCM, &corev1.ConfigMap{})
-		// TODO rename ConfigMap
+		// Use the updated name to get the resource
+		key.Name = cmName
+		err = m.Get(ctx, key, &corev1.ConfigMap{})
 
 	case *appsv1.StatefulSet:
 		m.log.Info("handling StatefulSet")
-
-		renamedSts := client.ObjectKey{
-			Namespace: namespace,
-			Name:      stsName,
-		}
-
-		m.log.Info("Trying to get existing StatefulSet", "NamespacedName", renamedSts)
-		got := appsv1.StatefulSet{}
-		err = m.Get(ctx, renamedSts, &got)
-		if err == nil {
-			// Copy the ResourceVersion
-			m.log.Info("Copying existing resource version")
-			v.ObjectMeta.ResourceVersion = got.ObjectMeta.ResourceVersion
-		}
 
 		m.log.Info("Updating name")
 		v.ObjectMeta.Name = stsName
@@ -297,6 +286,16 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 		m.log.Info("Updating serviceName")
 		// spec.serviceName
 		v.Spec.ServiceName = stsName + "-client"
+
+		got := appsv1.StatefulSet{}
+		// Use the updated name to get the resource
+		key.Name = stsName
+		err = m.Get(ctx, key, &got)
+		if err == nil {
+			// Copy the ResourceVersion
+			m.log.Info("Copying existing resource version")
+			v.ObjectMeta.ResourceVersion = got.ObjectMeta.ResourceVersion
+		}
 
 	case *corev1.Service:
 		m.log.Info("handling Service")
