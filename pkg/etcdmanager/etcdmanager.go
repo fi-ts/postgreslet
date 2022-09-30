@@ -16,11 +16,13 @@ import (
 	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/client-go/rest"
+	"k8s.io/utils/strings/slices"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -31,6 +33,7 @@ type Options struct {
 	PostgresletNamespace   string
 	PartitionID            string
 	SecretKeyRefName       string
+	PSPName                string
 }
 
 // OperatorManager manages the operator
@@ -122,20 +125,86 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 		return fmt.Errorf("error while making the object key: %w", err)
 	}
 
+	stsName := "etcd-" + m.options.PartitionID
+	saName := stsName
+	roleName := stsName
+	rbName := stsName
+	cmName := stsName
+
 	// perform different modifications on the parsed objects based on their kind
 	switch v := obj.(type) {
 
+	case *corev1.ServiceAccount:
+		m.log.Info("handling ServiceAccount")
+		m.log.Info("Updating name")
+		v.ObjectMeta.Name = saName
+		err = m.Get(ctx, key, &corev1.ServiceAccount{})
+
+	case *rbacv1.Role:
+		m.log.Info("handling Role")
+		m.log.Info("Updating name")
+		v.ObjectMeta.Name = roleName
+
+		m.log.Info("Updating psp")
+		for i := range v.Rules {
+			i := i
+
+			if !slices.Contains(v.Rules[i].APIGroups, "extensions") {
+				continue
+			}
+			if !slices.Contains(v.Rules[i].Resources, "podsecuritypolicies") {
+				continue
+			}
+			if !slices.Contains(v.Rules[i].Verbs, "use") {
+				continue
+			}
+			// overwrite psp name
+			v.Rules[i].ResourceNames = []string{m.options.PSPName}
+		}
+
+		err = m.Get(ctx, key, &rbacv1.Role{})
+
+	case *rbacv1.RoleBinding:
+		m.log.Info("handling RoleBinding")
+
+		m.log.Info("Updating name")
+		v.ObjectMeta.Name = rbName
+
+		m.log.Info("Updating roleRef")
+		v.RoleRef.Name = roleName
+
+		// Set the namespace of the ServiceAccount in the RoleBinding.
+		for i, s := range v.Subjects {
+			if s.Kind == "ServiceAccount" {
+				v.Subjects[i].Name = saName
+				v.Subjects[i].Namespace = namespace
+			}
+		}
+
+		// Fetch the RoleBinding
+		err = m.Get(ctx, key, &rbacv1.RoleBinding{})
+
 	case *corev1.ConfigMap:
 		m.log.Info("handling ConfigMap")
+
+		m.log.Info("Updating name")
+		v.ObjectMeta.Name = cmName
+
 		m.editConfigMap(v, namespace, m.options)
-		err = m.Get(ctx, key, &corev1.ConfigMap{})
+
+		renamedCM := client.ObjectKey{
+			Namespace: namespace,
+			Name:      cmName,
+		}
+		err = m.Get(ctx, renamedCM, &corev1.ConfigMap{})
+		// TODO rename ConfigMap
+
 	case *appsv1.StatefulSet:
 		m.log.Info("handling StatefulSet")
 
-		instanceName := "etcd-" + m.options.PartitionID
 		renamedSts := client.ObjectKey{
 			Namespace: namespace,
-			Name:      instanceName,
+			Name:      stsName,
 		}
 
 		m.log.Info("Trying to get existing StatefulSet", "NamespacedName", renamedSts)
@@ -148,8 +217,7 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 		}
 
 		m.log.Info("Updating name")
-
-		v.ObjectMeta.Name = instanceName
+		v.ObjectMeta.Name = stsName
 
 		m.log.Info("Updating containers")
 		for i := range v.Spec.Template.Spec.Containers {
@@ -197,24 +265,38 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 			m.log.Info("Updating initContainers")
 			for i := range v.Spec.Template.Spec.InitContainers {
 				i := i
+
+				m.log.Info("Updating etcd backup sidecar image")
 				v.Spec.Template.Spec.InitContainers[i].Image = m.options.EtcdBackupSidecarImage
+
+				// TODO update configMap name
 			}
+		}
+
+		m.log.Info("Updating configMap volume")
+		for i := range v.Spec.Template.Spec.Volumes {
+			i := i
+
+			if v.Spec.Template.Spec.Volumes[i].Name != "backup-restore-sidecar-config" {
+				continue
+			}
+			v.Spec.Template.Spec.Volumes[i].ConfigMap.Name = cmName
 		}
 
 		m.log.Info("Updating labels")
 		// Add partition ID label
 		v.ObjectMeta.Labels[pg.PartitionIDLabelName] = m.options.PartitionID
 		v.Spec.Template.ObjectMeta.Labels[pg.PartitionIDLabelName] = m.options.PartitionID
-		v.Spec.Template.ObjectMeta.Labels["instance"] = instanceName
+		v.Spec.Template.ObjectMeta.Labels["instance"] = stsName
 
 		m.log.Info("Updating selector")
 		// spec.selector.matchLabels
 		v.Spec.Selector.MatchLabels[pg.PartitionIDLabelName] = m.options.PartitionID
-		v.Spec.Selector.MatchLabels["instance"] = instanceName
+		v.Spec.Selector.MatchLabels["instance"] = stsName
 
 		m.log.Info("Updating serviceName")
 		// spec.serviceName
-		v.Spec.ServiceName = instanceName + "-client"
+		v.Spec.ServiceName = stsName + "-client"
 
 	case *corev1.Service:
 		m.log.Info("handling Service")
@@ -226,6 +308,8 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 			// Copy the ClusterIP
 			v.Spec.ClusterIP = got.Spec.ClusterIP
 		}
+
+		// TODO rename services!!!
 
 	default:
 		return errs.New("unknown `client.Object`")

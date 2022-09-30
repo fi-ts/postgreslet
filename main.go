@@ -65,6 +65,7 @@ const (
 	etcdImageFlg                   = "etcd-image"
 	etcdBackupSidecarImageFlg      = "etcd-backup-sidecar-image"
 	etcdBackupSecretNameFlg        = "etcd-backup-secret-name" // nolint
+	etcdPSPNameFlg                 = "etcd-psp-name"
 )
 
 var (
@@ -102,6 +103,7 @@ func main() {
 		etcdImage               string
 		etcdBackupSidecarImage  string
 		etcdBackupSecretName    string
+		etcdPSPName             string
 
 		enableLeaderElection        bool
 		enableCRDValidation         bool
@@ -224,6 +226,9 @@ func main() {
 	viper.SetDefault(etcdBackupSecretNameFlg, "etcd-backup-restore-s3-config") // TODO remove
 	etcdBackupSecretName = viper.GetString(etcdBackupSecretNameFlg)
 
+	viper.SetDefault(etcdPSPNameFlg, "postgres-operator-psp")
+	etcdPSPName = viper.GetString(etcdPSPNameFlg)
+
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 
 	ctrl.Log.Info("flag",
@@ -256,6 +261,7 @@ func main() {
 		etcdImageFlg, etcdImage,
 		etcdBackupSidecarImageFlg, etcdBackupSidecarImage,
 		etcdBackupSecretNameFlg, etcdBackupSecretName,
+		etcdPSPNameFlg, etcdPSPName,
 	)
 
 	svcClusterConf := ctrl.GetConfigOrDie()
@@ -294,6 +300,7 @@ func main() {
 		SecretKeyRefName:       etcdBackupSecretName,
 		PostgresletNamespace:   postgresletNamespace,
 		PartitionID:            partitionID,
+		PSPName:                etcdPSPName,
 	}
 	etcdMgr, err := etcdmanager.New(svcClusterConf, "external/svc-etcd.yaml", scheme, ctrl.Log.WithName("EtcdManager"), etcdMgrOpts)
 	if err != nil {

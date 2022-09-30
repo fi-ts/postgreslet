@@ -4,11 +4,177 @@ apiVersion: v1
 kind: List
 metadata: {}
 items:
+- apiVersion: v1
+  kind: ServiceAccount
+  metadata:
+    name: patroni-etcd
+    namespace: postgreslet-system
+- kind: Role
+  apiVersion: rbac.authorization.k8s.io/v1
+  metadata:
+    name: patroni-etcd
+    namespace: postgreslet-system
+  rules:
+  - apiGroups:
+    - ""
+    resources:
+    - configmaps
+    verbs:
+    - get
+  - apiGroups:
+    - ""
+    resources:
+    - events
+    verbs:
+    - create
+    - get
+    - list
+    - patch
+    - update
+    - watch
+  - apiGroups:
+    - ""
+    resources:
+    - endpoints
+    verbs:
+    - create
+    - delete
+    - deletecollection
+    - get
+    - list
+    - patch
+    - update
+    - watch
+  - apiGroups:
+    - ""
+    resources:
+    - secrets
+    verbs:
+    - create
+    - delete
+    - get
+    - update
+  - apiGroups:
+    - ""
+    resources:
+    - nodes
+    verbs:
+    - get
+    - list
+    - watch
+  # - apiGroups:
+  #   - ""
+  #   resources:
+  #   - persistentvolumeclaims
+  #   verbs:
+  #   - delete
+  #   - get
+  #   - list
+  #   - patch
+  #   - update
+  # - apiGroups:
+  #   - ""
+  #   resources:
+  #   - persistentvolumes
+  #   verbs:
+  #   - get
+  #   - list
+  #   - update
+  - apiGroups:
+    - ""
+    resources:
+    - pods
+    verbs:
+    - delete
+    - get
+    - list
+    - patch
+    - update
+    - watch
+  - apiGroups:
+    - ""
+    resources:
+    - pods/exec
+    verbs:
+    - create
+  - apiGroups:
+    - ""
+    resources:
+    - services
+    verbs:
+    - create
+    - delete
+    - get
+    - patch
+    - update
+  - apiGroups:
+    - apps
+    resources:
+    - statefulsets
+    # - deployments
+    verbs:
+    - create
+    - delete
+    - get
+    - list
+    - patch
+  - apiGroups:
+    - batch
+    resources:
+    - cronjobs
+    verbs:
+    - create
+    - delete
+    - get
+    - list
+    - patch
+    - update
+  - apiGroups:
+    - ""
+    resources:
+    - namespaces
+    verbs:
+    - get
+  - apiGroups:
+    - ""
+    resources:
+    - serviceaccounts
+    verbs:
+    - get
+    - create
+  - apiGroups:
+    - rbac.authorization.k8s.io
+    resources:
+    - rolebindings
+    verbs:
+    - get
+    - create
+  - apiGroups:
+    - extensions
+    resourceNames:
+    - postgreslet
+    resources:
+    - podsecuritypolicies
+    verbs:
+    - use
+- kind: RoleBinding
+  apiVersion: rbac.authorization.k8s.io/v1
+  metadata:
+    name: patroni-etcd
+    namespace: postgreslet-system
+  roleRef:
+    apiGroup: rbac.authorization.k8s.io
+    kind: Role
+    name: patroni-etcd
+  subjects:
+  - kind: ServiceAccount
+    name: patroni-etcd
+    namespace: postgreslet-system
 - kind: ConfigMap
   apiVersion: v1
   metadata:
     name: backup-restore-sidecar-config-etcd
-    namespace: ft-etcd-psql
+    namespace: postgreslet-system
   data:
     config.yaml: |
       db: etcd
@@ -26,7 +192,7 @@ items:
       name: etcd
       role: psql
     name: etcd-psql
-    namespace: ft-etcd-psql
+    namespace: postgreslet-system
   spec:
     podManagementPolicy: OrderedReady
     replicas: 1
@@ -44,6 +210,7 @@ items:
           name: etcd
           role: psql
       spec:
+        serviceAccountName: patroni-etcd
         containers:
         - image: quay.io/coreos/etcd:v3.5.4
           # can also be gcr.io/etcd-development/etcd
@@ -122,27 +289,27 @@ items:
               valueFrom:
                 secretKeyRef:
                   key: bucketName
-                  name: backup-restore-sidecar-backup-provider-config
+                  name: etcd-backup-restore-s3-config
             - name: BACKUP_RESTORE_SIDECAR_S3_ENDPOINT
               valueFrom:
                 secretKeyRef:
                   key: endpoint
-                  name: backup-restore-sidecar-backup-provider-config
+                  name: etcd-backup-restore-s3-config
             - name: BACKUP_RESTORE_SIDECAR_S3_REGION
               valueFrom:
                 secretKeyRef:
                   key: region
-                  name: backup-restore-sidecar-backup-provider-config
+                  name: etcd-backup-restore-s3-config
             - name: BACKUP_RESTORE_SIDECAR_S3_ACCESS_KEY
               valueFrom:
                 secretKeyRef:
                   key: access-key
-                  name: backup-restore-sidecar-backup-provider-config
+                  name: etcd-backup-restore-s3-config
             - name: BACKUP_RESTORE_SIDECAR_S3_SECRET_KEY
               valueFrom:
                 secretKeyRef:
                   key: secret-key
-                  name: backup-restore-sidecar-backup-provider-config
+                  name: etcd-backup-restore-s3-config
           command:
           - tini
           - --
@@ -198,7 +365,7 @@ items:
       name: etcd
       role: psql
     name: backup-restore-sidecar-svc
-    namespace: ft-etcd-psql
+    namespace: postgreslet-system
   spec:
     ports:
     - name: metrics
@@ -220,7 +387,7 @@ items:
       name: etcd
       role: psql
     name: etcd-psql
-    namespace: ft-etcd-psql
+    namespace: postgreslet-system
   spec:
     ports:
     - name: client
@@ -246,7 +413,7 @@ items:
       name: etcd
       role: psql
     name: etcd-psql-headless
-    namespace: ft-etcd-psql
+    namespace: postgreslet-system
   spec:
     clusterIP: None
     clusterIPs:
@@ -273,7 +440,7 @@ items:
 #       app: etcd-psql-svcm
 #       release: prometheus
 #     name: etcd-psql-svcm
-#     namespace: ft-etcd-psql
+#     namespace: postgreslet-system
 #   spec:
 #     endpoints:
 #       - port: client
@@ -290,7 +457,7 @@ items:
 #       app: backup-restore-sidecar-svcm
 #       release: prometheus
 #     name: backup-restore-sidecar-svcm
-#     namespace: ft-etcd-psql
+#     namespace: postgreslet-system
 #   spec:
 #     endpoints:
 #       - port: metrics
