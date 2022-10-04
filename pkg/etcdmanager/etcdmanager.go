@@ -120,6 +120,16 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 		return fmt.Errorf("error while setting the namespace of the `client.Object` to %v: %w", namespace, err)
 	}
 
+	// add common labels
+	labels, err := m.Labels(obj)
+	if err == nil {
+		labels[pg.PartitionIDLabelName] = m.options.PartitionID
+		labels[pg.ManagedByLabelName] = pg.ManagedByLabelValue
+		if err := m.SetLabels(obj, labels); err != nil {
+			return fmt.Errorf("error while setting the labels of the `client.Object` to %v: %w", labels, err)
+		}
+	}
+
 	// generate a proper object key for each object
 	key, err := m.toObjectKey(obj, namespace)
 	if err != nil {
@@ -273,8 +283,6 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 
 		m.log.Info("Updating labels")
 		// Add partition ID label
-		v.ObjectMeta.Labels[pg.PartitionIDLabelName] = m.options.PartitionID
-		v.ObjectMeta.Labels[pg.ManagedByLabelName] = pg.ManagedByLabelValue
 		v.Spec.Template.ObjectMeta.Labels[pg.PartitionIDLabelName] = m.options.PartitionID
 		v.Spec.Template.ObjectMeta.Labels[pg.ManagedByLabelName] = pg.ManagedByLabelValue
 		v.Spec.Template.ObjectMeta.Labels["instance"] = stsName
