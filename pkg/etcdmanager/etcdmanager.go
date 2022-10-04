@@ -262,6 +262,10 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 					if env.ValueFrom != nil && env.ValueFrom.SecretKeyRef != nil {
 						env.ValueFrom.SecretKeyRef.Name = m.options.SecretKeyRefName
 					}
+				case "ETCD_ADVERTISE_CLIENT_URLS":
+					env.Value = "http://" + svcHeadlessName + "." + namespace + ".svc.cluster.local:2379,http://" + svcName + "." + namespace + ".svc.cluster.local:2379"
+				case "ETCD_INITIAL_ADVERTISE_PEER_URLS":
+					env.Value = "http://" + svcHeadlessName + "." + namespace + ".svc.cluster.local:2380"
 				}
 			}
 		}
