@@ -157,7 +157,7 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 		v.ObjectMeta.Name = saName
 
 		// Use the updated name to get the resource
-		key.Name = saName
+		key.Name = v.ObjectMeta.Name
 		err = m.Get(ctx, key, &corev1.ServiceAccount{})
 
 	case *rbacv1.Role:
@@ -183,7 +183,7 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 		}
 
 		// Use the updated name to get the resource
-		key.Name = roleName
+		key.Name = v.ObjectMeta.Name
 		err = m.Get(ctx, key, &rbacv1.Role{})
 
 	case *rbacv1.RoleBinding:
@@ -204,7 +204,7 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 		}
 
 		// Use the updated name to get the resource
-		key.Name = rbName
+		key.Name = v.ObjectMeta.Name
 		err = m.Get(ctx, key, &rbacv1.RoleBinding{})
 
 	case *corev1.ConfigMap:
@@ -216,7 +216,7 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 		m.editConfigMap(v, namespace, m.options)
 
 		// Use the updated name to get the resource
-		key.Name = cmName
+		key.Name = v.ObjectMeta.Name
 		err = m.Get(ctx, key, &corev1.ConfigMap{})
 
 	case *appsv1.StatefulSet:
@@ -305,7 +305,7 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 
 		got := appsv1.StatefulSet{}
 		// Use the updated name to get the resource
-		key.Name = stsName
+		key.Name = v.ObjectMeta.Name
 		err = m.Get(ctx, key, &got)
 		if err == nil {
 			// Copy the ResourceVersion
@@ -334,6 +334,7 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 		v.Spec.Selector["instance"] = stsName
 
 		got := corev1.Service{}
+		key.Name = v.ObjectMeta.Name
 		err = m.Get(ctx, key, &got)
 		if err == nil {
 			// Copy the ResourceVersion
