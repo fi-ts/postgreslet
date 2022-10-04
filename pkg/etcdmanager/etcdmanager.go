@@ -257,8 +257,6 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 
 				m.log.Info("Updating etcd backup sidecar image")
 				v.Spec.Template.Spec.InitContainers[i].Image = m.options.EtcdBackupSidecarImage
-
-				// TODO update configMap name
 			}
 		}
 
@@ -275,12 +273,15 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 		m.log.Info("Updating labels")
 		// Add partition ID label
 		v.ObjectMeta.Labels[pg.PartitionIDLabelName] = m.options.PartitionID
+		v.ObjectMeta.Labels[pg.ManagedByLabelName] = pg.ManagedByLabelValue
 		v.Spec.Template.ObjectMeta.Labels[pg.PartitionIDLabelName] = m.options.PartitionID
+		v.Spec.Template.ObjectMeta.Labels[pg.ManagedByLabelName] = pg.ManagedByLabelValue
 		v.Spec.Template.ObjectMeta.Labels["instance"] = stsName
 
 		m.log.Info("Updating selector")
 		// spec.selector.matchLabels
 		v.Spec.Selector.MatchLabels[pg.PartitionIDLabelName] = m.options.PartitionID
+		v.Spec.Selector.MatchLabels[pg.ManagedByLabelName] = pg.ManagedByLabelValue
 		v.Spec.Selector.MatchLabels["instance"] = stsName
 
 		m.log.Info("Updating serviceName")
