@@ -308,6 +308,10 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 		// spec.serviceName
 		v.Spec.ServiceName = stsName + "-client"
 
+		m.log.Info("Updating serviceAccountName")
+		// spec.serviceName
+		v.Spec.Template.Spec.ServiceAccountName = saName
+
 		got := appsv1.StatefulSet{}
 		// Use the updated name to get the resource
 		key.Name = v.ObjectMeta.Name
