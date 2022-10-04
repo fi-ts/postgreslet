@@ -228,7 +228,7 @@ func main() {
 	viper.SetDefault(etcdBackupSecretNameFlg, "etcd-backup-restore-s3-config") // TODO remove
 	etcdBackupSecretName = viper.GetString(etcdBackupSecretNameFlg)
 
-	viper.SetDefault(etcdPSPNameFlg, "postgres-operator-psp")
+	viper.SetDefault(etcdPSPNameFlg, pspName)
 	etcdPSPName = viper.GetString(etcdPSPNameFlg)
 
 	viper.SetDefault(postgresletFullnameFlg, partitionID) // fall back to partition id
