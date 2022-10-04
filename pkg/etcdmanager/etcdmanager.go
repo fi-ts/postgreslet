@@ -237,7 +237,8 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 
 			m.log.Info("Updating envs")
 			// Patch Env
-			for _, env := range v.Spec.Template.Spec.Containers[i].Env {
+			for j, env := range v.Spec.Template.Spec.Containers[i].Env {
+				j := j
 				env := env
 				switch env.Name {
 				// case "ETCD_ADVERTISE_CLIENT_URLS": // TODO
@@ -263,9 +264,9 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 						env.ValueFrom.SecretKeyRef.Name = m.options.SecretKeyRefName
 					}
 				case "ETCD_ADVERTISE_CLIENT_URLS":
-					env.Value = "http://" + svcHeadlessName + "." + namespace + ".svc.cluster.local:2379,http://" + svcName + "." + namespace + ".svc.cluster.local:2379"
+					v.Spec.Template.Spec.Containers[i].Env[j].Value = "http://" + svcHeadlessName + "." + namespace + ".svc.cluster.local:2379,http://" + svcName + "." + namespace + ".svc.cluster.local:2379"
 				case "ETCD_INITIAL_ADVERTISE_PEER_URLS":
-					env.Value = "http://" + svcHeadlessName + "." + namespace + ".svc.cluster.local:2380"
+					v.Spec.Template.Spec.Containers[i].Env[j].Value = "http://" + svcHeadlessName + "." + namespace + ".svc.cluster.local:2380"
 				}
 			}
 		}
