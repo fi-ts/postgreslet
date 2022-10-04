@@ -123,6 +123,9 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 	// add common labels
 	labels, err := m.Labels(obj)
 	if err == nil {
+		if nil == labels {
+			labels = map[string]string{}
+		}
 		labels[pg.PartitionIDLabelName] = m.options.PartitionID
 		labels[pg.ManagedByLabelName] = pg.ManagedByLabelValue
 		if err := m.SetLabels(obj, labels); err != nil {
