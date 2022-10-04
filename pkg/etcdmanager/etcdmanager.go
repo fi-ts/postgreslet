@@ -141,6 +141,9 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 	roleName := stsName
 	rbName := stsName
 	cmName := stsName
+	svcName := stsName
+	svcHeadlessName := svcName + "-headless"
+	svcSidecarName := svcName + "-sidecar"
 
 	// perform different modifications on the parsed objects based on their kind
 	switch v := obj.(type) {
@@ -309,6 +312,24 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 
 	case *corev1.Service:
 		m.log.Info("handling Service")
+
+		m.log.Info("Updating name")
+		switch v.ObjectMeta.Name {
+		case "backup-restore-sidecar-svc":
+			v.ObjectMeta.Name = svcSidecarName
+		case "etcd-psql-headless":
+			v.ObjectMeta.Name = svcHeadlessName
+		case "etcd-psql":
+			v.ObjectMeta.Name = svcName
+		default:
+			return fmt.Errorf("unknown service name: %v", v.ObjectMeta.Name)
+		}
+
+		m.log.Info("Updating selector")
+		v.Spec.Selector[pg.PartitionIDLabelName] = m.options.PartitionID
+		v.Spec.Selector[pg.ManagedByLabelName] = pg.ManagedByLabelValue
+		v.Spec.Selector["instance"] = stsName
+
 		got := corev1.Service{}
 		err = m.Get(ctx, key, &got)
 		if err == nil {
@@ -317,8 +338,6 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 			// Copy the ClusterIP
 			v.Spec.ClusterIP = got.Spec.ClusterIP
 		}
-
-		// TODO rename services!!!
 
 	default:
 		return errs.New("unknown `client.Object`")
