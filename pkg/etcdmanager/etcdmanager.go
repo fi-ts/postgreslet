@@ -34,6 +34,7 @@ type Options struct {
 	PartitionID            string
 	SecretKeyRefName       string
 	PSPName                string
+	PostgresletFullname    string
 }
 
 // OperatorManager manages the operator
@@ -125,7 +126,7 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 		return fmt.Errorf("error while making the object key: %w", err)
 	}
 
-	stsName := "etcd-" + m.options.PartitionID
+	stsName := "etcd-" + m.options.PostgresletFullname
 	saName := stsName
 	roleName := stsName
 	rbName := stsName
