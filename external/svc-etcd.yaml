@@ -177,6 +177,7 @@ items:
     namespace: postgreslet-system
   data:
     config.yaml: |
+      # SAMPLE VALUES, WILL BE OVERWRITTEN
       db: etcd
       db-data-directory: /data/etcd/
       backup-provider: s3

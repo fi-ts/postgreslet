@@ -213,7 +213,12 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 		m.log.Info("Updating name")
 		v.ObjectMeta.Name = cmName
 
-		m.editConfigMap(v, namespace, m.options)
+		v.Data["config.yaml"] = "object-prefix: " + m.options.PartitionID + `
+		db: etcd
+		db-data-directory: /data/etcd/
+		backup-provider: s3
+		backup-cron-schedule: "*/1 * * * *"
+		compression-method: tarlz4`
 
 		// Use the updated name to get the resource
 		key.Name = v.ObjectMeta.Name
@@ -241,8 +246,6 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 				j := j
 				env := env
 				switch env.Name {
-				// case "ETCD_ADVERTISE_CLIENT_URLS": // TODO
-				// case "ETCD_INITIAL_ADVERTISE_PEER_URLS": // TODO
 				case "BACKUP_RESTORE_SIDECAR_S3_BUCKET_NAME":
 					if env.ValueFrom != nil && env.ValueFrom.SecretKeyRef != nil {
 						env.ValueFrom.SecretKeyRef.Name = m.options.SecretKeyRefName
@@ -378,12 +381,6 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 	}
 
 	return nil
-}
-
-// editConfigMap adds info to cm
-func (m *EtcdManager) editConfigMap(cm *corev1.ConfigMap, namespace string, options Options) {
-	// cm.Data["key"] = options.Value
-
 }
 
 // ensureCleanMetadata ensures obj has clean metadata
