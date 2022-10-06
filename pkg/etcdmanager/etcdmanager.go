@@ -220,7 +220,7 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 		configYaml.WriteString("backup-provider: s3\n")
 		configYaml.WriteString("backup-cron-schedule: \"*/1 * * * *\"\n")
 		configYaml.WriteString("object-prefix: " + m.options.PartitionID + "\n")
-		configYaml.WriteString("compression-method: tarlz4`\n")
+		configYaml.WriteString("compression-method: tarlz4\n")
 		v.Data["config.yaml"] = configYaml.String()
 
 		// Use the updated name to get the resource
