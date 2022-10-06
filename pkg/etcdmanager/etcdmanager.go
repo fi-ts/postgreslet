@@ -11,6 +11,7 @@ import (
 	errs "errors"
 	"fmt"
 	"os"
+	"strings"
 
 	pg "github.com/fi-ts/postgreslet/api/v1"
 	"github.com/go-logr/logr"
@@ -213,12 +214,14 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 		m.log.Info("Updating name")
 		v.ObjectMeta.Name = cmName
 
-		v.Data["config.yaml"] = "object-prefix: " + m.options.PartitionID + `
-db: etcd
-db-data-directory: /data/etcd/
-backup-provider: s3
-backup-cron-schedule: "*/1 * * * *"
-compression-method: tarlz4`
+		var configYaml strings.Builder
+		configYaml.WriteString("db: etcd\n")
+		configYaml.WriteString("db-data-directory: /data/etcd/\n")
+		configYaml.WriteString("backup-provider: s3\n")
+		configYaml.WriteString("backup-cron-schedule: \"*/1 * * * *\"\n")
+		configYaml.WriteString("object-prefix: " + m.options.PartitionID + "\n")
+		configYaml.WriteString("compression-method: tarlz4`\n")
+		v.Data["config.yaml"] = configYaml.String()
 
 		// Use the updated name to get the resource
 		key.Name = v.ObjectMeta.Name
