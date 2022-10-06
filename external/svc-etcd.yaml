@@ -225,6 +225,8 @@ items:
             value: http://etcd-psql-headless.ft-etcd-psql.svc.cluster.local:2380
           - name: ETCD_LISTEN_PEER_URLS
             value: http://0.0.0.0:2380
+          - name: ETCD_INITIAL_CLUSTER
+            value: default=http://etcd-psql-headless.ft-etcd-psql.svc.cluster.local:2380
           name: etcd
           command:
           - tini

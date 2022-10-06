@@ -264,6 +264,8 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 					v.Spec.Template.Spec.Containers[i].Env[j].Value = "http://" + svcHeadlessName + "." + namespace + ".svc.cluster.local:2379,http://" + svcName + "." + namespace + ".svc.cluster.local:2379"
 				case "ETCD_INITIAL_ADVERTISE_PEER_URLS":
 					v.Spec.Template.Spec.Containers[i].Env[j].Value = "http://" + svcHeadlessName + "." + namespace + ".svc.cluster.local:2380"
+				case "ETCD_INITIAL_CLUSTER":
+					v.Spec.Template.Spec.Containers[i].Env[j].Value = "default=http://" + svcHeadlessName + "." + namespace + ".svc.cluster.local:2380"
 				}
 			}
 		}
