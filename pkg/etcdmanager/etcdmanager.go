@@ -213,8 +213,7 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 		m.log.Info("Updating name")
 		v.ObjectMeta.Name = cmName
 
-		v.Data["config.yaml"] = "object-prefix: " + m.options.PartitionID + `
-		db: etcd
+		v.Data["config.yaml"] = "object-prefix: " + m.options.PartitionID + "\n" + `db: etcd
 		db-data-directory: /data/etcd/
 		backup-provider: s3
 		backup-cron-schedule: "*/1 * * * *"
