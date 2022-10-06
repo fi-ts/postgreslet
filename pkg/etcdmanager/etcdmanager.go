@@ -241,9 +241,12 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 				j := j
 				env := env
 				switch env.Name {
+				// case "ETCD_ADVERTISE_CLIENT_URLS": // TODO
+				// case "ETCD_INITIAL_ADVERTISE_PEER_URLS": // TODO
 				case "BACKUP_RESTORE_SIDECAR_S3_BUCKET_NAME":
-					v.Spec.Template.Spec.Containers[i].Env[j].ValueFrom = nil
-					v.Spec.Template.Spec.Containers[i].Env[j].Value = m.options.PartitionID
+					if env.ValueFrom != nil && env.ValueFrom.SecretKeyRef != nil {
+						env.ValueFrom.SecretKeyRef.Name = m.options.SecretKeyRefName
+					}
 				case "BACKUP_RESTORE_SIDECAR_S3_ENDPOINT":
 					if env.ValueFrom != nil && env.ValueFrom.SecretKeyRef != nil {
 						env.ValueFrom.SecretKeyRef.Name = m.options.SecretKeyRefName
