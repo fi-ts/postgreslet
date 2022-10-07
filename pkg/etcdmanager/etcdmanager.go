@@ -27,6 +27,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+const (
+	// EtcdComponentLabelName Name of the managed-by label
+	EtcdComponentLabelName string = "postgres.database.fits.cloud/component"
+	// EtcdComponentLabelValue Value of the managed-by label
+	EtcdComponentLabelValue string = "etcd-for-postgreslet"
+)
+
 // Options
 type Options struct {
 	EtcdImage              string
@@ -129,6 +136,7 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 		}
 		labels[pg.PartitionIDLabelName] = m.options.PartitionID
 		labels[pg.ManagedByLabelName] = pg.ManagedByLabelValue
+		labels[EtcdComponentLabelName] = EtcdComponentLabelValue
 		if err := m.SetLabels(obj, labels); err != nil {
 			return fmt.Errorf("error while setting the labels of the `client.Object` to %v: %w", labels, err)
 		}
@@ -425,6 +433,7 @@ func (m *EtcdManager) UninstallEtcd() error {
 	matchingLabels := client.MatchingLabels{
 		pg.PartitionIDLabelName: m.options.PartitionID,
 		pg.ManagedByLabelName:   pg.ManagedByLabelValue,
+		EtcdComponentLabelName:  EtcdComponentLabelValue,
 	}
 	deleteAllOpts := []client.DeleteAllOfOption{
 		client.InNamespace(m.options.PostgresletNamespace),
