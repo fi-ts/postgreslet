@@ -31,7 +31,7 @@ const (
 	// EtcdComponentLabelName Name of the managed-by label
 	EtcdComponentLabelName string = "postgres.database.fits.cloud/component"
 	// EtcdComponentLabelValue Value of the managed-by label
-	EtcdComponentLabelValue string = "etcd-for-postgreslet"
+	EtcdComponentLabelValue string = "etcd"
 )
 
 // Options
