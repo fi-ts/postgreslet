@@ -317,10 +317,12 @@ func main() {
 	if enableEtcd {
 		if err = etcdMgr.InstallOrUpdateEtcd(); err != nil {
 			setupLog.Error(err, "unable to deploy etcd")
-			os.Exit(1)
+			os.Exit(1) // TODO should we really exit here?
 		}
-		// } else {
-		// TODO remove
+	} else {
+		if err = etcdMgr.UninstallEtcd(); err != nil {
+			setupLog.Error(err, "unable to undeploy etcd")
+		}
 	}
 
 	var opMgrOpts operatormanager.Options = operatormanager.Options{

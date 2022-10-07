@@ -417,3 +417,61 @@ func (m *EtcdManager) toObjectKey(obj runtime.Object, namespace string) (client.
 		Name:      name,
 	}, nil
 }
+
+func (m *EtcdManager) UninstallEtcd() error {
+
+	ctx := context.Background()
+
+	matchingLabels := client.MatchingLabels{
+		pg.PartitionIDLabelName: m.options.PartitionID,
+		pg.ManagedByLabelName:   pg.ManagedByLabelValue,
+	}
+	deleteAllOpts := []client.DeleteAllOfOption{
+		client.InNamespace(m.options.PostgresletNamespace),
+		matchingLabels,
+	}
+
+	// ServiceAccount
+	if err := m.Client.DeleteAllOf(ctx, &corev1.ServiceAccount{}, deleteAllOpts...); err != nil {
+		if !errors.IsNotFound(err) {
+			m.log.Error(err, "Could not delete ServiceAccount")
+		}
+	}
+
+	// Role
+	if err := m.Client.DeleteAllOf(ctx, &rbacv1.Role{}, deleteAllOpts...); err != nil {
+		if !errors.IsNotFound(err) {
+			m.log.Error(err, "Could not delete Role")
+		}
+	}
+
+	// RoleBinding
+	if err := m.Client.DeleteAllOf(ctx, &rbacv1.RoleBinding{}, deleteAllOpts...); err != nil {
+		if !errors.IsNotFound(err) {
+			m.log.Error(err, "Could not delete RoleBinding")
+		}
+	}
+
+	// ConfigMap
+	if err := m.Client.DeleteAllOf(ctx, &corev1.ConfigMap{}, deleteAllOpts...); err != nil {
+		if !errors.IsNotFound(err) {
+			m.log.Error(err, "Could not delete ConfigMap")
+		}
+	}
+
+	// StatefulSet
+	if err := m.Client.DeleteAllOf(ctx, &appsv1.StatefulSet{}, deleteAllOpts...); err != nil {
+		if !errors.IsNotFound(err) {
+			m.log.Error(err, "Could not delete StatefulSet")
+		}
+	}
+
+	// Service
+	if err := m.Client.DeleteAllOf(ctx, &corev1.Service{}, deleteAllOpts...); err != nil {
+		if !errors.IsNotFound(err) {
+			m.log.Error(err, "Could not delete Service")
+		}
+	}
+
+	return nil
+}
