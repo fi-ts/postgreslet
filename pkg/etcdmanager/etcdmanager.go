@@ -312,12 +312,14 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 		// Add partition ID label
 		v.Spec.Template.ObjectMeta.Labels[pg.PartitionIDLabelName] = m.options.PartitionID
 		v.Spec.Template.ObjectMeta.Labels[pg.ManagedByLabelName] = pg.ManagedByLabelValue
+		v.Spec.Template.ObjectMeta.Labels[EtcdComponentLabelName] = EtcdComponentLabelValue
 		v.Spec.Template.ObjectMeta.Labels["instance"] = stsName
 
 		m.log.Info("Updating selector")
 		// spec.selector.matchLabels
 		v.Spec.Selector.MatchLabels[pg.PartitionIDLabelName] = m.options.PartitionID
 		v.Spec.Selector.MatchLabels[pg.ManagedByLabelName] = pg.ManagedByLabelValue
+		v.Spec.Selector.MatchLabels[EtcdComponentLabelName] = EtcdComponentLabelValue
 		v.Spec.Selector.MatchLabels["instance"] = stsName
 
 		m.log.Info("Updating serviceName")
