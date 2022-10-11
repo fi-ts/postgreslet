@@ -61,7 +61,7 @@ const (
 	patroniRetryTimeoutFlg         = "patroni-retry-timeout"
 	enableStandbyLeaderSelectorFlg = "enable-standby-leader-selector"
 	ControlPlaneNamespaceFlg       = "control-plane-namespace"
-	enableEtcdFlg                  = "enable-etcd"
+	deployEtcdFlg                  = "deploy-etcd"
 	etcdImageFlg                   = "etcd-image"
 	etcdBackupSidecarImageFlg      = "etcd-backup-sidecar-image"
 	etcdBackupSecretNameFlg        = "etcd-backup-secret-name" // nolint
@@ -112,7 +112,7 @@ func main() {
 		enableNetPol                bool
 		enablePodAntiaffinity       bool
 		enableStandbyLeaderSelector bool
-		enableEtcd                  bool
+		deployEtcd                  bool
 
 		portRangeStart int
 		portRangeSize  int
@@ -220,8 +220,8 @@ func main() {
 	viper.SetDefault(ControlPlaneNamespaceFlg, "metal-extension-postgres")
 	controlPlaneNamespace = viper.GetString(ControlPlaneNamespaceFlg)
 
-	viper.SetDefault(enableEtcdFlg, false)
-	enableEtcd = viper.GetBool(enableEtcdFlg)
+	viper.SetDefault(deployEtcdFlg, false)
+	deployEtcd = viper.GetBool(deployEtcdFlg)
 
 	etcdImage = viper.GetString(etcdImageFlg)
 	etcdBackupSidecarImage = viper.GetString(etcdBackupSidecarImageFlg)
@@ -262,7 +262,7 @@ func main() {
 		patroniRetryTimeoutFlg, patroniRetryTimeout,
 		enableStandbyLeaderSelectorFlg, enableStandbyLeaderSelector,
 		ControlPlaneNamespaceFlg, controlPlaneNamespace,
-		enableEtcdFlg, enableEtcd,
+		deployEtcdFlg, deployEtcd,
 		etcdImageFlg, etcdImage,
 		etcdBackupSidecarImageFlg, etcdBackupSidecarImage,
 		etcdBackupSecretNameFlg, etcdBackupSecretName,
@@ -314,7 +314,7 @@ func main() {
 		setupLog.Error(err, "unable to create `EtcdManager`")
 		os.Exit(1)
 	}
-	if enableEtcd {
+	if deployEtcd {
 		if err = etcdMgr.InstallOrUpdateEtcd(); err != nil {
 			setupLog.Error(err, "unable to deploy etcd")
 			os.Exit(1) // TODO should we really exit here?
