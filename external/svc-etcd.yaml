@@ -7,11 +7,19 @@ items:
 - kind: ServiceAccount
   apiVersion: v1
   metadata:
+    labels:
+      postgres.database.fits.cloud/partition-id: sample
+      postgres.database.fits.cloud/managed-by: postgreslet
+      postgres.database.fits.cloud/component: etcd
     name: patroni-etcd
     namespace: postgreslet-system
 - kind: Role
   apiVersion: rbac.authorization.k8s.io/v1
   metadata:
+    labels:
+      postgres.database.fits.cloud/partition-id: sample
+      postgres.database.fits.cloud/managed-by: postgreslet
+      postgres.database.fits.cloud/component: etcd
     name: patroni-etcd
     namespace: postgreslet-system
   rules:
@@ -160,6 +168,10 @@ items:
 - kind: RoleBinding
   apiVersion: rbac.authorization.k8s.io/v1
   metadata:
+    labels:
+      postgres.database.fits.cloud/partition-id: sample
+      postgres.database.fits.cloud/managed-by: postgreslet
+      postgres.database.fits.cloud/component: etcd
     name: patroni-etcd
     namespace: postgreslet-system
   roleRef:
@@ -173,6 +185,10 @@ items:
 - kind: ConfigMap
   apiVersion: v1
   metadata:
+    labels:
+      postgres.database.fits.cloud/partition-id: sample
+      postgres.database.fits.cloud/managed-by: postgreslet
+      postgres.database.fits.cloud/component: etcd
     name: backup-restore-sidecar-config-etcd
     namespace: postgreslet-system
   data:
@@ -188,10 +204,9 @@ items:
   apiVersion: apps/v1
   metadata:
     labels:
-      app: etcd-statefulset
-      instance: etcd-psql
-      name: etcd
-      role: psql
+      postgres.database.fits.cloud/partition-id: sample
+      postgres.database.fits.cloud/managed-by: postgreslet
+      postgres.database.fits.cloud/component: etcd
     name: etcd-psql
     namespace: postgreslet-system
   spec:
@@ -200,16 +215,18 @@ items:
     revisionHistoryLimit: 10
     selector:
       matchLabels:
-        instance: etcd-psql
-        name: etcd
+        postgres.database.fits.cloud/partition-id: sample
+        postgres.database.fits.cloud/managed-by: postgreslet
+        postgres.database.fits.cloud/component: etcd
+        postgres.database.fits.cloud/name: etcd-psql
     serviceName: etcd-psql-client
     template:
       metadata:
         labels:
-          app: etcd-statefulset
-          instance: etcd-psql
-          name: etcd
-          role: psql
+          postgres.database.fits.cloud/partition-id: sample
+          postgres.database.fits.cloud/managed-by: postgreslet
+          postgres.database.fits.cloud/component: etcd
+          postgres.database.fits.cloud/name: etcd-psql
       spec:
         serviceAccountName: patroni-etcd
         containers:
@@ -363,10 +380,9 @@ items:
   apiVersion: v1
   metadata:
     labels:
-      app: backup-restore-sidecar-svc
-      instance: etcd-psql
-      name: etcd
-      role: psql
+      postgres.database.fits.cloud/partition-id: sample
+      postgres.database.fits.cloud/managed-by: postgreslet
+      postgres.database.fits.cloud/component: etcd
     name: backup-restore-sidecar-svc
     namespace: postgreslet-system
   spec:
@@ -376,19 +392,19 @@ items:
       protocol: TCP
       targetPort: 2112
     selector:
-      app: etcd-statefulset
-      instance: etcd-psql
-      name: etcd
+      postgres.database.fits.cloud/partition-id: sample
+      postgres.database.fits.cloud/managed-by: postgreslet
+      postgres.database.fits.cloud/component: etcd
+      postgres.database.fits.cloud/name: etcd-psql
     sessionAffinity: None
     type: ClusterIP
 - kind: Service
   apiVersion: v1
   metadata:
     labels:
-      app: etcd-psql-svc
-      instance: etcd-psql
-      name: etcd
-      role: psql
+      postgres.database.fits.cloud/partition-id: sample
+      postgres.database.fits.cloud/managed-by: postgreslet
+      postgres.database.fits.cloud/component: etcd
     name: etcd-psql
     namespace: postgreslet-system
   spec:
@@ -402,19 +418,19 @@ items:
       protocol: TCP
       targetPort: server
     selector:
-      app: etcd-statefulset
-      instance: etcd-psql
-      name: etcd
+      postgres.database.fits.cloud/partition-id: sample
+      postgres.database.fits.cloud/managed-by: postgreslet
+      postgres.database.fits.cloud/component: etcd
+      postgres.database.fits.cloud/name: etcd-psql
     sessionAffinity: None
     type: ClusterIP
 - kind: Service
   apiVersion: v1
   metadata:
     labels:
-      app: etcd-psql-svc
-      instance: etcd-psql
-      name: etcd
-      role: psql
+      postgres.database.fits.cloud/partition-id: sample
+      postgres.database.fits.cloud/managed-by: postgreslet
+      postgres.database.fits.cloud/component: etcd
     name: etcd-psql-headless
     namespace: postgreslet-system
   spec:
@@ -432,8 +448,10 @@ items:
       targetPort: server
     publishNotReadyAddresses: true
     selector:
-      instance: etcd-psql
-      name: etcd
+      postgres.database.fits.cloud/partition-id: sample
+      postgres.database.fits.cloud/managed-by: postgreslet
+      postgres.database.fits.cloud/component: etcd
+      postgres.database.fits.cloud/name: etcd-psql
     sessionAffinity: None
     type: ClusterIP
 # - kind: ServiceMonitor

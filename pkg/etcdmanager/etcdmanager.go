@@ -135,7 +135,7 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 			labels = map[string]string{}
 		}
 		labels[pg.PartitionIDLabelName] = m.options.PartitionID
-		labels[pg.ManagedByLabelName] = pg.ManagedByLabelValue
+		labels[pg.ManagedByLabelName] = m.options.PostgresletFullname
 		labels[EtcdComponentLabelName] = EtcdComponentLabelValue
 		if err := m.SetLabels(obj, labels); err != nil {
 			return fmt.Errorf("error while setting the labels of the `client.Object` to %v: %w", labels, err)
@@ -311,16 +311,16 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 		m.log.Info("Updating labels")
 		// Add partition ID label
 		v.Spec.Template.ObjectMeta.Labels[pg.PartitionIDLabelName] = m.options.PartitionID
-		v.Spec.Template.ObjectMeta.Labels[pg.ManagedByLabelName] = pg.ManagedByLabelValue
+		v.Spec.Template.ObjectMeta.Labels[pg.ManagedByLabelName] = m.options.PostgresletFullname
 		v.Spec.Template.ObjectMeta.Labels[EtcdComponentLabelName] = EtcdComponentLabelValue
-		v.Spec.Template.ObjectMeta.Labels["instance"] = stsName
+		v.Spec.Template.ObjectMeta.Labels[pg.NameLabelName] = stsName
 
 		m.log.Info("Updating selector")
 		// spec.selector.matchLabels
 		v.Spec.Selector.MatchLabels[pg.PartitionIDLabelName] = m.options.PartitionID
-		v.Spec.Selector.MatchLabels[pg.ManagedByLabelName] = pg.ManagedByLabelValue
+		v.Spec.Selector.MatchLabels[pg.ManagedByLabelName] = m.options.PostgresletFullname
 		v.Spec.Selector.MatchLabels[EtcdComponentLabelName] = EtcdComponentLabelValue
-		v.Spec.Selector.MatchLabels["instance"] = stsName
+		v.Spec.Selector.MatchLabels[pg.NameLabelName] = stsName
 
 		m.log.Info("Updating serviceName")
 		// spec.serviceName
