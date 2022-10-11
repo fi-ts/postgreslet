@@ -249,6 +249,7 @@ items:
       postgres.database.fits.cloud/partition-id: sample
       postgres.database.fits.cloud/managed-by: postgreslet
       postgres.database.fits.cloud/component: etcd
+      postgres.database.fits.cloud/name: backup-restore-sidecar-svc
     name: backup-restore-sidecar-svc
     namespace: postgreslet-system
   spec:
@@ -271,6 +272,7 @@ items:
       postgres.database.fits.cloud/partition-id: sample
       postgres.database.fits.cloud/managed-by: postgreslet
       postgres.database.fits.cloud/component: etcd
+      postgres.database.fits.cloud/name: etcd-psql
     name: etcd-psql
     namespace: postgreslet-system
   spec:
@@ -297,6 +299,7 @@ items:
       postgres.database.fits.cloud/partition-id: sample
       postgres.database.fits.cloud/managed-by: postgreslet
       postgres.database.fits.cloud/component: etcd
+      postgres.database.fits.cloud/name: etcd-psql-headless
     name: etcd-psql-headless
     namespace: postgreslet-system
   spec:
@@ -320,37 +323,3 @@ items:
       postgres.database.fits.cloud/name: etcd-psql
     sessionAffinity: None
     type: ClusterIP
-# - kind: ServiceMonitor
-#   apiVersion: monitoring.coreos.com/v1
-#   metadata:
-#     labels:
-#       app: etcd-psql-svcm
-#       release: prometheus
-#     name: etcd-psql-svcm
-#     namespace: postgreslet-system
-#   spec:
-#     endpoints:
-#       - port: client
-#     namespaceSelector:
-#       matchNames:
-#       - ft-etcd-psql
-#     selector:
-#       matchLabels:
-#         app: etcd-psql-svc
-# - kind: ServiceMonitor
-#   apiVersion: monitoring.coreos.com/v1
-#   metadata:
-#     labels:
-#       app: backup-restore-sidecar-svcm
-#       release: prometheus
-#     name: backup-restore-sidecar-svcm
-#     namespace: postgreslet-system
-#   spec:
-#     endpoints:
-#       - port: metrics
-#     namespaceSelector:
-#       matchNames:
-#       - ft-etcd-psql
-#     selector:
-#       matchLabels:
-#         app: backup-restore-sidecar-svc

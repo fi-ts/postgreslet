@@ -15,13 +15,16 @@ import (
 
 	pg "github.com/fi-ts/postgreslet/api/v1"
 	"github.com/go-logr/logr"
+	coreosv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
 	"k8s.io/utils/strings/slices"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -110,7 +113,12 @@ func (m *EtcdManager) InstallOrUpdateEtcd() error {
 		}
 	}
 
-	// TODO ServiceMonitors
+	if err := m.createOrUpdateServiceMonitor(ctx, "etcd-"+m.options.PostgresletFullname, "client"); err != nil {
+		m.log.Error(err, "Create/update of servicemonitor failed")
+	}
+	if err := m.createOrUpdateServiceMonitor(ctx, "etcd-"+m.options.PostgresletFullname+"-sidecar", "metrics"); err != nil {
+		m.log.Error(err, "Create/update of servicemonitor failed")
+	}
 
 	m.log.Info("etcd installed")
 	return nil
@@ -355,6 +363,9 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 			return fmt.Errorf("unknown service name: %v", v.ObjectMeta.Name)
 		}
 
+		m.log.Info("Updating labels")
+		v.ObjectMeta.Labels[pg.NameLabelName] = v.ObjectMeta.Name
+
 		m.log.Info("Updating selector")
 		v.Spec.Selector[pg.PartitionIDLabelName] = m.options.PartitionID
 		v.Spec.Selector[pg.ManagedByLabelName] = pg.ManagedByLabelValue
@@ -426,6 +437,67 @@ func (m *EtcdManager) toObjectKey(obj runtime.Object, namespace string) (client.
 		Namespace: namespace,
 		Name:      name,
 	}, nil
+}
+
+// createOrUpdateExporterSidecarServiceMonitor ensures the servicemonitors for the sidecars exist
+func (m *EtcdManager) createOrUpdateServiceMonitor(ctx context.Context, targetName string, targetEndpoint string) error {
+	ns := m.options.PostgresletNamespace
+	n := targetName + "-svcm"
+	sm := &coreosv1.ServiceMonitor{}
+
+	// TODO what's the correct name?
+	if err := m.SetName(sm, n); err != nil {
+		return fmt.Errorf("error while setting the name of the servicemonitor to %v: %w", ns, err)
+	}
+	if err := m.SetNamespace(sm, ns); err != nil {
+		return fmt.Errorf("error while setting the namespace of the servicemonitor to %v: %w", ns, err)
+	}
+	l := map[string]string{
+		pg.PartitionIDLabelName: m.options.PartitionID,
+		pg.ManagedByLabelName:   m.options.PostgresletFullname,
+		EtcdComponentLabelName:  EtcdComponentLabelValue,
+		pg.NameLabelName:        n,
+	}
+	if err := m.SetLabels(sm, l); err != nil {
+		return fmt.Errorf("error while setting the namespace of the servicemonitor to %v: %w", ns, err)
+	}
+
+	sm.Spec.Endpoints = []coreosv1.Endpoint{
+		{
+			Port: targetEndpoint,
+		},
+	}
+	sm.Spec.NamespaceSelector = coreosv1.NamespaceSelector{
+		MatchNames: []string{ns},
+	}
+	l[pg.NameLabelName] = targetName
+	sm.Spec.Selector = metav1.LabelSelector{
+		MatchLabels: l,
+	}
+
+	// try to fetch any existing service
+	nsn := types.NamespacedName{
+		Namespace: ns,
+		Name:      n,
+	}
+	old := &coreosv1.ServiceMonitor{}
+	if err := m.Get(ctx, nsn, old); err == nil {
+		// Copy the resource version
+		sm.ObjectMeta.ResourceVersion = old.ObjectMeta.ResourceVersion
+		if err := m.Update(ctx, sm); err != nil {
+			return fmt.Errorf("error while updating the servicemonitor: %w", err)
+		}
+		m.log.Info("servicemonitor updated")
+		return nil
+	}
+
+	// local servicemonitor does not exist, creating it
+	if err := m.Create(ctx, sm); err != nil {
+		return fmt.Errorf("error while creating the servicemonitor: %w", err)
+	}
+	m.log.Info("servicemonitor created")
+
+	return nil
 }
 
 func (m *EtcdManager) UninstallEtcd() error {
