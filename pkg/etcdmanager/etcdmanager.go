@@ -31,10 +31,10 @@ import (
 )
 
 const (
-	// EtcdComponentLabelName Name of the managed-by label
-	EtcdComponentLabelName string = "postgres.database.fits.cloud/component"
-	// EtcdComponentLabelValue Value of the managed-by label
-	EtcdComponentLabelValue string = "etcd"
+	// etcdComponentLabelName Name of the managed-by label
+	etcdComponentLabelName string = "postgres.database.fits.cloud/component"
+	// etcdComponentLabelValue Value of the managed-by label
+	etcdComponentLabelValue string = "etcd"
 )
 
 // Options
@@ -50,13 +50,13 @@ type Options struct {
 
 // OperatorManager manages the operator
 type EtcdManager struct {
-	client.Client
-	runtime.Decoder
-	list *corev1.List
-	log  logr.Logger
-	meta.MetadataAccessor
-	*runtime.Scheme
-	options Options
+	client           client.Client
+	decoder          runtime.Decoder
+	manifest         *corev1.List
+	log              logr.Logger
+	metadataAccessor meta.MetadataAccessor
+	scheme           *runtime.Scheme
+	options          Options
 }
 
 // New creates a new `OperatorManager`
@@ -76,18 +76,18 @@ func New(confRest *rest.Config, fileName string, scheme *runtime.Scheme, log log
 
 	// Convert to a list of YAMLs.
 	deserializer := serializer.NewCodecFactory(scheme).UniversalDeserializer()
-	list := &corev1.List{}
-	if _, _, err := deserializer.Decode(bb, nil, list); err != nil {
+	manifest := &corev1.List{}
+	if _, _, err := deserializer.Decode(bb, nil, manifest); err != nil {
 		return nil, fmt.Errorf("error while converting bytes to a list of yamls: %w", err)
 	}
 
 	log.Info("new `EtcdManager` created")
 	return &EtcdManager{
-		MetadataAccessor: meta.NewAccessor(),
-		Client:           client,
-		Decoder:          deserializer,
-		list:             list,
-		Scheme:           scheme,
+		metadataAccessor: meta.NewAccessor(),
+		client:           client,
+		decoder:          deserializer,
+		manifest:         manifest,
+		scheme:           scheme,
 		log:              log,
 		options:          opt,
 	}, nil
@@ -98,8 +98,8 @@ func (m *EtcdManager) InstallOrUpdateEtcd() error {
 	ctx := context.Background()
 
 	// Decode each YAML to `client.Object`, add the namespace to it and install it.
-	for _, item := range m.list.Items {
-		obj, _, err := m.Decoder.Decode(item.Raw, nil, nil)
+	for _, item := range m.manifest.Items {
+		obj, _, err := m.decoder.Decode(item.Raw, nil, nil)
 		if err != nil {
 			return fmt.Errorf("error while converting yaml to `client.Object`: %w", err)
 		}
@@ -114,10 +114,10 @@ func (m *EtcdManager) InstallOrUpdateEtcd() error {
 	}
 
 	if err := m.createOrUpdateServiceMonitor(ctx, "etcd-"+m.options.PostgresletFullname, "client"); err != nil {
-		m.log.Error(err, "Create/update of servicemonitor failed")
+		m.log.Error(err, "create/update of servicemonitor failed")
 	}
 	if err := m.createOrUpdateServiceMonitor(ctx, "etcd-"+m.options.PostgresletFullname+"-sidecar", "metrics"); err != nil {
-		m.log.Error(err, "Create/update of servicemonitor failed")
+		m.log.Error(err, "create/update of servicemonitor failed")
 	}
 
 	m.log.Info("etcd installed")
@@ -132,20 +132,20 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 	}
 
 	// use our current namespace, not the one from the YAML
-	if err := m.SetNamespace(obj, namespace); err != nil {
+	if err := m.metadataAccessor.SetNamespace(obj, namespace); err != nil {
 		return fmt.Errorf("error while setting the namespace of the `client.Object` to %v: %w", namespace, err)
 	}
 
 	// add common labels
-	labels, err := m.Labels(obj)
+	labels, err := m.metadataAccessor.Labels(obj)
 	if err == nil {
 		if nil == labels {
 			labels = map[string]string{}
 		}
 		labels[pg.PartitionIDLabelName] = m.options.PartitionID
 		labels[pg.ManagedByLabelName] = m.options.PostgresletFullname
-		labels[EtcdComponentLabelName] = EtcdComponentLabelValue
-		if err := m.SetLabels(obj, labels); err != nil {
+		labels[etcdComponentLabelName] = etcdComponentLabelValue
+		if err := m.metadataAccessor.SetLabels(obj, labels); err != nil {
 			return fmt.Errorf("error while setting the labels of the `client.Object` to %v: %w", labels, err)
 		}
 	}
@@ -170,16 +170,14 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 
 	case *corev1.ServiceAccount:
 		m.log.Info("handling ServiceAccount")
-		m.log.Info("Updating name")
 		v.ObjectMeta.Name = saName
 
 		// Use the updated name to get the resource
 		key.Name = v.ObjectMeta.Name
-		err = m.Get(ctx, key, &corev1.ServiceAccount{})
+		err = m.client.Get(ctx, key, &corev1.ServiceAccount{})
 
 	case *rbacv1.Role:
 		m.log.Info("handling Role")
-		m.log.Info("Updating name")
 		v.ObjectMeta.Name = roleName
 
 		m.log.Info("Updating psp")
@@ -201,12 +199,10 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 
 		// Use the updated name to get the resource
 		key.Name = v.ObjectMeta.Name
-		err = m.Get(ctx, key, &rbacv1.Role{})
+		err = m.client.Get(ctx, key, &rbacv1.Role{})
 
 	case *rbacv1.RoleBinding:
 		m.log.Info("handling RoleBinding")
-
-		m.log.Info("Updating name")
 		v.ObjectMeta.Name = rbName
 
 		m.log.Info("Updating roleRef")
@@ -222,12 +218,10 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 
 		// Use the updated name to get the resource
 		key.Name = v.ObjectMeta.Name
-		err = m.Get(ctx, key, &rbacv1.RoleBinding{})
+		err = m.client.Get(ctx, key, &rbacv1.RoleBinding{})
 
 	case *corev1.ConfigMap:
 		m.log.Info("handling ConfigMap")
-
-		m.log.Info("Updating name")
 		v.ObjectMeta.Name = cmName
 
 		var configYaml strings.Builder
@@ -241,12 +235,10 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 
 		// Use the updated name to get the resource
 		key.Name = v.ObjectMeta.Name
-		err = m.Get(ctx, key, &corev1.ConfigMap{})
+		err = m.client.Get(ctx, key, &corev1.ConfigMap{})
 
 	case *appsv1.StatefulSet:
 		m.log.Info("handling StatefulSet")
-
-		m.log.Info("Updating name")
 		v.ObjectMeta.Name = stsName
 
 		m.log.Info("Updating containers")
@@ -320,14 +312,14 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 		// Add partition ID label
 		v.Spec.Template.ObjectMeta.Labels[pg.PartitionIDLabelName] = m.options.PartitionID
 		v.Spec.Template.ObjectMeta.Labels[pg.ManagedByLabelName] = m.options.PostgresletFullname
-		v.Spec.Template.ObjectMeta.Labels[EtcdComponentLabelName] = EtcdComponentLabelValue
+		v.Spec.Template.ObjectMeta.Labels[etcdComponentLabelName] = etcdComponentLabelValue
 		v.Spec.Template.ObjectMeta.Labels[pg.NameLabelName] = stsName
 
 		m.log.Info("Updating selector")
 		// spec.selector.matchLabels
 		v.Spec.Selector.MatchLabels[pg.PartitionIDLabelName] = m.options.PartitionID
 		v.Spec.Selector.MatchLabels[pg.ManagedByLabelName] = m.options.PostgresletFullname
-		v.Spec.Selector.MatchLabels[EtcdComponentLabelName] = EtcdComponentLabelValue
+		v.Spec.Selector.MatchLabels[etcdComponentLabelName] = etcdComponentLabelValue
 		v.Spec.Selector.MatchLabels[pg.NameLabelName] = stsName
 
 		m.log.Info("Updating serviceName")
@@ -341,7 +333,7 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 		got := appsv1.StatefulSet{}
 		// Use the updated name to get the resource
 		key.Name = v.ObjectMeta.Name
-		err = m.Get(ctx, key, &got)
+		err = m.client.Get(ctx, key, &got)
 		if err == nil {
 			// Copy the ResourceVersion
 			m.log.Info("Copying existing resource version")
@@ -350,8 +342,6 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 
 	case *corev1.Service:
 		m.log.Info("handling Service")
-
-		m.log.Info("Updating name")
 		switch v.ObjectMeta.Name {
 		case "backup-restore-sidecar-svc":
 			v.ObjectMeta.Name = svcSidecarName
@@ -373,7 +363,7 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 
 		got := corev1.Service{}
 		key.Name = v.ObjectMeta.Name
-		err = m.Get(ctx, key, &got)
+		err = m.client.Get(ctx, key, &got)
 		if err == nil {
 			// Copy the ResourceVersion
 			v.ObjectMeta.ResourceVersion = got.ObjectMeta.ResourceVersion
@@ -388,7 +378,7 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// the object (with that objectKey) does not exist yet, so we create it
-			if err := m.Create(ctx, obj); err != nil {
+			if err := m.client.Create(ctx, obj); err != nil {
 				return fmt.Errorf("error while creating the `client.Object`: %w", err)
 			}
 			m.log.Info("new `client.Object` created")
@@ -400,7 +390,7 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 	}
 
 	// if we made it this far, the object already exists, so we just update it
-	if err := m.Update(ctx, obj); err != nil {
+	if err := m.client.Update(ctx, obj); err != nil {
 		return fmt.Errorf("error while updating the `client.Object`: %w", err)
 	}
 
@@ -410,17 +400,17 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 // ensureCleanMetadata ensures obj has clean metadata
 func (m *EtcdManager) ensureCleanMetadata(obj runtime.Object) error {
 	// Remove annotations.
-	if err := m.MetadataAccessor.SetAnnotations(obj, nil); err != nil {
+	if err := m.metadataAccessor.SetAnnotations(obj, nil); err != nil {
 		return fmt.Errorf("error while removing annotations of the read k8s resource: %w", err)
 	}
 
 	// Remove resourceVersion.
-	if err := m.MetadataAccessor.SetResourceVersion(obj, ""); err != nil {
+	if err := m.metadataAccessor.SetResourceVersion(obj, ""); err != nil {
 		return fmt.Errorf("error while removing resourceVersion of the read k8s resource: %w", err)
 	}
 
 	// Remove uid.
-	if err := m.MetadataAccessor.SetUID(obj, ""); err != nil {
+	if err := m.metadataAccessor.SetUID(obj, ""); err != nil {
 		return fmt.Errorf("error while removing uid of the read k8s resource: %w", err)
 	}
 
@@ -429,7 +419,7 @@ func (m *EtcdManager) ensureCleanMetadata(obj runtime.Object) error {
 
 // toObjectKey makes ObjectKey from namespace and the name of obj
 func (m *EtcdManager) toObjectKey(obj runtime.Object, namespace string) (client.ObjectKey, error) {
-	name, err := m.MetadataAccessor.Name(obj)
+	name, err := m.metadataAccessor.Name(obj)
 	if err != nil {
 		return client.ObjectKey{}, fmt.Errorf("error while extracting the name of the k8s resource: %w", err)
 	}
@@ -446,19 +436,19 @@ func (m *EtcdManager) createOrUpdateServiceMonitor(ctx context.Context, targetNa
 	sm := &coreosv1.ServiceMonitor{}
 
 	// TODO what's the correct name?
-	if err := m.SetName(sm, n); err != nil {
+	if err := m.metadataAccessor.SetName(sm, n); err != nil {
 		return fmt.Errorf("error while setting the name of the servicemonitor to %v: %w", ns, err)
 	}
-	if err := m.SetNamespace(sm, ns); err != nil {
+	if err := m.metadataAccessor.SetNamespace(sm, ns); err != nil {
 		return fmt.Errorf("error while setting the namespace of the servicemonitor to %v: %w", ns, err)
 	}
 	l := map[string]string{
 		pg.PartitionIDLabelName: m.options.PartitionID,
 		pg.ManagedByLabelName:   m.options.PostgresletFullname,
-		EtcdComponentLabelName:  EtcdComponentLabelValue,
+		etcdComponentLabelName:  etcdComponentLabelValue,
 		pg.NameLabelName:        n,
 	}
-	if err := m.SetLabels(sm, l); err != nil {
+	if err := m.metadataAccessor.SetLabels(sm, l); err != nil {
 		return fmt.Errorf("error while setting the namespace of the servicemonitor to %v: %w", ns, err)
 	}
 
@@ -481,10 +471,10 @@ func (m *EtcdManager) createOrUpdateServiceMonitor(ctx context.Context, targetNa
 		Name:      n,
 	}
 	old := &coreosv1.ServiceMonitor{}
-	if err := m.Get(ctx, nsn, old); err == nil {
+	if err := m.client.Get(ctx, nsn, old); err == nil {
 		// Copy the resource version
 		sm.ObjectMeta.ResourceVersion = old.ObjectMeta.ResourceVersion
-		if err := m.Update(ctx, sm); err != nil {
+		if err := m.client.Update(ctx, sm); err != nil {
 			return fmt.Errorf("error while updating the servicemonitor: %w", err)
 		}
 		m.log.Info("servicemonitor updated")
@@ -492,7 +482,7 @@ func (m *EtcdManager) createOrUpdateServiceMonitor(ctx context.Context, targetNa
 	}
 
 	// local servicemonitor does not exist, creating it
-	if err := m.Create(ctx, sm); err != nil {
+	if err := m.client.Create(ctx, sm); err != nil {
 		return fmt.Errorf("error while creating the servicemonitor: %w", err)
 	}
 	m.log.Info("servicemonitor created")
@@ -507,7 +497,7 @@ func (m *EtcdManager) UninstallEtcd() error {
 	matchingLabels := client.MatchingLabels{
 		pg.PartitionIDLabelName: m.options.PartitionID,
 		pg.ManagedByLabelName:   pg.ManagedByLabelValue,
-		EtcdComponentLabelName:  EtcdComponentLabelValue,
+		etcdComponentLabelName:  etcdComponentLabelValue,
 	}
 	deleteAllOpts := []client.DeleteAllOfOption{
 		client.InNamespace(m.options.PostgresletNamespace),
@@ -515,42 +505,42 @@ func (m *EtcdManager) UninstallEtcd() error {
 	}
 
 	// StatefulSet
-	if err := m.Client.DeleteAllOf(ctx, &appsv1.StatefulSet{}, deleteAllOpts...); err != nil {
+	if err := m.client.DeleteAllOf(ctx, &appsv1.StatefulSet{}, deleteAllOpts...); err != nil {
 		if !errors.IsNotFound(err) {
 			m.log.Error(err, "Could not delete StatefulSet")
 		}
 	}
 
 	// ConfigMap
-	if err := m.Client.DeleteAllOf(ctx, &corev1.ConfigMap{}, deleteAllOpts...); err != nil {
+	if err := m.client.DeleteAllOf(ctx, &corev1.ConfigMap{}, deleteAllOpts...); err != nil {
 		if !errors.IsNotFound(err) {
 			m.log.Error(err, "Could not delete ConfigMap")
 		}
 	}
 
 	// RoleBinding
-	if err := m.Client.DeleteAllOf(ctx, &rbacv1.RoleBinding{}, deleteAllOpts...); err != nil {
+	if err := m.client.DeleteAllOf(ctx, &rbacv1.RoleBinding{}, deleteAllOpts...); err != nil {
 		if !errors.IsNotFound(err) {
 			m.log.Error(err, "Could not delete RoleBinding")
 		}
 	}
 
 	// Role
-	if err := m.Client.DeleteAllOf(ctx, &rbacv1.Role{}, deleteAllOpts...); err != nil {
+	if err := m.client.DeleteAllOf(ctx, &rbacv1.Role{}, deleteAllOpts...); err != nil {
 		if !errors.IsNotFound(err) {
 			m.log.Error(err, "Could not delete Role")
 		}
 	}
 
 	// ServiceAccount
-	if err := m.Client.DeleteAllOf(ctx, &corev1.ServiceAccount{}, deleteAllOpts...); err != nil {
+	if err := m.client.DeleteAllOf(ctx, &corev1.ServiceAccount{}, deleteAllOpts...); err != nil {
 		if !errors.IsNotFound(err) {
 			m.log.Error(err, "Could not delete ServiceAccount")
 		}
 	}
 
 	// Service
-	if err := m.Client.DeleteAllOf(ctx, &corev1.Service{}, deleteAllOpts...); err != nil {
+	if err := m.client.DeleteAllOf(ctx, &corev1.Service{}, deleteAllOpts...); err != nil {
 		if !errors.IsNotFound(err) {
 			m.log.Error(err, "Could not delete Service")
 		}

@@ -317,7 +317,7 @@ func main() {
 	if deployEtcd {
 		if err = etcdMgr.InstallOrUpdateEtcd(); err != nil {
 			setupLog.Error(err, "unable to deploy etcd")
-			os.Exit(1) // TODO should we really exit here?
+			os.Exit(1)
 		}
 	} else {
 		if err = etcdMgr.UninstallEtcd(); err != nil {
