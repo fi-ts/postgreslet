@@ -514,24 +514,10 @@ func (m *EtcdManager) UninstallEtcd() error {
 		matchingLabels,
 	}
 
-	// ServiceAccount
-	if err := m.Client.DeleteAllOf(ctx, &corev1.ServiceAccount{}, deleteAllOpts...); err != nil {
+	// StatefulSet
+	if err := m.Client.DeleteAllOf(ctx, &appsv1.StatefulSet{}, deleteAllOpts...); err != nil {
 		if !errors.IsNotFound(err) {
-			m.log.Error(err, "Could not delete ServiceAccount")
-		}
-	}
-
-	// Role
-	if err := m.Client.DeleteAllOf(ctx, &rbacv1.Role{}, deleteAllOpts...); err != nil {
-		if !errors.IsNotFound(err) {
-			m.log.Error(err, "Could not delete Role")
-		}
-	}
-
-	// RoleBinding
-	if err := m.Client.DeleteAllOf(ctx, &rbacv1.RoleBinding{}, deleteAllOpts...); err != nil {
-		if !errors.IsNotFound(err) {
-			m.log.Error(err, "Could not delete RoleBinding")
+			m.log.Error(err, "Could not delete StatefulSet")
 		}
 	}
 
@@ -542,10 +528,24 @@ func (m *EtcdManager) UninstallEtcd() error {
 		}
 	}
 
-	// StatefulSet
-	if err := m.Client.DeleteAllOf(ctx, &appsv1.StatefulSet{}, deleteAllOpts...); err != nil {
+	// RoleBinding
+	if err := m.Client.DeleteAllOf(ctx, &rbacv1.RoleBinding{}, deleteAllOpts...); err != nil {
 		if !errors.IsNotFound(err) {
-			m.log.Error(err, "Could not delete StatefulSet")
+			m.log.Error(err, "Could not delete RoleBinding")
+		}
+	}
+
+	// Role
+	if err := m.Client.DeleteAllOf(ctx, &rbacv1.Role{}, deleteAllOpts...); err != nil {
+		if !errors.IsNotFound(err) {
+			m.log.Error(err, "Could not delete Role")
+		}
+	}
+
+	// ServiceAccount
+	if err := m.Client.DeleteAllOf(ctx, &corev1.ServiceAccount{}, deleteAllOpts...); err != nil {
+		if !errors.IsNotFound(err) {
+			m.log.Error(err, "Could not delete ServiceAccount")
 		}
 	}
 
