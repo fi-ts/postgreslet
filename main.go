@@ -61,6 +61,7 @@ const (
 	patroniRetryTimeoutFlg         = "patroni-retry-timeout"
 	enableStandbyLeaderSelectorFlg = "enable-standby-leader-selector"
 	ControlPlaneNamespaceFlg       = "control-plane-namespace"
+	enableLegacyStandbySelectorFlg = "enable-legacy-standby-selector"
 	deployEtcdFlg                  = "deploy-etcd"
 	etcdImageFlg                   = "etcd-image"
 	etcdBackupSidecarImageFlg      = "etcd-backup-sidecar-image"
@@ -85,6 +86,7 @@ func init() {
 }
 
 func main() {
+
 	var (
 		metricsAddrCtrlMgr      string
 		metricsAddrSvcMgr       string
@@ -112,6 +114,7 @@ func main() {
 		enableNetPol                bool
 		enablePodAntiaffinity       bool
 		enableStandbyLeaderSelector bool
+		enableLegacyStandbySelector bool
 		deployEtcd                  bool
 
 		portRangeStart int
@@ -220,6 +223,9 @@ func main() {
 	viper.SetDefault(ControlPlaneNamespaceFlg, "metal-extension-postgres")
 	controlPlaneNamespace = viper.GetString(ControlPlaneNamespaceFlg)
 
+	viper.SetDefault(enableLegacyStandbySelectorFlg, false)
+	enableLegacyStandbySelector = viper.GetBool(enableLegacyStandbySelectorFlg)
+
 	viper.SetDefault(deployEtcdFlg, false)
 	deployEtcd = viper.GetBool(deployEtcdFlg)
 
@@ -262,6 +268,7 @@ func main() {
 		patroniRetryTimeoutFlg, patroniRetryTimeout,
 		enableStandbyLeaderSelectorFlg, enableStandbyLeaderSelector,
 		ControlPlaneNamespaceFlg, controlPlaneNamespace,
+		enableLegacyStandbySelectorFlg, enableLegacyStandbySelector,
 		deployEtcdFlg, deployEtcd,
 		etcdImageFlg, etcdImage,
 		etcdBackupSidecarImageFlg, etcdBackupSidecarImage,
@@ -348,6 +355,7 @@ func main() {
 		PortRangeStart:              int32(portRangeStart),
 		PortRangeSize:               int32(portRangeSize),
 		EnableStandbyLeaderSelector: enableStandbyLeaderSelector,
+		EnableLegacyStandbySelector: enableLegacyStandbySelector,
 	}
 	if err = (&controllers.PostgresReconciler{
 		CtrlClient:                  ctrlPlaneClusterMgr.GetClient(),

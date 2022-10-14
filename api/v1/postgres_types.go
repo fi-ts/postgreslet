@@ -68,6 +68,7 @@ const (
 	SpiloRoleLabelName               = "spilo-role"
 	SpiloRoleLabelValueMaster        = "master"
 	SpiloRoleLabelValueStandbyLeader = "standby_leader"
+	StatefulsetPodNameLabelName      = "statefulset.kubernetes.io/pod-name"
 
 	teamIDPrefix = "pg"
 
@@ -321,7 +322,7 @@ func (p *Postgres) ToKey() *types.NamespacedName {
 	}
 }
 
-func (p *Postgres) ToSvcLB(lbIP string, lbPort int32, enableStandbyLeaderSelector bool) *corev1.Service {
+func (p *Postgres) ToSvcLB(lbIP string, lbPort int32, enableStandbyLeaderSelector bool, enableLegacyStandbySelector bool) *corev1.Service {
 	lb := &corev1.Service{}
 	lb.Spec.Type = "LoadBalancer"
 
@@ -342,15 +343,23 @@ func (p *Postgres) ToSvcLB(lbIP string, lbPort int32, enableStandbyLeaderSelecto
 	port.TargetPort = intstr.FromInt(5432)
 	lb.Spec.Ports = []corev1.ServicePort{port}
 
-	spiloRole := SpiloRoleLabelValueMaster
-	if enableStandbyLeaderSelector && !p.IsReplicationPrimary() {
-		spiloRole = SpiloRoleLabelValueStandbyLeader
-	}
 	lb.Spec.Selector = map[string]string{
 		ApplicationLabelName: ApplicationLabelValue,
 		"cluster-name":       p.ToPeripheralResourceName(),
-		SpiloRoleLabelName:   spiloRole,
 		"team":               p.generateTeamID(),
+	}
+	if p.IsReplicationPrimary() {
+		lb.Spec.Selector[SpiloRoleLabelName] = SpiloRoleLabelValueMaster
+	} else {
+		if enableStandbyLeaderSelector {
+			// Only set this value when we are NOT a primary and the StandbyLeaderSelector is enabled.
+			lb.Spec.Selector[SpiloRoleLabelName] = SpiloRoleLabelValueStandbyLeader
+		} else if enableLegacyStandbySelector {
+			lb.Spec.Selector[SpiloRoleLabelName] = SpiloRoleLabelValueMaster
+		} else {
+			// select the first pod in the statefulset
+			lb.Spec.Selector[StatefulsetPodNameLabelName] = p.ToPeripheralResourceName() + "-0"
+		}
 	}
 
 	if len(lbIP) > 0 {
