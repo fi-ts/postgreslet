@@ -307,17 +307,17 @@ func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context
 		src := &pg.Postgres{}
 		if err := r.CtrlClient.Get(ctx, srcNs, src); err != nil {
 			r.recorder.Eventf(instance, "Warning", "Error", "failed to get source postgres for restore: %v", err)
-			return err
-		}
-		log.Info("source for restore fetched", "postgres", instance)
+		} else {
+			log.Info("source for restore fetched", "postgres", instance)
 
-		bc, err := r.getBackupConfig(ctx, instance.Namespace, src.Spec.BackupSecretRef)
-		if err != nil {
-			return err
-		}
+			bc, err := r.getBackupConfig(ctx, instance.Namespace, src.Spec.BackupSecretRef)
+			if err != nil {
+				return err
+			}
 
-		restoreBackupConfig = bc
-		restoreSouceInstance = src
+			restoreBackupConfig = bc
+			restoreSouceInstance = src
+		}
 	}
 
 	// Get zalando postgresql and create one if none.
