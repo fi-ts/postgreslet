@@ -358,7 +358,7 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 
 		m.log.Info("Updating selector")
 		v.Spec.Selector[pg.PartitionIDLabelName] = m.options.PartitionID
-		v.Spec.Selector[pg.ManagedByLabelName] = pg.ManagedByLabelValue
+		v.Spec.Selector[pg.ManagedByLabelName] = m.options.PostgresletFullname
 		v.Spec.Selector[pg.NameLabelName] = stsName
 
 		got := corev1.Service{}
