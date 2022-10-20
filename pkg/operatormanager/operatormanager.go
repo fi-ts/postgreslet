@@ -120,7 +120,7 @@ func (m *OperatorManager) InstallOrUpdateOperator(ctx context.Context, namespace
 	}
 
 	// Add our (initially empty) custom pod environment configmap
-	if err := m.createPodEnvironmentConfigMap(ctx, namespace); err != nil {
+	if err := m.CreatePodEnvironmentConfigMap(ctx, namespace); err != nil {
 		return fmt.Errorf("error while creating pod environment configmap %v: %w", namespace, err)
 	}
 
@@ -462,8 +462,8 @@ func (m *OperatorManager) createNamespace(ctx context.Context, namespace string)
 	return nil
 }
 
-// createPodEnvironmentConfigMap creates a new ConfigMap with additional environment variables for the pods
-func (m *OperatorManager) createPodEnvironmentConfigMap(ctx context.Context, namespace string) error {
+// CreatePodEnvironmentConfigMap creates a new ConfigMap with additional environment variables for the pods
+func (m *OperatorManager) CreatePodEnvironmentConfigMap(ctx context.Context, namespace string) error {
 	ns := types.NamespacedName{
 		Namespace: namespace,
 		Name:      PodEnvCMName,
