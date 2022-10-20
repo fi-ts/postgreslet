@@ -457,7 +457,15 @@ func (r *PostgresReconciler) updatePodEnvironmentConfigMap(ctx context.Context, 
 		Namespace: p.ToPeripheralResourceNamespace(),
 	}
 	if err := r.SvcClient.Get(ctx, ns, cm); err != nil {
-		return fmt.Errorf("error while getting the pod environment configmap from service cluster: %w", err)
+		// when updating from v0.7.0 straight to v0.10.0, we neither have that ConfigMap (as we use a Secret in version
+		// v0.7.0) nor do we create it (the new labels aren't there yet, so the selector does not match and
+		// operatormanager.OperatorManager.UpdateAllManagedOperators does not call InstallOrUpdateOperator)
+		// we previously aborted here (before the postgresql resource was updated with the new labels), meaning we would
+		// simply restart the loop without solving the problem.
+		if err := r.SvcClient.Create(ctx, cm); err != nil {
+			return fmt.Errorf("error while creating the missing Pod Environment ConfigMap: %w", err)
+		}
+		log.Info("mising Pod Environment ConfigMap created!")
 	}
 	cm.Data = data
 	if err := r.SvcClient.Update(ctx, cm); err != nil {
