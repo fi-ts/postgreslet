@@ -465,7 +465,7 @@ func (r *PostgresReconciler) updatePodEnvironmentConfigMap(ctx context.Context, 
 		if err := r.CreatePodEnvironmentConfigMap(ctx, ns.Namespace); err != nil {
 			return fmt.Errorf("error while creating the missing Pod Environment ConfigMap %v: %w", ns.Namespace, err)
 		}
-		return fmt.Errorf("mising Pod Environment ConfigMap created, requeueing: %w", err)
+		log.Info("mising Pod Environment ConfigMap created!")
 	}
 	cm.Data = data
 	if err := r.SvcClient.Update(ctx, cm); err != nil {
