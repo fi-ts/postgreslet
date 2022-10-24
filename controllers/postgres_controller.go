@@ -462,7 +462,7 @@ func (r *PostgresReconciler) updatePodEnvironmentConfigMap(ctx context.Context, 
 		// operatormanager.OperatorManager.UpdateAllManagedOperators does not call InstallOrUpdateOperator)
 		// we previously aborted here (before the postgresql resource was updated with the new labels), meaning we would
 		// simply restart the loop without solving the problem.
-		if cm, err = r.CreatePodEnvironmentConfigMap(ctx, ns.Namespace); err != nil {
+		if err := r.CreatePodEnvironmentConfigMap(ctx, ns.Namespace); err != nil {
 			return fmt.Errorf("error while creating the missing Pod Environment ConfigMap %v: %w", ns.Namespace, err)
 		}
 		log.Info("mising Pod Environment ConfigMap created!")

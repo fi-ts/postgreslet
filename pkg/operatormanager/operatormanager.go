@@ -120,7 +120,7 @@ func (m *OperatorManager) InstallOrUpdateOperator(ctx context.Context, namespace
 	}
 
 	// Add our (initially empty) custom pod environment configmap
-	if _, err := m.CreatePodEnvironmentConfigMap(ctx, namespace); err != nil {
+	if err := m.CreatePodEnvironmentConfigMap(ctx, namespace); err != nil {
 		return fmt.Errorf("error while creating pod environment configmap %v: %w", namespace, err)
 	}
 
@@ -463,32 +463,32 @@ func (m *OperatorManager) createNamespace(ctx context.Context, namespace string)
 }
 
 // CreatePodEnvironmentConfigMap creates a new ConfigMap with additional environment variables for the pods
-func (m *OperatorManager) CreatePodEnvironmentConfigMap(ctx context.Context, namespace string) (*corev1.ConfigMap, error) {
+func (m *OperatorManager) CreatePodEnvironmentConfigMap(ctx context.Context, namespace string) error {
 	ns := types.NamespacedName{
 		Namespace: namespace,
 		Name:      PodEnvCMName,
 	}
-	cm := &corev1.ConfigMap{}
-	if err := m.Get(ctx, ns, cm); err == nil {
+	if err := m.Get(ctx, ns, &corev1.ConfigMap{}); err == nil {
 		// configmap already exists, nothing to do here
 		// we will update the configmap with the correct S3 config in the postgres controller
 		m.log.Info("Pod Environment ConfigMap already exists")
-		return cm, nil
+		return nil
 	}
 
+	cm := &corev1.ConfigMap{}
 	if err := m.SetName(cm, PodEnvCMName); err != nil {
-		return nil, fmt.Errorf("error while setting the name of the new Pod Environment ConfigMap to %v: %w", namespace, err)
+		return fmt.Errorf("error while setting the name of the new Pod Environment ConfigMap to %v: %w", namespace, err)
 	}
 	if err := m.SetNamespace(cm, namespace); err != nil {
-		return nil, fmt.Errorf("error while setting the namespace of the new Pod Environment ConfigMap to %v: %w", namespace, err)
+		return fmt.Errorf("error while setting the namespace of the new Pod Environment ConfigMap to %v: %w", namespace, err)
 	}
 
 	if err := m.Create(ctx, cm); err != nil {
-		return nil, fmt.Errorf("error while creating the new Pod Environment ConfigMap: %w", err)
+		return fmt.Errorf("error while creating the new Pod Environment ConfigMap: %w", err)
 	}
 	m.log.Info("new Pod Environment ConfigMap created")
 
-	return cm, nil
+	return nil
 }
 
 func (m *OperatorManager) createOrUpdateSidecarsConfig(ctx context.Context, namespace string) error {
