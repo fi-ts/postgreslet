@@ -391,7 +391,7 @@ func (r *PostgresReconciler) ensureZalandoDependencies(ctx context.Context, p *p
 }
 
 func (r *PostgresReconciler) updatePodEnvironmentConfigMap(ctx context.Context, p *pg.Postgres) error {
-	log := r.Log.WithValues("postgres", p.UID)
+	log := r.Log.WithValues("namespace", p.Namespace)
 	if p.Spec.BackupSecretRef == "" {
 		log.Info("No configured backupSecretRef found, skipping configuration of postgres backup")
 		return nil
