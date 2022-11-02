@@ -19,6 +19,7 @@ import (
 	"strings"
 
 	"github.com/go-logr/logr"
+	"github.com/google/uuid"
 	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/tools/record"
@@ -249,6 +250,12 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	err := r.createOrUpdateExporterSidecarServiceMonitor(ctx, namespace, instance)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("error while creating sidecars servicemonitor %v: %w", namespace, err)
+	}
+
+	// Make sure the storage secret exist, if neccessary
+	if err := r.ensureStorageEncryptionSecret(ctx, instance); err != nil {
+		r.recorder.Eventf(instance, "Warning", "Error", "failed to create storage secret: %v", err)
+		return ctrl.Result{}, fmt.Errorf("error while creating storage secret: %w", err)
 	}
 
 	if err := r.createOrUpdateZalandoPostgresql(ctx, instance, log, globalSidecarsCM, r.PatroniTTL, r.PatroniLoopWait, r.PatroniRetryTimeout); err != nil {
@@ -1188,4 +1195,44 @@ func (r *PostgresReconciler) deleteExporterSidecarService(ctx context.Context, n
 	log.Info("postgres-exporter service deleted")
 
 	return nil
+}
+
+func (r *PostgresReconciler) ensureStorageEncryptionSecret(ctx context.Context, instance *pg.Postgres) error {
+
+	// Check if secrets exist local in SERVICE Cluster
+	n := "storage-encryption-key"
+	ns := instance.ToPeripheralResourceNamespace()
+	s := &corev1.Secret{}
+	r.Log.Info("checking for storage secret", "namespace", ns, "name", n)
+	err := r.SvcClient.Get(ctx, types.NamespacedName{Namespace: ns, Name: n}, s)
+	if err == nil {
+		r.Log.Info("storage secret found, no action needed")
+		return nil
+	}
+
+	// we got an error other than not found, so we cannot continue!
+	if !apierrors.IsNotFound(err) {
+		return fmt.Errorf("error while fetching storage secret from service cluster: %w", err)
+	}
+
+	r.Log.Info("creating storage secret")
+
+	postgresSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      n,
+			Namespace: ns,
+			Labels:    map[string]string(instance.ToZalandoPostgresqlMatchingLabels()),
+		},
+		StringData: map[string]string{
+			"host-encryption-passphrase": uuid.NewString(), // TODO discuss how to generate the key, make it configurable in the long run
+		},
+	}
+
+	if err := r.SvcClient.Create(ctx, postgresSecret); err != nil {
+		return fmt.Errorf("error while creating storage secret in service cluster: %w", err)
+	}
+	r.Log.Info("created storage secret", "secret", postgresSecret)
+
+	return nil
+
 }
