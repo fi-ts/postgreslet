@@ -1024,27 +1024,22 @@ func (r *PostgresReconciler) createOrUpdateExporterSidecarServices(ctx context.C
 		exporterServiceTargetPort = exporterServicePort
 	}
 
-	pes := &corev1.Service{}
-
-	if err := r.OperatorManager.SetName(pes, postgresExporterServiceName); err != nil {
-		return fmt.Errorf("error while setting the name of the postgres-exporter service to %v: %w", namespace, err)
-	}
-	if err := r.OperatorManager.SetNamespace(pes, namespace); err != nil {
-		return fmt.Errorf("error while setting the namespace of the postgres-exporter service to %v: %w", namespace, err)
-	}
 	labels := map[string]string{
 		// pg.ApplicationLabelName: pg.ApplicationLabelValue, // TODO check if we still need that label, IsOperatorDeletable won't work anymore if we set it.
 		"app": "postgres-exporter",
-	}
-	if err := r.OperatorManager.SetLabels(pes, labels); err != nil {
-		return fmt.Errorf("error while setting the labels of the postgres-exporter service to %v: %w", labels, err)
 	}
 	annotations := map[string]string{
 		postgresExporterServiceTenantAnnotationName:    in.Spec.Tenant,
 		postgresExporterServiceProjectIDAnnotationName: in.Spec.ProjectID,
 	}
-	if err := r.OperatorManager.SetAnnotations(pes, annotations); err != nil {
-		return fmt.Errorf("error while setting the annotations of the postgres-exporter service to %v: %w", annotations, err)
+
+	pes := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        postgresExporterServiceName,
+			Namespace:   namespace,
+			Labels:      labels,
+			Annotations: annotations,
+		},
 	}
 
 	pes.Spec.Ports = []corev1.ServicePort{
@@ -1106,28 +1101,25 @@ func (r *PostgresReconciler) deleteNetPol(ctx context.Context, instance *pg.Post
 func (r *PostgresReconciler) createOrUpdateExporterSidecarServiceMonitor(ctx context.Context, namespace string, in *pg.Postgres) error {
 	log := r.Log.WithValues("namespace", namespace)
 
-	pesm := &coreosv1.ServiceMonitor{}
-
-	// TODO what's the correct name?
-	if err := r.OperatorManager.SetName(pesm, postgresExporterServiceName); err != nil {
-		return fmt.Errorf("error while setting the name of the postgres-exporter servicemonitor to %v: %w", namespace, err)
-	}
-	if err := r.OperatorManager.SetNamespace(pesm, namespace); err != nil {
-		return fmt.Errorf("error while setting the namespace of the postgres-exporter servicemonitor to %v: %w", namespace, err)
-	}
 	labels := map[string]string{
 		"app":     "postgres-exporter",
 		"release": "prometheus",
 	}
-	if err := r.OperatorManager.SetLabels(pesm, labels); err != nil {
-		return fmt.Errorf("error while setting the namespace of the postgres-exporter servicemonitor to %v: %w", namespace, err)
-	}
+
 	annotations := map[string]string{
 		postgresExporterServiceTenantAnnotationName:    in.Spec.Tenant,
 		postgresExporterServiceProjectIDAnnotationName: in.Spec.ProjectID,
 	}
-	if err := r.OperatorManager.SetAnnotations(pesm, annotations); err != nil {
-		return fmt.Errorf("error while setting the annotations of the postgres-exporter service monitor to %v: %w", annotations, err)
+
+	// TODO what's the correct name?
+
+	pesm := &coreosv1.ServiceMonitor{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        postgresExporterServiceName,
+			Namespace:   namespace,
+			Labels:      labels,
+			Annotations: annotations,
+		},
 	}
 
 	pesm.Spec.Endpoints = []coreosv1.Endpoint{
@@ -1175,12 +1167,11 @@ func (r *PostgresReconciler) createOrUpdateExporterSidecarServiceMonitor(ctx con
 func (r *PostgresReconciler) deleteExporterSidecarService(ctx context.Context, namespace string) error {
 	log := r.Log.WithValues("namespace", namespace)
 
-	s := &corev1.Service{}
-	if err := r.OperatorManager.SetName(s, postgresExporterServiceName); err != nil {
-		return fmt.Errorf("error while setting the name of the postgres-exporter service to delete to %v: %w", postgresExporterServiceName, err)
-	}
-	if err := r.OperatorManager.SetNamespace(s, namespace); err != nil {
-		return fmt.Errorf("error while setting the namespace of the postgres-exporter service to delete to %v: %w", namespace, err)
+	s := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      postgresExporterServiceName,
+			Namespace: namespace,
+		},
 	}
 	if err := r.SvcClient.Delete(ctx, s); err != nil {
 		return fmt.Errorf("error while deleting the postgres-exporter service: %w", err)
