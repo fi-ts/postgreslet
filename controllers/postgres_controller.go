@@ -63,18 +63,18 @@ type PostgresReconciler struct {
 	Log                               logr.Logger
 	Scheme                            *runtime.Scheme
 	PartitionID, Tenant, StorageClass string
-	*operatormanager.OperatorManager
-	*lbmanager.LBManager
-	recorder                    record.EventRecorder
-	PgParamBlockList            map[string]bool
-	StandbyClustersSourceRanges []string
-	PostgresletNamespace        string
-	SidecarsConfigMapName       string
-	EnableNetPol                bool
-	EtcdHost                    string
-	PatroniTTL                  uint32
-	PatroniLoopWait             uint32
-	PatroniRetryTimeout         uint32
+	OperatorManager                   *operatormanager.OperatorManager
+	LBManager                         *lbmanager.LBManager
+	recorder                          record.EventRecorder
+	PgParamBlockList                  map[string]bool
+	StandbyClustersSourceRanges       []string
+	PostgresletNamespace              string
+	SidecarsConfigMapName             string
+	EnableNetPol                      bool
+	EtcdHost                          string
+	PatroniTTL                        uint32
+	PatroniLoopWait                   uint32
+	PatroniRetryTimeout               uint32
 }
 
 // Reconcile is the entry point for postgres reconciliation.
@@ -121,7 +121,7 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		}
 		log.Info("corresponding CRD ClusterwideNetworkPolicy deleted")
 
-		if err := r.DeleteSvcLB(ctx, instance); err != nil {
+		if err := r.LBManager.DeleteSvcLB(ctx, instance); err != nil {
 			r.recorder.Eventf(instance, "Warning", "Error", "failed to delete Service: %v", err)
 			return ctrl.Result{}, err
 		}
@@ -144,7 +144,7 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 			log.Info("corresponding NetworkPolicy deleted")
 		}
 
-		deletable, err := r.IsOperatorDeletable(ctx, namespace)
+		deletable, err := r.OperatorManager.IsOperatorDeletable(ctx, namespace)
 		if err != nil {
 			r.recorder.Eventf(instance, "Warning", "Error", "failed to check if the operator is idle: %v", err)
 			return ctrl.Result{}, fmt.Errorf("error while checking if the operator is idle: %w", err)
@@ -154,7 +154,7 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 			log.Info("operator not yet deletable, requeueing")
 			return ctrl.Result{Requeue: true}, nil
 		}
-		if err := r.UninstallOperator(ctx, namespace); err != nil {
+		if err := r.OperatorManager.UninstallOperator(ctx, namespace); err != nil {
 			r.recorder.Eventf(instance, "Warning", "Error", "failed to uninstall operator: %v", err)
 			return ctrl.Result{}, fmt.Errorf("error while uninstalling operator: %w", err)
 		}
@@ -256,7 +256,7 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, fmt.Errorf("failed to create or update zalando postgresql: %w", err)
 	}
 
-	if err := r.CreateSvcLBIfNone(ctx, instance); err != nil {
+	if err := r.LBManager.CreateSvcLBIfNone(ctx, instance); err != nil {
 		r.recorder.Eventf(instance, "Warning", "Error", "failed to create Service: %v", err)
 		return ctrl.Result{}, err
 	}
@@ -372,13 +372,13 @@ func (r *PostgresReconciler) deleteUserPasswordsSecret(ctx context.Context, inst
 // ensureZalandoDependencies makes sure Zalando resources are installed in the service-cluster.
 func (r *PostgresReconciler) ensureZalandoDependencies(ctx context.Context, p *pg.Postgres) error {
 	namespace := p.ToPeripheralResourceNamespace()
-	isInstalled, err := r.IsOperatorInstalled(ctx, namespace)
+	isInstalled, err := r.OperatorManager.IsOperatorInstalled(ctx, namespace)
 	if err != nil {
 		return fmt.Errorf("error while querying if zalando dependencies are installed: %w", err)
 	}
 
 	if !isInstalled {
-		if err := r.InstallOrUpdateOperator(ctx, namespace); err != nil {
+		if err := r.OperatorManager.InstallOrUpdateOperator(ctx, namespace); err != nil {
 			return fmt.Errorf("error while installing zalando dependencies: %w", err)
 		}
 	}
@@ -462,7 +462,7 @@ func (r *PostgresReconciler) updatePodEnvironmentConfigMap(ctx context.Context, 
 		// operatormanager.OperatorManager.UpdateAllManagedOperators does not call InstallOrUpdateOperator)
 		// we previously aborted here (before the postgresql resource was updated with the new labels), meaning we would
 		// simply restart the loop without solving the problem.
-		if cm, err = r.CreatePodEnvironmentConfigMap(ctx, ns.Namespace); err != nil {
+		if cm, err = r.OperatorManager.CreatePodEnvironmentConfigMap(ctx, ns.Namespace); err != nil {
 			return fmt.Errorf("error while creating the missing Pod Environment ConfigMap %v: %w", ns.Namespace, err)
 		}
 		log.Info("mising Pod Environment ConfigMap created!")
@@ -1026,24 +1026,24 @@ func (r *PostgresReconciler) createOrUpdateExporterSidecarServices(ctx context.C
 
 	pes := &corev1.Service{}
 
-	if err := r.SetName(pes, postgresExporterServiceName); err != nil {
+	if err := r.OperatorManager.SetName(pes, postgresExporterServiceName); err != nil {
 		return fmt.Errorf("error while setting the name of the postgres-exporter service to %v: %w", namespace, err)
 	}
-	if err := r.SetNamespace(pes, namespace); err != nil {
+	if err := r.OperatorManager.SetNamespace(pes, namespace); err != nil {
 		return fmt.Errorf("error while setting the namespace of the postgres-exporter service to %v: %w", namespace, err)
 	}
 	labels := map[string]string{
 		// pg.ApplicationLabelName: pg.ApplicationLabelValue, // TODO check if we still need that label, IsOperatorDeletable won't work anymore if we set it.
 		"app": "postgres-exporter",
 	}
-	if err := r.SetLabels(pes, labels); err != nil {
+	if err := r.OperatorManager.SetLabels(pes, labels); err != nil {
 		return fmt.Errorf("error while setting the labels of the postgres-exporter service to %v: %w", labels, err)
 	}
 	annotations := map[string]string{
 		postgresExporterServiceTenantAnnotationName:    in.Spec.Tenant,
 		postgresExporterServiceProjectIDAnnotationName: in.Spec.ProjectID,
 	}
-	if err := r.SetAnnotations(pes, annotations); err != nil {
+	if err := r.OperatorManager.SetAnnotations(pes, annotations); err != nil {
 		return fmt.Errorf("error while setting the annotations of the postgres-exporter service to %v: %w", annotations, err)
 	}
 
@@ -1109,24 +1109,24 @@ func (r *PostgresReconciler) createOrUpdateExporterSidecarServiceMonitor(ctx con
 	pesm := &coreosv1.ServiceMonitor{}
 
 	// TODO what's the correct name?
-	if err := r.SetName(pesm, postgresExporterServiceName); err != nil {
+	if err := r.OperatorManager.SetName(pesm, postgresExporterServiceName); err != nil {
 		return fmt.Errorf("error while setting the name of the postgres-exporter servicemonitor to %v: %w", namespace, err)
 	}
-	if err := r.SetNamespace(pesm, namespace); err != nil {
+	if err := r.OperatorManager.SetNamespace(pesm, namespace); err != nil {
 		return fmt.Errorf("error while setting the namespace of the postgres-exporter servicemonitor to %v: %w", namespace, err)
 	}
 	labels := map[string]string{
 		"app":     "postgres-exporter",
 		"release": "prometheus",
 	}
-	if err := r.SetLabels(pesm, labels); err != nil {
+	if err := r.OperatorManager.SetLabels(pesm, labels); err != nil {
 		return fmt.Errorf("error while setting the namespace of the postgres-exporter servicemonitor to %v: %w", namespace, err)
 	}
 	annotations := map[string]string{
 		postgresExporterServiceTenantAnnotationName:    in.Spec.Tenant,
 		postgresExporterServiceProjectIDAnnotationName: in.Spec.ProjectID,
 	}
-	if err := r.SetAnnotations(pesm, annotations); err != nil {
+	if err := r.OperatorManager.SetAnnotations(pesm, annotations); err != nil {
 		return fmt.Errorf("error while setting the annotations of the postgres-exporter service monitor to %v: %w", annotations, err)
 	}
 
@@ -1176,10 +1176,10 @@ func (r *PostgresReconciler) deleteExporterSidecarService(ctx context.Context, n
 	log := r.Log.WithValues("namespace", namespace)
 
 	s := &corev1.Service{}
-	if err := r.SetName(s, postgresExporterServiceName); err != nil {
+	if err := r.OperatorManager.SetName(s, postgresExporterServiceName); err != nil {
 		return fmt.Errorf("error while setting the name of the postgres-exporter service to delete to %v: %w", postgresExporterServiceName, err)
 	}
-	if err := r.SetNamespace(s, namespace); err != nil {
+	if err := r.OperatorManager.SetNamespace(s, namespace); err != nil {
 		return fmt.Errorf("error while setting the namespace of the postgres-exporter service to delete to %v: %w", namespace, err)
 	}
 	if err := r.SvcClient.Delete(ctx, s); err != nil {
