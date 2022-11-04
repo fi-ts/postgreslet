@@ -1221,7 +1221,6 @@ func (r *PostgresReconciler) ensureStorageEncryptionSecret(ctx context.Context, 
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      n,
 			Namespace: ns,
-			Labels:    map[string]string(instance.ToZalandoPostgresqlMatchingLabels()),
 		},
 		StringData: map[string]string{
 			"host-encryption-passphrase": uuid.NewString(), // TODO discuss how to generate the key, make it configurable in the long run
