@@ -10,6 +10,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -1224,14 +1225,16 @@ func (r *PostgresReconciler) ensureStorageEncryptionSecret(ctx context.Context, 
 		r.Log.Error(err, "error generating random storage encryption key")
 		return err
 	}
+	// the key needs to be in string form, so we simply encode it with base64 (end hence reduce the amount of valid chars in that key...)
+	k := base64.StdEncoding.EncodeToString(b)
 
 	postgresSecret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      n,
 			Namespace: ns,
 		},
-		Data: map[string][]byte{
-			"host-encryption-passphrase": b,
+		StringData: map[string]string{
+			"host-encryption-passphrase": k,
 		},
 	}
 
