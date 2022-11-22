@@ -9,6 +9,7 @@ package controllers
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -19,7 +20,6 @@ import (
 	"strings"
 
 	"github.com/go-logr/logr"
-	"github.com/google/uuid"
 	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/tools/record"
@@ -1217,13 +1217,21 @@ func (r *PostgresReconciler) ensureStorageEncryptionSecret(ctx context.Context, 
 
 	r.Log.Info("creating storage secret")
 
+	// generate random 512bit key
+	b := make([]byte, 64)
+	_, err = rand.Read(b)
+	if err != nil {
+		r.Log.Error(err, "error generating random storage encryption key")
+		return err
+	}
+
 	postgresSecret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      n,
 			Namespace: ns,
 		},
-		StringData: map[string]string{
-			"host-encryption-passphrase": uuid.NewString(), // TODO discuss how to generate the key, make it configurable in the long run
+		Data: map[string][]byte{
+			"host-encryption-passphrase": b,
 		},
 	}
 
