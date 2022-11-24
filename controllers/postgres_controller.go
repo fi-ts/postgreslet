@@ -1218,15 +1218,10 @@ func (r *PostgresReconciler) ensureStorageEncryptionSecret(ctx context.Context, 
 
 	r.Log.Info("creating storage secret")
 
-	// generate random 512bit key
-	b := make([]byte, 64)
-	_, err = rand.Read(b)
+	k, err := r.generateRandomString()
 	if err != nil {
-		r.Log.Error(err, "error generating random storage encryption key")
 		return err
 	}
-	// the key needs to be in string form, so we simply encode it with base64 (end hence reduce the amount of valid chars in that key...)
-	k := base64.StdEncoding.EncodeToString(b)
 
 	postgresSecret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1245,4 +1240,15 @@ func (r *PostgresReconciler) ensureStorageEncryptionSecret(ctx context.Context, 
 
 	return nil
 
+}
+
+func (r *PostgresReconciler) generateRandomString() (string, error) {
+	b := make([]byte, 64)
+	_, err := rand.Read(b)
+	if err != nil {
+		r.Log.Error(err, "error generating random storage encryption key")
+		return "", err
+	}
+	// the key needs to be in string form, so we simply encode it with base64 (end hence reduce the amount of valid chars in that key...)
+	return base64.StdEncoding.EncodeToString(b), nil
 }
