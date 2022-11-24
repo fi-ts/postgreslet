@@ -226,9 +226,9 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 
 	// check (and update if neccessary) the current patroni replication config.
 	immediateRequeue, patroniConfigChangeErr := r.checkAndUpdatePatroniReplicationConfig(ctx, instance)
-	if immediateRequeue {
-		// if a config change was performed that requires a while to settle in, we simply requeue
-		// on the next reconciliation loop, the config should be correct already so we can continue with the rest
+	if immediateRequeue && patroniConfigChangeErr == nil {
+		// if a (successful) config change was performed that requires a while to settle in, we simply requeue.
+		// on the next reconciliation loop, the config should be correct already so we can continue with the rest.
 		log.Info("Requeueing after patroni replication config change")
 		return ctrl.Result{Requeue: true, RequeueAfter: r.ReplicationChangeRequeueDuration}, patroniConfigChangeErr
 	}
@@ -753,6 +753,7 @@ func (r *PostgresReconciler) checkAndUpdatePatroniReplicationConfig(ctx context.
 	if instance.IsReplicationPrimary() {
 		if resp.StandbyCluster != nil {
 			r.Log.Info("standby_cluster mistmatch, updating and requeing", "response", resp)
+			// what happens, if patroni does not do what it is asked to do? what if it returns an error here?
 			return requeueImmediately, r.httpPatchPatroni(ctx, instance, leaderIP)
 		}
 		if instance.Spec.PostgresConnection.SynchronousReplication {
