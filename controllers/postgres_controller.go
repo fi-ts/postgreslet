@@ -9,11 +9,10 @@ package controllers
 import (
 	"bytes"
 	"context"
-	"crypto/rand"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/rand"
 	"net"
 	"net/http"
 	"net/url"
@@ -1243,12 +1242,10 @@ func (r *PostgresReconciler) ensureStorageEncryptionSecret(ctx context.Context, 
 }
 
 func (r *PostgresReconciler) generateRandomString() (string, error) {
+	chars := "!\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"
 	b := make([]byte, 64)
-	_, err := rand.Read(b)
-	if err != nil {
-		r.Log.Error(err, "error generating random storage encryption key")
-		return "", err
+	for i := range b {
+		b[i] = chars[rand.Intn(len(chars))]
 	}
-	// the key needs to be in string form, so we simply encode it with base64 (end hence reduce the amount of valid chars in that key...)
-	return base64.StdEncoding.EncodeToString(b), nil
+	return string(b), nil
 }
