@@ -12,7 +12,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -230,7 +230,7 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		// if a (successful) config change was performed that requires a while to settle in, we simply requeue.
 		// on the next reconciliation loop, the config should be correct already so we can continue with the rest.
 		log.Info("Requeueing after patroni replication config change")
-		return ctrl.Result{Requeue: true, RequeueAfter: r.ReplicationChangeRequeueDuration}, patroniConfigChangeErr
+		return ctrl.Result{Requeue: true, RequeueAfter: r.ReplicationChangeRequeueDuration}, nil
 	}
 
 	// create standby egress rule first, so the standby can actually connect to the primary
@@ -937,7 +937,7 @@ func (r *PostgresReconciler) httpGetPatroniConfig(ctx context.Context, podIP str
 
 	defer resp.Body.Close()
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		r.Log.Info("could not read body")
 		return nil, err
