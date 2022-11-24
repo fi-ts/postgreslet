@@ -9,10 +9,11 @@ package controllers
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math/rand"
+	"math/big"
 	"net"
 	"net/http"
 	"net/url"
@@ -1217,10 +1218,7 @@ func (r *PostgresReconciler) ensureStorageEncryptionSecret(ctx context.Context, 
 
 	r.Log.Info("creating storage secret")
 
-	k, err := r.generateRandomString()
-	if err != nil {
-		return err
-	}
+	k := r.generateRandomString()
 
 	postgresSecret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1241,11 +1239,13 @@ func (r *PostgresReconciler) ensureStorageEncryptionSecret(ctx context.Context, 
 
 }
 
-func (r *PostgresReconciler) generateRandomString() (string, error) {
-	chars := "!\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"
+func (r *PostgresReconciler) generateRandomString() string {
+	const chars string = "!\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"
+	var size *big.Int = big.NewInt(int64(len(chars)))
 	b := make([]byte, 64)
 	for i := range b {
-		b[i] = chars[rand.Intn(len(chars))]
+		x, _ := rand.Int(rand.Reader, size)
+		b[i] = chars[x.Int64()]
 	}
-	return string(b), nil
+	return string(b)
 }
