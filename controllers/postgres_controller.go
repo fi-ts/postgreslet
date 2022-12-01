@@ -67,16 +67,17 @@ type PostgresReconciler struct {
 	PartitionID, Tenant, StorageClass string
 	*operatormanager.OperatorManager
 	*lbmanager.LBManager
-	recorder                    record.EventRecorder
-	PgParamBlockList            map[string]bool
-	StandbyClustersSourceRanges []string
-	PostgresletNamespace        string
-	SidecarsConfigMapName       string
-	EnableNetPol                bool
-	EtcdHost                    string
-	PatroniTTL                  uint32
-	PatroniLoopWait             uint32
-	PatroniRetryTimeout         uint32
+	recorder                            record.EventRecorder
+	PgParamBlockList                    map[string]bool
+	StandbyClustersSourceRanges         []string
+	PostgresletNamespace                string
+	SidecarsConfigMapName               string
+	EnableNetPol                        bool
+	EtcdHost                            string
+	PatroniTTL                          uint32
+	PatroniLoopWait                     uint32
+	PatroniRetryTimeout                 uint32
+	EnableRandomStorageEncryptionSecret bool
 }
 
 // Reconcile is the entry point for postgres reconciliation.
@@ -1199,6 +1200,11 @@ func (r *PostgresReconciler) deleteExporterSidecarService(ctx context.Context, n
 }
 
 func (r *PostgresReconciler) ensureStorageEncryptionSecret(ctx context.Context, instance *pg.Postgres) error {
+
+	if !r.EnableRandomStorageEncryptionSecret {
+		r.Log.Info("storage secret disabled, no action needed")
+		return nil
+	}
 
 	// Check if secrets exist local in SERVICE Cluster
 	n := "storage-encryption-key"

@@ -36,38 +36,39 @@ import (
 
 const (
 	// envPrefix               = "pg"
-	metricsAddrSvcMgrFlg           = "metrics-addr-svc-mgr"
-	metricsAddrCtrlMgrFlg          = "metrics-addr-ctrl-mgr"
-	enableLeaderElectionFlg        = "enable-leader-election"
-	partitionIDFlg                 = "partition-id"
-	tenantFlg                      = "tenant"
-	ctrlPlaneKubeConfifgFlg        = "controlplane-kubeconfig"
-	loadBalancerIPFlg              = "load-balancer-ip"
-	portRangeStartFlg              = "port-range-start"
-	portRangeSizeFlg               = "port-range-size"
-	customPSPNameFlg               = "custom-psp-name"
-	storageClassFlg                = "storage-class"
-	postgresImageFlg               = "postgres-image"
-	etcdHostFlg                    = "etcd-host"
-	crdValidationFlg               = "enable-crd-validation"
-	operatorImageFlg               = "operator-image"
-	pgParamBlockListFlg            = "postgres-param-blocklist"
-	majorVersionUpgradeModeFlg     = "major-version-upgrade-mode"
-	standbyClustersSourceRangesFlg = "standby-clusters-source-ranges"
-	postgresletNamespaceFlg        = "postgreslet-namespace"
-	sidecarsCMNameFlg              = "sidecars-configmap-name"
-	enableNetPolFlg                = "enable-netpol"
-	enablePodAntiaffinityFlg       = "enable-pod-antiaffinity"
-	patroniRetryTimeoutFlg         = "patroni-retry-timeout"
-	enableStandbyLeaderSelectorFlg = "enable-standby-leader-selector"
-	ControlPlaneNamespaceFlg       = "control-plane-namespace"
-	enableLegacyStandbySelectorFlg = "enable-legacy-standby-selector"
-	deployEtcdFlg                  = "deploy-etcd"
-	etcdImageFlg                   = "etcd-image"
-	etcdBackupSidecarImageFlg      = "etcd-backup-sidecar-image"
-	etcdBackupSecretNameFlg        = "etcd-backup-secret-name" // nolint
-	etcdPSPNameFlg                 = "etcd-psp-name"
-	postgresletFullnameFlg         = "postgreslet-fullname"
+	metricsAddrSvcMgrFlg                  = "metrics-addr-svc-mgr"
+	metricsAddrCtrlMgrFlg                 = "metrics-addr-ctrl-mgr"
+	enableLeaderElectionFlg               = "enable-leader-election"
+	partitionIDFlg                        = "partition-id"
+	tenantFlg                             = "tenant"
+	ctrlPlaneKubeConfifgFlg               = "controlplane-kubeconfig"
+	loadBalancerIPFlg                     = "load-balancer-ip"
+	portRangeStartFlg                     = "port-range-start"
+	portRangeSizeFlg                      = "port-range-size"
+	customPSPNameFlg                      = "custom-psp-name"
+	storageClassFlg                       = "storage-class"
+	postgresImageFlg                      = "postgres-image"
+	etcdHostFlg                           = "etcd-host"
+	crdValidationFlg                      = "enable-crd-validation"
+	operatorImageFlg                      = "operator-image"
+	pgParamBlockListFlg                   = "postgres-param-blocklist"
+	majorVersionUpgradeModeFlg            = "major-version-upgrade-mode"
+	standbyClustersSourceRangesFlg        = "standby-clusters-source-ranges"
+	postgresletNamespaceFlg               = "postgreslet-namespace"
+	sidecarsCMNameFlg                     = "sidecars-configmap-name"
+	enableNetPolFlg                       = "enable-netpol"
+	enablePodAntiaffinityFlg              = "enable-pod-antiaffinity"
+	patroniRetryTimeoutFlg                = "patroni-retry-timeout"
+	enableStandbyLeaderSelectorFlg        = "enable-standby-leader-selector"
+	ControlPlaneNamespaceFlg              = "control-plane-namespace"
+	enableLegacyStandbySelectorFlg        = "enable-legacy-standby-selector"
+	deployEtcdFlg                         = "deploy-etcd"
+	etcdImageFlg                          = "etcd-image"
+	etcdBackupSidecarImageFlg             = "etcd-backup-sidecar-image"
+	etcdBackupSecretNameFlg               = "etcd-backup-secret-name" // nolint
+	etcdPSPNameFlg                        = "etcd-psp-name"
+	postgresletFullnameFlg                = "postgreslet-fullname"
+	enableRandomStorageEncrytionSecretFlg = "enable-random-storage-encryption-secret"
 )
 
 var (
@@ -109,13 +110,14 @@ func main() {
 		etcdPSPName             string
 		postgresletFullname     string
 
-		enableLeaderElection        bool
-		enableCRDValidation         bool
-		enableNetPol                bool
-		enablePodAntiaffinity       bool
-		enableStandbyLeaderSelector bool
-		enableLegacyStandbySelector bool
-		deployEtcd                  bool
+		enableLeaderElection               bool
+		enableCRDValidation                bool
+		enableNetPol                       bool
+		enablePodAntiaffinity              bool
+		enableStandbyLeaderSelector        bool
+		enableLegacyStandbySelector        bool
+		deployEtcd                         bool
+		enableRandomStorageEncrytionSecret bool
 
 		portRangeStart int
 		portRangeSize  int
@@ -240,6 +242,9 @@ func main() {
 	viper.SetDefault(postgresletFullnameFlg, partitionID) // fall back to partition id
 	postgresletFullname = viper.GetString(postgresletFullnameFlg)
 
+	viper.SetDefault(enableRandomStorageEncrytionSecretFlg, false)
+	enableRandomStorageEncrytionSecret = viper.GetBool(enableRandomStorageEncrytionSecretFlg)
+
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 
 	ctrl.Log.Info("flag",
@@ -275,6 +280,7 @@ func main() {
 		etcdBackupSecretNameFlg, etcdBackupSecretName,
 		etcdPSPNameFlg, etcdPSPName,
 		postgresletFullnameFlg, postgresletFullname,
+		enableRandomStorageEncrytionSecretFlg, enableRandomStorageEncrytionSecret,
 	)
 
 	svcClusterConf := ctrl.GetConfigOrDie()
@@ -358,24 +364,25 @@ func main() {
 		EnableLegacyStandbySelector: enableLegacyStandbySelector,
 	}
 	if err = (&controllers.PostgresReconciler{
-		CtrlClient:                  ctrlPlaneClusterMgr.GetClient(),
-		SvcClient:                   svcClusterMgr.GetClient(),
-		Log:                         ctrl.Log.WithName("controllers").WithName("Postgres"),
-		Scheme:                      ctrlPlaneClusterMgr.GetScheme(),
-		PartitionID:                 partitionID,
-		Tenant:                      tenant,
-		StorageClass:                storageClass,
-		OperatorManager:             opMgr,
-		LBManager:                   lbmanager.New(svcClusterMgr.GetClient(), lbMgrOpts),
-		PgParamBlockList:            pgParamBlockList,
-		StandbyClustersSourceRanges: standbyClusterSourceRanges,
-		PostgresletNamespace:        postgresletNamespace,
-		SidecarsConfigMapName:       sidecarsCMName,
-		EnableNetPol:                enableNetPol,
-		EtcdHost:                    etcdHost,
-		PatroniTTL:                  patroniTTL,
-		PatroniLoopWait:             patroniLoopWait,
-		PatroniRetryTimeout:         patroniRetryTimeout,
+		CtrlClient:                          ctrlPlaneClusterMgr.GetClient(),
+		SvcClient:                           svcClusterMgr.GetClient(),
+		Log:                                 ctrl.Log.WithName("controllers").WithName("Postgres"),
+		Scheme:                              ctrlPlaneClusterMgr.GetScheme(),
+		PartitionID:                         partitionID,
+		Tenant:                              tenant,
+		StorageClass:                        storageClass,
+		OperatorManager:                     opMgr,
+		LBManager:                           lbmanager.New(svcClusterMgr.GetClient(), lbMgrOpts),
+		PgParamBlockList:                    pgParamBlockList,
+		StandbyClustersSourceRanges:         standbyClusterSourceRanges,
+		PostgresletNamespace:                postgresletNamespace,
+		SidecarsConfigMapName:               sidecarsCMName,
+		EnableNetPol:                        enableNetPol,
+		EtcdHost:                            etcdHost,
+		PatroniTTL:                          patroniTTL,
+		PatroniLoopWait:                     patroniLoopWait,
+		PatroniRetryTimeout:                 patroniRetryTimeout,
+		EnableRandomStorageEncryptionSecret: enableRandomStorageEncrytionSecret,
 	}).SetupWithManager(ctrlPlaneClusterMgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Postgres")
 		os.Exit(1)
