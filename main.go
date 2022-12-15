@@ -356,6 +356,7 @@ func main() {
 		PortRangeSize:               int32(portRangeSize),
 		EnableStandbyLeaderSelector: enableStandbyLeaderSelector,
 		EnableLegacyStandbySelector: enableLegacyStandbySelector,
+		StandbyClustersSourceRanges: standbyClusterSourceRanges,
 	}
 	if err = (&controllers.PostgresReconciler{
 		CtrlClient:                  ctrlPlaneClusterMgr.GetClient(),

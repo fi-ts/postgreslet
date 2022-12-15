@@ -17,6 +17,7 @@ type Options struct {
 	PortRangeSize               int32
 	EnableStandbyLeaderSelector bool
 	EnableLegacyStandbySelector bool
+	StandbyClustersSourceRanges []string
 }
 
 // LBManager Responsible for the creation and deletion of externally accessible Services to access the Postgresql clusters managed by the Postgreslet.
@@ -60,14 +61,17 @@ func (m *LBManager) CreateSvcLBIfNone(ctx context.Context, in *api.Postgres) err
 			lbIPToUse = ""
 		}
 
-		if err := m.Create(ctx, in.ToSvcLB(lbIPToUse, nextFreePort, m.options.EnableStandbyLeaderSelector, m.options.EnableLegacyStandbySelector)); err != nil {
+		if err := m.Create(ctx, in.ToSvcLB(lbIPToUse, nextFreePort, m.options.EnableStandbyLeaderSelector, m.options.EnableLegacyStandbySelector, m.options.StandbyClustersSourceRanges)); err != nil {
 			return fmt.Errorf("failed to create Service of type LoadBalancer: %w", err)
 		}
 		return nil
 	}
 
+	updated := in.ToSvcLB("", 0, m.options.EnableStandbyLeaderSelector, m.options.EnableLegacyStandbySelector, m.options.StandbyClustersSourceRanges)
 	// update the selector, and only the selector (we do NOT want the change the ip or port here!!!)
-	svc.Spec.Selector = in.ToSvcLB("", 0, m.options.EnableStandbyLeaderSelector, m.options.EnableLegacyStandbySelector).Spec.Selector
+	svc.Spec.Selector = updated.Spec.Selector
+	// also update the source ranges
+	svc.Spec.LoadBalancerSourceRanges = updated.Spec.LoadBalancerSourceRanges
 
 	if err := m.Update(ctx, svc); err != nil {
 		return fmt.Errorf("failed to update Service of type LoadBalancer: %w", err)
