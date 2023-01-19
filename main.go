@@ -25,6 +25,7 @@ import (
 
 	databasev1 "github.com/fi-ts/postgreslet/api/v1"
 	"github.com/fi-ts/postgreslet/controllers"
+	"github.com/fi-ts/postgreslet/pkg/etcdmanager"
 	"github.com/fi-ts/postgreslet/pkg/lbmanager"
 	"github.com/fi-ts/postgreslet/pkg/operatormanager"
 	firewall "github.com/metal-stack/firewall-controller/api/v1"
@@ -60,6 +61,13 @@ const (
 	patroniRetryTimeoutFlg         = "patroni-retry-timeout"
 	enableStandbyLeaderSelectorFlg = "enable-standby-leader-selector"
 	ControlPlaneNamespaceFlg       = "control-plane-namespace"
+	enableLegacyStandbySelectorFlg = "enable-legacy-standby-selector"
+	deployEtcdFlg                  = "deploy-etcd"
+	etcdImageFlg                   = "etcd-image"
+	etcdBackupSidecarImageFlg      = "etcd-backup-sidecar-image"
+	etcdBackupSecretNameFlg        = "etcd-backup-secret-name" // nolint
+	etcdPSPNameFlg                 = "etcd-psp-name"
+	postgresletFullnameFlg         = "postgreslet-fullname"
 )
 
 var (
@@ -78,12 +86,48 @@ func init() {
 }
 
 func main() {
-	var metricsAddrCtrlMgr, metricsAddrSvcMgr, partitionID, tenant, ctrlClusterKubeconfig, pspName, lbIP, storageClass, postgresImage, etcdHost, operatorImage, majorVersionUpgradeMode, postgresletNamespace, sidecarsCMName, controlPlaneNamespace string
-	var enableLeaderElection, enableCRDValidation, enableNetPol, enablePodAntiaffinity, enableStandbyLeaderSelector bool
-	var portRangeStart, portRangeSize int
-	var patroniTTL, patroniLoopWait, patroniRetryTimeout uint32
-	var pgParamBlockList map[string]bool
-	var standbyClusterSourceRanges []string
+
+	var (
+		metricsAddrCtrlMgr      string
+		metricsAddrSvcMgr       string
+		partitionID             string
+		tenant                  string
+		ctrlClusterKubeconfig   string
+		pspName                 string
+		lbIP                    string
+		storageClass            string
+		postgresImage           string
+		etcdHost                string
+		operatorImage           string
+		majorVersionUpgradeMode string
+		postgresletNamespace    string
+		sidecarsCMName          string
+		controlPlaneNamespace   string
+		etcdImage               string
+		etcdBackupSidecarImage  string
+		etcdBackupSecretName    string
+		etcdPSPName             string
+		postgresletFullname     string
+
+		enableLeaderElection        bool
+		enableCRDValidation         bool
+		enableNetPol                bool
+		enablePodAntiaffinity       bool
+		enableStandbyLeaderSelector bool
+		enableLegacyStandbySelector bool
+		deployEtcd                  bool
+
+		portRangeStart int
+		portRangeSize  int
+
+		patroniTTL          uint32
+		patroniLoopWait     uint32
+		patroniRetryTimeout uint32
+
+		pgParamBlockList map[string]bool
+
+		standbyClusterSourceRanges []string
+	)
 
 	// TODO enable Prefix and update helm chart
 	// viper.SetEnvPrefix(envPrefix)
@@ -179,6 +223,23 @@ func main() {
 	viper.SetDefault(ControlPlaneNamespaceFlg, "metal-extension-postgres")
 	controlPlaneNamespace = viper.GetString(ControlPlaneNamespaceFlg)
 
+	viper.SetDefault(enableLegacyStandbySelectorFlg, false)
+	enableLegacyStandbySelector = viper.GetBool(enableLegacyStandbySelectorFlg)
+
+	viper.SetDefault(deployEtcdFlg, false)
+	deployEtcd = viper.GetBool(deployEtcdFlg)
+
+	etcdImage = viper.GetString(etcdImageFlg)
+	etcdBackupSidecarImage = viper.GetString(etcdBackupSidecarImageFlg)
+	viper.SetDefault(etcdBackupSecretNameFlg, "pgaas-etcd-s3-credentials")
+	etcdBackupSecretName = viper.GetString(etcdBackupSecretNameFlg)
+
+	viper.SetDefault(etcdPSPNameFlg, pspName)
+	etcdPSPName = viper.GetString(etcdPSPNameFlg)
+
+	viper.SetDefault(postgresletFullnameFlg, partitionID) // fall back to partition id
+	postgresletFullname = viper.GetString(postgresletFullnameFlg)
+
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 
 	ctrl.Log.Info("flag",
@@ -207,6 +268,13 @@ func main() {
 		patroniRetryTimeoutFlg, patroniRetryTimeout,
 		enableStandbyLeaderSelectorFlg, enableStandbyLeaderSelector,
 		ControlPlaneNamespaceFlg, controlPlaneNamespace,
+		enableLegacyStandbySelectorFlg, enableLegacyStandbySelector,
+		deployEtcdFlg, deployEtcd,
+		etcdImageFlg, etcdImage,
+		etcdBackupSidecarImageFlg, etcdBackupSidecarImage,
+		etcdBackupSecretNameFlg, etcdBackupSecretName,
+		etcdPSPNameFlg, etcdPSPName,
+		postgresletFullnameFlg, postgresletFullname,
 	)
 
 	svcClusterConf := ctrl.GetConfigOrDie()
@@ -239,6 +307,31 @@ func main() {
 		os.Exit(1)
 	}
 
+	var etcdMgrOpts etcdmanager.Options = etcdmanager.Options{
+		EtcdImage:              etcdImage,
+		EtcdBackupSidecarImage: etcdBackupSidecarImage,
+		SecretKeyRefName:       etcdBackupSecretName,
+		PostgresletNamespace:   postgresletNamespace,
+		PartitionID:            partitionID,
+		PSPName:                etcdPSPName,
+		PostgresletFullname:    postgresletFullname,
+	}
+	etcdMgr, err := etcdmanager.New(svcClusterConf, "external/svc-etcd.yaml", scheme, ctrl.Log.WithName("EtcdManager"), etcdMgrOpts)
+	if err != nil {
+		setupLog.Error(err, "unable to create `EtcdManager`")
+		os.Exit(1)
+	}
+	if deployEtcd {
+		if err = etcdMgr.InstallOrUpdateEtcd(); err != nil {
+			setupLog.Error(err, "unable to deploy etcd")
+			os.Exit(1)
+		}
+	} else {
+		if err = etcdMgr.UninstallEtcd(); err != nil {
+			setupLog.Error(err, "unable to undeploy etcd")
+		}
+	}
+
 	var opMgrOpts operatormanager.Options = operatormanager.Options{
 		PspName:                 pspName,
 		OperatorImage:           operatorImage,
@@ -262,6 +355,7 @@ func main() {
 		PortRangeStart:              int32(portRangeStart),
 		PortRangeSize:               int32(portRangeSize),
 		EnableStandbyLeaderSelector: enableStandbyLeaderSelector,
+		EnableLegacyStandbySelector: enableLegacyStandbySelector,
 	}
 	if err = (&controllers.PostgresReconciler{
 		CtrlClient:                  ctrlPlaneClusterMgr.GetClient(),
