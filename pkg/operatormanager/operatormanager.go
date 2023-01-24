@@ -17,6 +17,7 @@ import (
 
 	pg "github.com/fi-ts/postgreslet/api/v1"
 	"github.com/go-logr/logr"
+	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -35,8 +36,8 @@ const (
 	// TODO: use different account for operator and database
 	serviceAccountName string = "postgres-operator"
 
-	// PodEnvSecretName Name of the pod environment secret to create and use
-	PodEnvSecretName string = "postgres-pod-config" //nolint:gosec
+	// PodEnvCMName Name of the pod environment configmap to create and use
+	PodEnvCMName string = "postgres-pod-config"
 
 	operatorPodLabelName  string = "name"
 	operatorPodLabelValue string = "postgres-operator"
@@ -62,6 +63,8 @@ type Options struct {
 	MajorVersionUpgradeMode string
 	PostgresletNamespace    string
 	SidecarsConfigMapName   string
+	PodAntiaffinity         bool
+	PartitionID             string
 }
 
 // OperatorManager manages the operator
@@ -116,9 +119,9 @@ func (m *OperatorManager) InstallOrUpdateOperator(ctx context.Context, namespace
 		return fmt.Errorf("error while ensuring the existence of namespace %v: %w", namespace, err)
 	}
 
-	// Add our (initially empty) custom pod environment secret
-	if err := m.createPodEnvironmentSecret(ctx, namespace); err != nil {
-		return fmt.Errorf("error while creating pod environment secret %v: %w", namespace, err)
+	// Add our (initially empty) custom pod environment configmap
+	if _, err := m.CreatePodEnvironmentConfigMap(ctx, namespace); err != nil {
+		return fmt.Errorf("error while creating pod environment configmap %v: %w", namespace, err)
 	}
 
 	// Add our sidecars configmap
@@ -238,7 +241,7 @@ func (m *OperatorManager) UninstallOperator(ctx context.Context, namespace strin
 	}
 
 	// delete the pod environment configmap
-	if err := m.deletePodEnvironmentSecret(ctx, namespace); client.IgnoreNotFound(err) != nil {
+	if err := m.deletePodEnvironmentConfigMap(ctx, namespace); client.IgnoreNotFound(err) != nil {
 		return fmt.Errorf("error while deleting pod environment configmap: %w", err)
 	}
 
@@ -391,8 +394,8 @@ func (m *OperatorManager) editConfigMap(cm *corev1.ConfigMap, namespace string, 
 	cm.Data["watched_namespace"] = namespace
 	// TODO don't use the same serviceaccount for operator and databases, see #88
 	cm.Data["pod_service_account_name"] = serviceAccountName
-	// set the reference to our custom pod environment secret
-	cm.Data["pod_environment_secret"] = PodEnvSecretName
+	// set the reference to our custom pod environment configmap
+	cm.Data["pod_environment_configmap"] = PodEnvCMName
 	// set the list of inherited labels that will be passed on to the pods
 	s := []string{pg.TenantLabelName, pg.ProjectIDLabelName, pg.UIDLabelName, pg.NameLabelName}
 	// TODO maybe use a precompiled string here
@@ -412,6 +415,8 @@ func (m *OperatorManager) editConfigMap(cm *corev1.ConfigMap, namespace string, 
 	// we specifically refer to those two users in the cloud-api, so we hardcode them here as well to be on the safe side.
 	cm.Data["super_username"] = "postgres"
 	cm.Data["replication_username"] = "standby"
+
+	cm.Data["enable_pod_antiaffinity"] = strconv.FormatBool(options.PodAntiaffinity)
 }
 
 // ensureCleanMetadata ensures obj has clean metadata
@@ -457,33 +462,33 @@ func (m *OperatorManager) createNamespace(ctx context.Context, namespace string)
 	return nil
 }
 
-// createPodEnvironmentSecret creates a new Secret with additional environment variables for the pods
-func (m *OperatorManager) createPodEnvironmentSecret(ctx context.Context, namespace string) error {
+// CreatePodEnvironmentConfigMap creates a new ConfigMap with additional environment variables for the pods
+func (m *OperatorManager) CreatePodEnvironmentConfigMap(ctx context.Context, namespace string) (*corev1.ConfigMap, error) {
 	ns := types.NamespacedName{
 		Namespace: namespace,
-		Name:      PodEnvSecretName,
+		Name:      PodEnvCMName,
 	}
-	if err := m.Get(ctx, ns, &corev1.Secret{}); err == nil {
-		// secret already exists, nothing to do here
-		// we will update the secret with the correct S3 config in the postgres controller
-		m.log.Info("Pod Environment Secret already exists")
-		return nil
-	}
-
-	s := &corev1.Secret{}
-	if err := m.SetName(s, PodEnvSecretName); err != nil {
-		return fmt.Errorf("error while setting the name of the new Pod Environment Secret to %v: %w", namespace, err)
-	}
-	if err := m.SetNamespace(s, namespace); err != nil {
-		return fmt.Errorf("error while setting the namespace of the new Pod Environment Secret to %v: %w", namespace, err)
+	cm := &corev1.ConfigMap{}
+	if err := m.Get(ctx, ns, cm); err == nil {
+		// configmap already exists, nothing to do here
+		// we will update the configmap with the correct S3 config in the postgres controller
+		m.log.Info("Pod Environment ConfigMap already exists")
+		return cm, nil
 	}
 
-	if err := m.Create(ctx, s); err != nil {
-		return fmt.Errorf("error while creating the new Pod Environment Secret: %w", err)
+	if err := m.SetName(cm, PodEnvCMName); err != nil {
+		return nil, fmt.Errorf("error while setting the name of the new Pod Environment ConfigMap to %v: %w", namespace, err)
 	}
-	m.log.Info("new Pod Environment Secret created")
+	if err := m.SetNamespace(cm, namespace); err != nil {
+		return nil, fmt.Errorf("error while setting the namespace of the new Pod Environment ConfigMap to %v: %w", namespace, err)
+	}
 
-	return nil
+	if err := m.Create(ctx, cm); err != nil {
+		return nil, fmt.Errorf("error while creating the new Pod Environment ConfigMap: %w", err)
+	}
+	m.log.Info("new Pod Environment ConfigMap created")
+
+	return cm, nil
 }
 
 func (m *OperatorManager) createOrUpdateSidecarsConfig(ctx context.Context, namespace string) error {
@@ -557,25 +562,25 @@ func (m *OperatorManager) createOrUpdateSidecarsConfigMap(ctx context.Context, n
 	return nil
 }
 
-func (m *OperatorManager) deletePodEnvironmentSecret(ctx context.Context, namespace string) error {
-	s := &corev1.Secret{}
-	if err := m.SetName(s, PodEnvSecretName); err != nil {
-		return fmt.Errorf("error while setting the name of the Pod Environment Secret to delete to %v: %w", PodEnvSecretName, err)
+func (m *OperatorManager) deletePodEnvironmentConfigMap(ctx context.Context, namespace string) error {
+	cm := &corev1.ConfigMap{}
+	if err := m.SetName(cm, PodEnvCMName); err != nil {
+		return fmt.Errorf("error while setting the name of the Pod Environment ConfigMap to delete to %v: %w", PodEnvCMName, err)
 	}
-	if err := m.SetNamespace(s, namespace); err != nil {
-		return fmt.Errorf("error while setting the namespace of the Pod Environment Secret to delete to %v: %w", namespace, err)
+	if err := m.SetNamespace(cm, namespace); err != nil {
+		return fmt.Errorf("error while setting the namespace of the Pod Environment ConfigMap to delete to %v: %w", namespace, err)
 	}
-	if err := m.Delete(ctx, s); err != nil {
-		return fmt.Errorf("error while deleting the Pod Environment Secret: %w", err)
+	if err := m.Delete(ctx, cm); err != nil {
+		return fmt.Errorf("error while deleting the Pod Environment ConfigMap: %w", err)
 	}
-	m.log.Info("Pod Environment Secret deleted")
+	m.log.Info("Pod Environment ConfigMap deleted")
 
 	return nil
 }
 
 // toInstanceMatchingLabels makes the matching labels for the pods of the instances operated by the operator
 func (m *OperatorManager) toInstanceMatchingLabels() *client.MatchingLabels {
-	return &client.MatchingLabels{"application": "spilo"}
+	return &client.MatchingLabels{pg.ApplicationLabelName: pg.ApplicationLabelValue}
 }
 
 // toObjectKey makes ObjectKey from namespace and the name of obj
@@ -590,24 +595,24 @@ func (m *OperatorManager) toObjectKey(obj runtime.Object, namespace string) (cli
 	}, nil
 }
 
-// UpdateAllOperators Updates the manifests of all postgres operators managed by the postgreslet
-func (m *OperatorManager) UpdateAllOperators(ctx context.Context) error {
-	// fetch all operators (running or otherwise)
-	m.log.Info("Fetching all managed namespaces")
+// UpdateAllManagedOperators Updates the manifests of all postgres operators managed by this postgreslet
+func (m *OperatorManager) UpdateAllManagedOperators(ctx context.Context) error {
+	// fetch postgresql custom ressource (running or otherwise)
+	m.log.Info("Fetching all zalando custom ressources managed by this postgreslet")
 	matchingLabels := client.MatchingLabels{
-		pg.ManagedByLabelName: pg.ManagedByLabelValue,
+		pg.PartitionIDLabelName: m.options.PartitionID,
 	}
-	nsList := &corev1.NamespaceList{}
+	zList := &zalando.PostgresqlList{}
 	opts := []client.ListOption{
 		matchingLabels,
 	}
-	if err := m.List(ctx, nsList, opts...); err != nil {
+	if err := m.List(ctx, zList, opts...); err != nil {
 		return client.IgnoreNotFound(err)
 	}
 	// update each namespace
-	for _, ns := range nsList.Items {
-		m.log.Info("Updating postgres operator installation", "namespace", ns.Name)
-		if err := m.InstallOrUpdateOperator(ctx, ns.Name); err != nil {
+	for _, z := range zList.Items {
+		m.log.Info("Updating postgres operator installation", "namespace", z.Namespace)
+		if err := m.InstallOrUpdateOperator(ctx, z.Namespace); err != nil {
 			return err
 		}
 	}

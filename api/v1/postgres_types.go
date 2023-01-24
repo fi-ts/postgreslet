@@ -8,6 +8,7 @@ package v1
 
 import (
 	"fmt"
+	"net/netip"
 	"reflect"
 	"strconv"
 	"strings"
@@ -17,7 +18,6 @@ import (
 
 	firewall "github.com/metal-stack/firewall-controller/api/v1"
 	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
-	"inet.af/netaddr"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -60,8 +60,20 @@ const (
 	// StandbyKey defines the key under which the standby configuration is stored in the CR.  Defined by the postgres-operator/patroni
 	StandbyKey    = "standby"
 	StandbyMethod = "streaming_host"
+	// PartitionIDLabelName Name of the managed-by label
+	PartitionIDLabelName string = "postgres.database.fits.cloud/partition-id"
+
+	ApplicationLabelName             = "application"
+	ApplicationLabelValue            = "spilo"
+	SpiloRoleLabelName               = "spilo-role"
+	SpiloRoleLabelValueMaster        = "master"
+	SpiloRoleLabelValueStandbyLeader = "standby_leader"
+	StatefulsetPodNameLabelName      = "statefulset.kubernetes.io/pod-name"
 
 	teamIDPrefix = "pg"
+
+	DefaultPatroniParamValueLoopWait     uint32 = 10
+	DefaultPatroniParamValueRetryTimeout uint32 = 60
 
 	defaultPostgresParamValueTCPKeepAlivesIdle      = "200"
 	defaultPostgresParamValueTCPKeepAlivesInterval  = "30"
@@ -277,7 +289,7 @@ func (p *Postgres) ToCWNP(port int) (*firewall.ClusterwideNetworkPolicy, error) 
 	ipblocks := []networkingv1.IPBlock{}
 	if p.HasSourceRanges() {
 		for _, src := range p.Spec.AccessList.SourceRanges {
-			parsedSrc, err := netaddr.ParseIPPrefix(src)
+			parsedSrc, err := netip.ParsePrefix(src)
 			if err != nil {
 				return nil, fmt.Errorf("unable to parse source range %s: %w", src, err)
 			}
@@ -310,7 +322,7 @@ func (p *Postgres) ToKey() *types.NamespacedName {
 	}
 }
 
-func (p *Postgres) ToSvcLB(lbIP string, lbPort int32) *corev1.Service {
+func (p *Postgres) ToSvcLB(lbIP string, lbPort int32, enableStandbyLeaderSelector bool, enableLegacyStandbySelector bool) *corev1.Service {
 	lb := &corev1.Service{}
 	lb.Spec.Type = "LoadBalancer"
 
@@ -332,10 +344,22 @@ func (p *Postgres) ToSvcLB(lbIP string, lbPort int32) *corev1.Service {
 	lb.Spec.Ports = []corev1.ServicePort{port}
 
 	lb.Spec.Selector = map[string]string{
-		"application":  "spilo",
-		"cluster-name": p.ToPeripheralResourceName(),
-		"spilo-role":   "master",
-		"team":         p.generateTeamID(),
+		ApplicationLabelName: ApplicationLabelValue,
+		"cluster-name":       p.ToPeripheralResourceName(),
+		"team":               p.generateTeamID(),
+	}
+	if p.IsReplicationPrimary() {
+		lb.Spec.Selector[SpiloRoleLabelName] = SpiloRoleLabelValueMaster
+	} else {
+		if enableStandbyLeaderSelector {
+			// Only set this value when we are NOT a primary and the StandbyLeaderSelector is enabled.
+			lb.Spec.Selector[SpiloRoleLabelName] = SpiloRoleLabelValueStandbyLeader
+		} else if enableLegacyStandbySelector {
+			lb.Spec.Selector[SpiloRoleLabelName] = SpiloRoleLabelValueMaster
+		} else {
+			// select the first pod in the statefulset
+			lb.Spec.Selector[StatefulsetPodNameLabelName] = p.ToPeripheralResourceName() + "-0"
+		}
 	}
 
 	if len(lbIP) > 0 {
@@ -401,9 +425,9 @@ func (p *Postgres) ToUserPasswordsSecretListOption() []client.ListOption {
 
 func (p *Postgres) ToUserPasswordSecretMatchingLabels() map[string]string {
 	return map[string]string{
-		"application":  "spilo",
-		"cluster-name": p.ToPeripheralResourceName(),
-		"team":         p.generateTeamID(),
+		ApplicationLabelName: ApplicationLabelValue,
+		"cluster-name":       p.ToPeripheralResourceName(),
+		"team":               p.generateTeamID(),
 	}
 }
 
@@ -482,7 +506,7 @@ func (p *Postgres) ToPeripheralResourceLookupKey() types.NamespacedName {
 	}
 }
 
-func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *corev1.ConfigMap, sc string, pgParamBlockList map[string]bool, rbs *BackupConfig, srcDB *Postgres) (*unstructured.Unstructured, error) {
+func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *corev1.ConfigMap, sc string, pgParamBlockList map[string]bool, rbs *BackupConfig, srcDB *Postgres, patroniTTL, patroniLoopWait, patroniRetryTimeout uint32) (*unstructured.Unstructured, error) {
 	if z == nil {
 		z = &zalando.Postgresql{}
 	}
@@ -490,6 +514,9 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 	z.Namespace = p.ToPeripheralResourceNamespace()
 	z.Name = p.ToPeripheralResourceName()
 	z.Labels = p.ToZalandoPostgresqlMatchingLabels()
+	// Add the newly introduced label only here, not in  p.ToZalandoPostgresqlMatchingLabels() (so that the selectors using  p.ToZalandoPostgresqlMatchingLabels() will still work untill all postgres resources have that new label)
+	// TODO once all the custom resources have that new label, move this part to p.ToZalandoPostgresqlMatchingLabels()
+	z.Labels[PartitionIDLabelName] = p.Spec.PartitionID
 
 	z.Spec.NumberOfInstances = p.Spec.NumberOfInstances
 	z.Spec.PostgresqlParam.PgVersion = p.Spec.Version
@@ -515,8 +542,9 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 	z.Spec.Volume.Size = p.Spec.Size.StorageSize
 	z.Spec.Volume.StorageClass = sc
 
-	// TODO make configurable?
-	z.Spec.Patroni.TTL = 130
+	z.Spec.Patroni.TTL = patroniTTL
+	z.Spec.Patroni.LoopWait = patroniLoopWait
+	z.Spec.Patroni.RetryTimeout = patroniRetryTimeout
 	z.Spec.Patroni.SynchronousMode = true
 	z.Spec.Patroni.SynchronousModeStrict = false
 
@@ -532,7 +560,7 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 
 	// Create database owner
 	z.Spec.Users = make(map[string]zalando.UserFlags)
-	z.Spec.Users[ownerName] = zalando.UserFlags{"superuser", "createdb"}
+	z.Spec.Users[ownerName] = zalando.UserFlags{"createdb", "createrole"}
 
 	// Create default database
 	z.Spec.Databases = make(map[string]string)
@@ -577,6 +605,9 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 			S3SecretAccessKey: rbs.S3SecretKey,
 			S3ForcePathStyle:  pointer.Bool(true),
 		}
+	} else {
+		// if we don't set the clone block, remove it completely
+		z.Spec.Clone = nil
 	}
 
 	// Enable replication (using unstructured json)
@@ -788,7 +819,7 @@ func (p *Postgres) ToStandbyClusterIngressCWNP(sourceCIDRs []string) (*firewall.
 	//
 	standbyClusterIngressIPBlocks := []networkingv1.IPBlock{}
 	for _, cidr := range sourceCIDRs {
-		remoteServiceClusterCIDR, err := netaddr.ParseIPPrefix(cidr)
+		remoteServiceClusterCIDR, err := netip.ParsePrefix(cidr)
 		if err != nil {
 			return nil, fmt.Errorf("unable to parse standby host ip %s: %w", p.Spec.PostgresConnection.ConnectionIP, err)
 		}
@@ -815,7 +846,7 @@ func (p *Postgres) ToStandbyClusterIngressCWNP(sourceCIDRs []string) (*firewall.
 func (p *Postgres) ToStandbyClusterEgressCWNP() (*firewall.ClusterwideNetworkPolicy, error) {
 	standbyClusterEgressIPBlocks := []networkingv1.IPBlock{}
 	if p.Spec.PostgresConnection.ConnectionIP != "" {
-		remoteServiceClusterCIDR, err := netaddr.ParseIPPrefix(p.Spec.PostgresConnection.ConnectionIP + "/32")
+		remoteServiceClusterCIDR, err := netip.ParsePrefix(p.Spec.PostgresConnection.ConnectionIP + "/32")
 		if err != nil {
 			return nil, fmt.Errorf("unable to parse standby host ip %s: %w", p.Spec.PostgresConnection.ConnectionIP, err)
 		}

@@ -12,9 +12,11 @@ import (
 )
 
 type Options struct {
-	LBIP           string
-	PortRangeStart int32
-	PortRangeSize  int32
+	LBIP                        string
+	PortRangeStart              int32
+	PortRangeSize               int32
+	EnableStandbyLeaderSelector bool
+	EnableLegacyStandbySelector bool
 }
 
 // LBManager Responsible for the creation and deletion of externally accessible Services to access the Postgresql clusters managed by the Postgreslet.
@@ -33,10 +35,11 @@ func New(client client.Client, opt Options) *LBManager {
 
 // CreateSvcLBIfNone Creates a new Service of type LoadBalancer for the given Postgres resource if neccessary
 func (m *LBManager) CreateSvcLBIfNone(ctx context.Context, in *api.Postgres) error {
+	svc := &corev1.Service{}
 	if err := m.Get(ctx, client.ObjectKey{
 		Namespace: in.ToPeripheralResourceNamespace(),
 		Name:      in.ToSvcLBName(),
-	}, &corev1.Service{}); err != nil {
+	}, svc); err != nil {
 		if !apimach.IsNotFound(err) {
 			return fmt.Errorf("failed to fetch Service of type LoadBalancer: %w", err)
 		}
@@ -57,11 +60,19 @@ func (m *LBManager) CreateSvcLBIfNone(ctx context.Context, in *api.Postgres) err
 			lbIPToUse = ""
 		}
 
-		if err := m.Create(ctx, in.ToSvcLB(lbIPToUse, nextFreePort)); err != nil {
+		if err := m.Create(ctx, in.ToSvcLB(lbIPToUse, nextFreePort, m.options.EnableStandbyLeaderSelector, m.options.EnableLegacyStandbySelector)); err != nil {
 			return fmt.Errorf("failed to create Service of type LoadBalancer: %w", err)
 		}
 		return nil
 	}
+
+	// update the selector, and only the selector (we do NOT want the change the ip or port here!!!)
+	svc.Spec.Selector = in.ToSvcLB("", 0, m.options.EnableStandbyLeaderSelector, m.options.EnableLegacyStandbySelector).Spec.Selector
+
+	if err := m.Update(ctx, svc); err != nil {
+		return fmt.Errorf("failed to update Service of type LoadBalancer: %w", err)
+	}
+
 	return nil
 }
 

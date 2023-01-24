@@ -29,12 +29,15 @@ import (
 	networkingv1 "k8s.io/api/networking/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	pg "github.com/fi-ts/postgreslet/api/v1"
 	"github.com/fi-ts/postgreslet/pkg/lbmanager"
@@ -69,6 +72,9 @@ type PostgresReconciler struct {
 	SidecarsConfigMapName       string
 	EnableNetPol                bool
 	EtcdHost                    string
+	PatroniTTL                  uint32
+	PatroniLoopWait             uint32
+	PatroniRetryTimeout         uint32
 }
 
 // Reconcile is the entry point for postgres reconciliation.
@@ -245,7 +251,7 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, fmt.Errorf("error while creating sidecars servicemonitor %v: %w", namespace, err)
 	}
 
-	if err := r.createOrUpdateZalandoPostgresql(ctx, instance, log, globalSidecarsCM); err != nil {
+	if err := r.createOrUpdateZalandoPostgresql(ctx, instance, log, globalSidecarsCM, r.PatroniTTL, r.PatroniLoopWait, r.PatroniRetryTimeout); err != nil {
 		r.recorder.Eventf(instance, "Warning", "Error", "failed to create Zalando resource: %v", err)
 		return ctrl.Result{}, fmt.Errorf("failed to create or update zalando postgresql: %w", err)
 	}
@@ -283,10 +289,11 @@ func (r *PostgresReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.recorder = mgr.GetEventRecorderFor("PostgresController")
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&pg.Postgres{}).
+		WithEventFilter(predicate.GenerationChangedPredicate{}).
 		Complete(r)
 }
 
-func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context, instance *pg.Postgres, log logr.Logger, sidecarsCM *corev1.ConfigMap) error {
+func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context, instance *pg.Postgres, log logr.Logger, sidecarsCM *corev1.ConfigMap, patroniTTL, patroniLoopWait, patroniRetryTimout uint32) error {
 	var restoreBackupConfig *pg.BackupConfig
 	var restoreSouceInstance *pg.Postgres
 	if instance.Spec.PostgresRestore != nil {
@@ -299,18 +306,18 @@ func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context
 		}
 		src := &pg.Postgres{}
 		if err := r.CtrlClient.Get(ctx, srcNs, src); err != nil {
-			r.recorder.Eventf(instance, "Warning", "Error", "failed to get resource: %v", err)
-			return err
-		}
-		log.Info("source for restore fetched", "postgres", instance)
+			r.recorder.Eventf(instance, "Warning", "Error", "failed to get source postgres for restore: %v", err)
+		} else {
+			log.Info("source for restore fetched", "postgres", instance)
 
-		bc, err := r.getBackupConfig(ctx, instance.Namespace, src.Spec.BackupSecretRef)
-		if err != nil {
-			return err
-		}
+			bc, err := r.getBackupConfig(ctx, instance.Namespace, src.Spec.BackupSecretRef)
+			if err != nil {
+				return err
+			}
 
-		restoreBackupConfig = bc
-		restoreSouceInstance = src
+			restoreBackupConfig = bc
+			restoreSouceInstance = src
+		}
 	}
 
 	// Get zalando postgresql and create one if none.
@@ -321,7 +328,7 @@ func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context
 			return fmt.Errorf("failed to fetch zalando postgresql: %w", err)
 		}
 
-		u, err := instance.ToUnstructuredZalandoPostgresql(nil, sidecarsCM, r.StorageClass, r.PgParamBlockList, restoreBackupConfig, restoreSouceInstance)
+		u, err := instance.ToUnstructuredZalandoPostgresql(nil, sidecarsCM, r.StorageClass, r.PgParamBlockList, restoreBackupConfig, restoreSouceInstance, patroniTTL, patroniLoopWait, patroniRetryTimout)
 		if err != nil {
 			return fmt.Errorf("failed to convert to unstructured zalando postgresql: %w", err)
 		}
@@ -337,7 +344,7 @@ func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context
 	// Update zalando postgresql
 	mergeFrom := client.MergeFrom(rawZ.DeepCopy())
 
-	u, err := instance.ToUnstructuredZalandoPostgresql(rawZ, sidecarsCM, r.StorageClass, r.PgParamBlockList, restoreBackupConfig, restoreSouceInstance)
+	u, err := instance.ToUnstructuredZalandoPostgresql(rawZ, sidecarsCM, r.StorageClass, r.PgParamBlockList, restoreBackupConfig, restoreSouceInstance, patroniTTL, patroniLoopWait, patroniRetryTimout)
 	if err != nil {
 		return fmt.Errorf("failed to convert to unstructured zalando postgresql: %w", err)
 	}
@@ -376,15 +383,15 @@ func (r *PostgresReconciler) ensureZalandoDependencies(ctx context.Context, p *p
 		}
 	}
 
-	if err := r.updatePodEnvironmentSecret(ctx, p); err != nil {
+	if err := r.updatePodEnvironmentConfigMap(ctx, p); err != nil {
 		return fmt.Errorf("error while updating backup config: %w", err)
 	}
 
 	return nil
 }
 
-func (r *PostgresReconciler) updatePodEnvironmentSecret(ctx context.Context, p *pg.Postgres) error {
-	log := r.Log.WithValues("postgres", p.UID)
+func (r *PostgresReconciler) updatePodEnvironmentConfigMap(ctx context.Context, p *pg.Postgres) error {
+	log := r.Log.WithValues("postgres", p.Name)
 	if p.Spec.BackupSecretRef == "" {
 		log.Info("No configured backupSecretRef found, skipping configuration of postgres backup")
 		return nil
@@ -423,37 +430,45 @@ func (r *PostgresReconciler) updatePodEnvironmentSecret(ctx context.Context, p *
 		walgLibSodiumKey = *backupConfig.S3EncryptionKey
 	}
 
-	// create updated content for pod environment secret
-	data := map[string][]byte{
-		"USE_WALG_BACKUP":                  []byte("true"),
-		"USE_WALG_RESTORE":                 []byte("true"),
-		"WALE_S3_PREFIX":                   []byte("s3://" + bucketName + "/$(SCOPE)"),
-		"WALG_S3_PREFIX":                   []byte("s3://" + bucketName + "/$(SCOPE)"),
-		"CLONE_WALG_S3_PREFIX":             []byte("s3://" + bucketName + "/$(CLONE_SCOPE)"),
-		"WALE_BACKUP_THRESHOLD_PERCENTAGE": []byte("100"),
-		"AWS_ENDPOINT":                     []byte(awsEndpoint),
-		"WALE_S3_ENDPOINT":                 []byte(walES3Endpoint), // same as above, but slightly modified
-		"AWS_ACCESS_KEY_ID":                []byte(awsAccessKeyID),
-		"AWS_SECRET_ACCESS_KEY":            []byte(awsSecretAccessKey),
-		"AWS_S3_FORCE_PATH_STYLE":          []byte("true"),
-		"AWS_REGION":                       []byte(region),           // now we can use AWS S3
-		"WALG_DISABLE_S3_SSE":              []byte(walgDisableSSE),   // disable server side encryption if key is nil
-		"WALG_LIBSODIUM_KEY":               []byte(walgLibSodiumKey), // libsodium client side encryption key // TODO validate in server-side that it is 32 bytes long, see https://github.com/wal-g/wal-g#encryption
-		"BACKUP_SCHEDULE":                  []byte(backupSchedule),
-		"BACKUP_NUM_TO_RETAIN":             []byte(backupNumToRetain),
+	// create updated content for pod environment configmap
+	data := map[string]string{
+		"USE_WALG_BACKUP":                  "true",
+		"USE_WALG_RESTORE":                 "true",
+		"WALE_S3_PREFIX":                   "s3://" + bucketName + "/$(SCOPE)",
+		"WALG_S3_PREFIX":                   "s3://" + bucketName + "/$(SCOPE)",
+		"CLONE_WALG_S3_PREFIX":             "s3://" + bucketName + "/$(CLONE_SCOPE)",
+		"WALE_BACKUP_THRESHOLD_PERCENTAGE": "100",
+		"AWS_ENDPOINT":                     awsEndpoint,
+		"WALE_S3_ENDPOINT":                 walES3Endpoint, // same as above, but slightly modified
+		"AWS_ACCESS_KEY_ID":                awsAccessKeyID,
+		"AWS_SECRET_ACCESS_KEY":            awsSecretAccessKey,
+		"AWS_S3_FORCE_PATH_STYLE":          "true",
+		"AWS_REGION":                       region,           // now we can use AWS S3
+		"WALG_DISABLE_S3_SSE":              walgDisableSSE,   // disable server side encryption if key is nil
+		"WALG_LIBSODIUM_KEY":               walgLibSodiumKey, // libsodium client side encryption key // TODO validate in server-side that it is 32 bytes long, see https://github.com/wal-g/wal-g#encryption
+		"BACKUP_SCHEDULE":                  backupSchedule,
+		"BACKUP_NUM_TO_RETAIN":             backupNumToRetain,
 	}
 
-	s := &corev1.Secret{}
+	cm := &corev1.ConfigMap{}
 	ns := types.NamespacedName{
-		Name:      operatormanager.PodEnvSecretName,
+		Name:      operatormanager.PodEnvCMName,
 		Namespace: p.ToPeripheralResourceNamespace(),
 	}
-	if err := r.SvcClient.Get(ctx, ns, s); err != nil {
-		return fmt.Errorf("error while getting the pod environment secret from service cluster: %w", err)
+	if err := r.SvcClient.Get(ctx, ns, cm); err != nil {
+		// when updating from v0.7.0 straight to v0.10.0, we neither have that ConfigMap (as we use a Secret in version
+		// v0.7.0) nor do we create it (the new labels aren't there yet, so the selector does not match and
+		// operatormanager.OperatorManager.UpdateAllManagedOperators does not call InstallOrUpdateOperator)
+		// we previously aborted here (before the postgresql resource was updated with the new labels), meaning we would
+		// simply restart the loop without solving the problem.
+		if cm, err = r.CreatePodEnvironmentConfigMap(ctx, ns.Namespace); err != nil {
+			return fmt.Errorf("error while creating the missing Pod Environment ConfigMap %v: %w", ns.Namespace, err)
+		}
+		log.Info("mising Pod Environment ConfigMap created!")
 	}
-	s.Data = data
-	if err := r.SvcClient.Update(ctx, s); err != nil {
-		return fmt.Errorf("error while updating the pod environment secret in service cluster: %w", err)
+	cm.Data = data
+	if err := r.SvcClient.Update(ctx, cm); err != nil {
+		return fmt.Errorf("error while updating the pod environment configmap in service cluster: %w", err)
 	}
 
 	return nil
@@ -695,20 +710,77 @@ func (r *PostgresReconciler) updatePatroniConfig(ctx context.Context, instance *
 
 	r.Log.Info("Sending REST call to Patroni API")
 	pods := &corev1.PodList{}
+
+	roleReq, err := labels.NewRequirement(pg.SpiloRoleLabelName, selection.In, []string{pg.SpiloRoleLabelValueMaster, pg.SpiloRoleLabelValueStandbyLeader})
+	if err != nil {
+		r.Log.Info("could not create requirements for label selector to query pods, requeuing")
+		return err
+	}
+	leaderSelector := labels.NewSelector()
+	leaderSelector = leaderSelector.Add(*roleReq)
+
 	opts := []client.ListOption{
 		client.InNamespace(instance.ToPeripheralResourceNamespace()),
-		client.MatchingLabels{"spilo-role": "master"},
+		client.MatchingLabelsSelector{Selector: leaderSelector},
 	}
 	if err := r.SvcClient.List(ctx, pods, opts...); err != nil {
 		r.Log.Info("could not query pods, requeuing")
 		return err
 	}
 	if len(pods.Items) == 0 {
-		r.Log.Info("no master pod ready, requeuing")
-		// TODO return proper error
-		return errors.New("no master pods found")
+		r.Log.Info("no leader pod found, selecting all spilo pods as a last resort (might be ok if it is still creating)")
+
+		err = r.updatePatroniConfigOnAllPods(ctx, instance)
+		if err != nil {
+			r.Log.Info("updating patroni config failed, got one or more errors")
+			return err
+		}
+		return nil
 	}
 	podIP := pods.Items[0].Status.PodIP
+
+	return r.httpPatchPatroni(ctx, instance, podIP)
+}
+
+func (r *PostgresReconciler) updatePatroniConfigOnAllPods(ctx context.Context, instance *pg.Postgres) error {
+	pods := &corev1.PodList{}
+	opts := []client.ListOption{
+		client.InNamespace(instance.ToPeripheralResourceNamespace()),
+		client.MatchingLabels{pg.ApplicationLabelName: pg.ApplicationLabelValue},
+	}
+	if err := r.SvcClient.List(ctx, pods, opts...); err != nil {
+		r.Log.Info("could not query pods, requeuing")
+		return err
+	}
+
+	if len(pods.Items) == 0 {
+		r.Log.Info("no spilo pods found at all, requeueing")
+		return errors.New("no spilo pods found at all")
+	}
+
+	// iterate all spilo pods
+	var lastErr error
+	for _, pod := range pods.Items {
+		pod := pod // pin!
+		podIP := pod.Status.PodIP
+		if err := r.httpPatchPatroni(ctx, instance, podIP); err != nil {
+			lastErr = err
+			r.Log.Info("failed to update pod")
+		}
+	}
+	if lastErr != nil {
+		r.Log.Info("updating patroni config failed, got one or more errors")
+		return lastErr
+	}
+	r.Log.Info("updating patroni config succeeded")
+	return nil
+}
+
+func (r *PostgresReconciler) httpPatchPatroni(ctx context.Context, instance *pg.Postgres, podIP string) error {
+	if podIP == "" {
+		return errors.New("podIP must not be empty")
+	}
+
 	podPort := "8008"
 	path := "config"
 
@@ -760,12 +832,14 @@ func (r *PostgresReconciler) updatePatroniConfig(ctx context.Context, instance *
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPatch, url, bytes.NewBuffer(jsonReq))
 	if err != nil {
+		r.Log.Error(err, "could not create request")
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
+		r.Log.Error(err, "could not perform request")
 		return err
 	}
 	defer resp.Body.Close()
@@ -802,7 +876,7 @@ func (r *PostgresReconciler) createOrUpdateNetPol(ctx context.Context, instance 
 	namespace := instance.ToPeripheralResourceNamespace()
 
 	pgPodMatchingLabels := instance.ToZalandoPostgresqlMatchingLabels()
-	pgPodMatchingLabels["application"] = "spilo"
+	pgPodMatchingLabels[pg.ApplicationLabelName] = pg.ApplicationLabelValue
 
 	spec := networkingv1.NetworkPolicySpec{
 		PodSelector: metav1.LabelSelector{
@@ -958,7 +1032,7 @@ func (r *PostgresReconciler) createOrUpdateExporterSidecarServices(ctx context.C
 		return fmt.Errorf("error while setting the namespace of the postgres-exporter service to %v: %w", namespace, err)
 	}
 	labels := map[string]string{
-		// "application": "spilo", // TODO check if we still need that label, IsOperatorDeletable won't work anymore if we set it.
+		// pg.ApplicationLabelName: pg.ApplicationLabelValue, // TODO check if we still need that label, IsOperatorDeletable won't work anymore if we set it.
 		"app": "postgres-exporter",
 	}
 	if err := r.SetLabels(pes, labels); err != nil {
@@ -981,7 +1055,7 @@ func (r *PostgresReconciler) createOrUpdateExporterSidecarServices(ctx context.C
 		},
 	}
 	selector := map[string]string{
-		"application": "spilo",
+		pg.ApplicationLabelName: pg.ApplicationLabelValue,
 	}
 	pes.Spec.Selector = selector
 	pes.Spec.Type = corev1.ServiceTypeClusterIP
