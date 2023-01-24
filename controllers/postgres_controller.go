@@ -422,8 +422,8 @@ func (r *PostgresReconciler) updatePodEnvironmentConfigMap(ctx context.Context, 
 	backupSchedule := backupConfig.Schedule
 	backupNumToRetain := backupConfig.Retention
 
-	// s3 server side encryption SSE is enabled if the key is given
-	// TODO our s3 needs a small change to make this work
+	// s3 server side encryption SSE is disabled
+	// we use client side encryption
 	walgDisableSSE := "true"
 	walgLibSodiumKey := ""
 	if backupConfig.S3EncryptionKey != nil {
@@ -444,7 +444,7 @@ func (r *PostgresReconciler) updatePodEnvironmentConfigMap(ctx context.Context, 
 		"AWS_SECRET_ACCESS_KEY":            awsSecretAccessKey,
 		"AWS_S3_FORCE_PATH_STYLE":          "true",
 		"AWS_REGION":                       region,           // now we can use AWS S3
-		"WALG_DISABLE_S3_SSE":              walgDisableSSE,   // disable server side encryption if key is nil
+		"WALG_DISABLE_S3_SSE":              walgDisableSSE,   // server side encryption
 		"WALG_LIBSODIUM_KEY":               walgLibSodiumKey, // libsodium client side encryption key // TODO validate in server-side that it is 32 bytes long, see https://github.com/wal-g/wal-g#encryption
 		"BACKUP_SCHEDULE":                  backupSchedule,
 		"BACKUP_NUM_TO_RETAIN":             backupNumToRetain,
