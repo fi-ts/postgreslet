@@ -430,6 +430,8 @@ func (r *PostgresReconciler) updatePodEnvironmentConfigMap(ctx context.Context, 
 		walgLibSodiumKey = *backupConfig.S3EncryptionKey
 	}
 
+	// TODO: Move https://postgres-operator.readthedocs.io/en/latest/administrator/#via-postgres-cluster-manifest
+
 	// create updated content for pod environment configmap
 	data := map[string]string{
 		"USE_WALG_BACKUP":                  "true",
