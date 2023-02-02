@@ -51,6 +51,8 @@ const (
 	postgresExporterServicePortName                string = "metrics"
 	postgresExporterServiceTenantAnnotationName    string = pg.TenantLabelName
 	postgresExporterServiceProjectIDAnnotationName string = pg.ProjectIDLabelName
+	storageEncryptionKeyName                       string = "storage-encryption-key"
+	storageEncryptionKeyFinalizerName              string = "secret.finalizers.database.fits.cloud"
 )
 
 // requeue defines in how many seconds a requeue should happen
@@ -167,6 +169,11 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 			return ctrl.Result{}, err
 		}
 		log.Info("corresponding passwords secret deleted")
+
+		if err := r.deleteStorageEncryptionSecret(ctx, instance); err != nil {
+			return ctrl.Result{}, fmt.Errorf("error while deleting storage encryption secret: %w", err)
+		}
+		log.Info("storage encryption secret removed")
 
 		instance.RemoveFinalizer(pg.PostgresFinalizerName)
 		if err := r.CtrlClient.Update(ctx, instance); err != nil {
@@ -1207,7 +1214,7 @@ func (r *PostgresReconciler) ensureStorageEncryptionSecret(ctx context.Context, 
 	}
 
 	// Check if secrets exist local in SERVICE Cluster
-	n := "storage-encryption-key"
+	n := storageEncryptionKeyName
 	ns := instance.ToPeripheralResourceNamespace()
 	s := &corev1.Secret{}
 	r.Log.Info("checking for storage secret", "namespace", ns, "name", n)
@@ -1231,8 +1238,9 @@ func (r *PostgresReconciler) ensureStorageEncryptionSecret(ctx context.Context, 
 
 	postgresSecret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      n,
-			Namespace: ns,
+			Name:       n,
+			Namespace:  ns,
+			Finalizers: []string{storageEncryptionKeyFinalizerName},
 		},
 		StringData: map[string]string{
 			"host-encryption-passphrase": k,
@@ -1260,4 +1268,41 @@ func (r *PostgresReconciler) generateRandomString() (string, error) {
 		b[i] = chars[x.Int64()]
 	}
 	return string(b), nil
+}
+
+func (r *PostgresReconciler) deleteStorageEncryptionSecret(ctx context.Context, instance *pg.Postgres) error {
+
+	// Fetch secret
+	n := storageEncryptionKeyName
+	ns := instance.ToPeripheralResourceNamespace()
+	s := &corev1.Secret{}
+	r.Log.Info("Fetching storage secret", "namespace", ns, "name", n)
+	err := r.SvcClient.Get(ctx, types.NamespacedName{Namespace: ns, Name: n}, s)
+	if err != nil {
+		// TODO this would be blocking if we couldn't remove the finalizer!
+		return fmt.Errorf("error while fetching storage secret from service cluster: %w", err)
+	}
+
+	// Remove finalizer
+	s.ObjectMeta.Finalizers = removeElem(s.ObjectMeta.Finalizers, storageEncryptionKeyFinalizerName)
+	if err := r.SvcClient.Update(ctx, s); err != nil {
+		return fmt.Errorf("error while removing finalizer from storage secret in service cluster: %w", err)
+	}
+
+	// Delete secret
+	if err := r.SvcClient.Delete(ctx, s); err != nil {
+		return fmt.Errorf("error while deleting storage secret in service cluster: %w", err)
+	}
+
+	return nil
+}
+
+func removeElem(ss []string, s string) (out []string) {
+	for _, elem := range ss {
+		if elem == s {
+			continue
+		}
+		out = append(out, elem)
+	}
+	return
 }
