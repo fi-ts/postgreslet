@@ -52,7 +52,7 @@ const (
 	postgresExporterServiceTenantAnnotationName    string = pg.TenantLabelName
 	postgresExporterServiceProjectIDAnnotationName string = pg.ProjectIDLabelName
 	storageEncryptionKeyName                       string = "storage-encryption-key"
-	storageEncryptionKeyFinalizerName              string = "secret.finalizers.database.fits.cloud"
+	storageEncryptionKeyFinalizerName              string = "postgres.database.fits.cloud/secret-finalizer"
 )
 
 // requeue defines in how many seconds a requeue should happen
