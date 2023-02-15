@@ -387,6 +387,10 @@ func (r *PostgresReconciler) ensureZalandoDependencies(ctx context.Context, p *p
 		return fmt.Errorf("error while updating backup config: %w", err)
 	}
 
+	if err := r.updatePodEnvironmentSecret(ctx, p); err != nil {
+		return fmt.Errorf("error while updating backup config secret: %w", err)
+	}
+
 	return nil
 }
 
@@ -417,20 +421,12 @@ func (r *PostgresReconciler) updatePodEnvironmentConfigMap(ctx context.Context, 
 
 	// use the rest as provided in the secret
 	bucketName := backupConfig.S3BucketName
-	awsAccessKeyID := backupConfig.S3AccessKey
-	awsSecretAccessKey := backupConfig.S3SecretKey
 	backupSchedule := backupConfig.Schedule
 	backupNumToRetain := backupConfig.Retention
 
 	// s3 server side encryption SSE is disabled
 	// we use client side encryption
 	walgDisableSSE := "true"
-	walgLibSodiumKey := ""
-	if backupConfig.S3EncryptionKey != nil {
-		walgLibSodiumKey = *backupConfig.S3EncryptionKey
-	}
-
-	// TODO: Move https://postgres-operator.readthedocs.io/en/latest/administrator/#via-postgres-cluster-manifest
 
 	// create updated content for pod environment configmap
 	data := map[string]string{
@@ -442,12 +438,9 @@ func (r *PostgresReconciler) updatePodEnvironmentConfigMap(ctx context.Context, 
 		"WALE_BACKUP_THRESHOLD_PERCENTAGE": "100",
 		"AWS_ENDPOINT":                     awsEndpoint,
 		"WALE_S3_ENDPOINT":                 walES3Endpoint, // same as above, but slightly modified
-		"AWS_ACCESS_KEY_ID":                awsAccessKeyID,
-		"AWS_SECRET_ACCESS_KEY":            awsSecretAccessKey,
 		"AWS_S3_FORCE_PATH_STYLE":          "true",
-		"AWS_REGION":                       region,           // now we can use AWS S3
-		"WALG_DISABLE_S3_SSE":              walgDisableSSE,   // server side encryption
-		"WALG_LIBSODIUM_KEY":               walgLibSodiumKey, // libsodium client side encryption key // TODO validate in server-side that it is 32 bytes long, see https://github.com/wal-g/wal-g#encryption
+		"AWS_REGION":                       region,         // now we can use AWS S3
+		"WALG_DISABLE_S3_SSE":              walgDisableSSE, // server side encryption
 		"BACKUP_SCHEDULE":                  backupSchedule,
 		"BACKUP_NUM_TO_RETAIN":             backupNumToRetain,
 	}
@@ -470,6 +463,51 @@ func (r *PostgresReconciler) updatePodEnvironmentConfigMap(ctx context.Context, 
 	}
 	cm.Data = data
 	if err := r.SvcClient.Update(ctx, cm); err != nil {
+		return fmt.Errorf("error while updating the pod environment configmap in service cluster: %w", err)
+	}
+
+	return nil
+}
+
+func (r *PostgresReconciler) updatePodEnvironmentSecret(ctx context.Context, p *pg.Postgres) error {
+	log := r.Log.WithValues("postgres", p.Name)
+	if p.Spec.BackupSecretRef == "" {
+		log.Info("No configured backupSecretRef found, skipping configuration of postgres backup")
+		return nil
+	}
+
+	backupConfig, err := r.getBackupConfig(ctx, p.Namespace, p.Spec.BackupSecretRef)
+	if err != nil {
+		return err
+	}
+
+	awsAccessKeyID := backupConfig.S3AccessKey
+	awsSecretAccessKey := backupConfig.S3SecretKey
+
+	// create updated content for pod environment configmap
+	data := map[string][]byte{
+		"AWS_ACCESS_KEY_ID":     []byte(awsAccessKeyID),
+		"AWS_SECRET_ACCESS_KEY": []byte(awsSecretAccessKey),
+	}
+
+	// libsodium client side encryption key // TODO validate in server-side that it is 32 bytes long, see https://github.com/wal-g/wal-g#encryption
+	if backupConfig.S3EncryptionKey != nil {
+		data["WALG_LIBSODIUM_KEY"] = []byte(*backupConfig.S3EncryptionKey)
+	}
+
+	s := &corev1.Secret{}
+	ns := types.NamespacedName{
+		Name:      operatormanager.PodEnvCMName,
+		Namespace: p.ToPeripheralResourceNamespace(),
+	}
+	if err := r.SvcClient.Get(ctx, ns, s); err != nil {
+		if s, err = r.CreatePodEnvironmentSecret(ctx, ns.Namespace); err != nil {
+			return fmt.Errorf("error while creating the missing Pod Environment ConfigMap %v: %w", ns.Namespace, err)
+		}
+		log.Info("mising Pod Environment ConfigMap created!")
+	}
+	s.Data = data
+	if err := r.SvcClient.Update(ctx, s); err != nil {
 		return fmt.Errorf("error while updating the pod environment configmap in service cluster: %w", err)
 	}
 
