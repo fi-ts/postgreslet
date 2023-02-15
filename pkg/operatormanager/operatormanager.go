@@ -39,9 +39,6 @@ const (
 	// PodEnvCMName Name of the pod environment configmap to create and use
 	PodEnvCMName string = "postgres-pod-config"
 
-	// PodEnvSecretName Name of the pod environment secret to create and use
-	PodEnvSecretName string = "postgres-pod-secret"
-
 	operatorPodLabelName  string = "name"
 	operatorPodLabelValue string = "postgres-operator"
 
@@ -125,11 +122,6 @@ func (m *OperatorManager) InstallOrUpdateOperator(ctx context.Context, namespace
 	// Add our (initially empty) custom pod environment configmap
 	if _, err := m.CreatePodEnvironmentConfigMap(ctx, namespace); err != nil {
 		return fmt.Errorf("error while creating pod environment configmap %v: %w", namespace, err)
-	}
-
-	// Add our (initially empty) custom pod environment secret
-	if _, err := m.CreatePodEnvironmentSecret(ctx, namespace); err != nil {
-		return fmt.Errorf("error while creating pod environment secret %v: %w", namespace, err)
 	}
 
 	// Add our sidecars configmap
@@ -497,35 +489,6 @@ func (m *OperatorManager) CreatePodEnvironmentConfigMap(ctx context.Context, nam
 	m.log.Info("new Pod Environment ConfigMap created")
 
 	return cm, nil
-}
-
-// CreatePodEnvironmentSecret creates a new Secret with additional environment variables for the pods
-func (m *OperatorManager) CreatePodEnvironmentSecret(ctx context.Context, namespace string) (*corev1.Secret, error) {
-	ns := types.NamespacedName{
-		Namespace: namespace,
-		Name:      PodEnvSecretName,
-	}
-	s := &corev1.Secret{}
-	if err := m.Get(ctx, ns, s); err == nil {
-		// secret already exists, nothing to do here
-		// we will update the secret with the correct S3 config in the postgres controller
-		m.log.Info("Pod Environment Secret already exists")
-		return s, nil
-	}
-
-	if err := m.SetName(s, PodEnvSecretName); err != nil {
-		return nil, fmt.Errorf("error while setting the name of the new Pod Environment Secret to %v: %w", namespace, err)
-	}
-	if err := m.SetNamespace(s, namespace); err != nil {
-		return nil, fmt.Errorf("error while setting the namespace of the new Pod Environment Secret to %v: %w", namespace, err)
-	}
-
-	if err := m.Create(ctx, s); err != nil {
-		return nil, fmt.Errorf("error while creating the new Pod Environment Secret: %w", err)
-	}
-	m.log.Info("new Pod Environment Secret created")
-
-	return s, nil
 }
 
 func (m *OperatorManager) createOrUpdateSidecarsConfig(ctx context.Context, namespace string) error {
