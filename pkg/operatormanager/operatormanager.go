@@ -40,7 +40,7 @@ const (
 	PodEnvCMName string = "postgres-pod-config"
 
 	// PodEnvSecretName Name of the pod environment secret to create and use
-	PodEnvSecretName string = "postgres-pod-secret"
+	PodEnvSecretName string = "postgres-pod-secret" //nolint:gosec
 
 	operatorPodLabelName  string = "name"
 	operatorPodLabelValue string = "postgres-operator"
