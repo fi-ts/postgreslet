@@ -49,6 +49,8 @@ const (
 	postgresExporterServicePortName                string = "metrics"
 	postgresExporterServiceTenantAnnotationName    string = pg.TenantLabelName
 	postgresExporterServiceProjectIDAnnotationName string = pg.ProjectIDLabelName
+	walGEncryptionSecretNamePostfix                string = "-walg-encryption"
+	walGEncryptionSecretKeyName                    string = "key"
 )
 
 // requeue defines in how many seconds a requeue should happen
@@ -75,6 +77,8 @@ type PostgresReconciler struct {
 	PatroniTTL                  uint32
 	PatroniLoopWait             uint32
 	PatroniRetryTimeout         uint32
+	EnableWalGEncryption        bool
+	PostgresletFullname         string
 }
 
 // Reconcile is the entry point for postgres reconciliation.
@@ -490,9 +494,21 @@ func (r *PostgresReconciler) updatePodEnvironmentSecret(ctx context.Context, p *
 		"AWS_SECRET_ACCESS_KEY": []byte(awsSecretAccessKey),
 	}
 
-	// libsodium client side encryption key // TODO validate in server-side that it is 32 bytes long, see https://github.com/wal-g/wal-g#encryption
-	if backupConfig.S3EncryptionKey != nil {
-		data["WALG_LIBSODIUM_KEY"] = []byte(*backupConfig.S3EncryptionKey)
+	// libsodium client side encryption key
+	if r.EnableWalGEncryption {
+		s, err := r.getWalGEncryptionSecret(ctx)
+		if err != nil {
+			return err
+		}
+		k, exists := s.Data[walGEncryptionSecretKeyName]
+		if !exists {
+			return fmt.Errorf("could not find key %v in secret %v/%v-%v", walGEncryptionSecretKeyName, r.PostgresletNamespace, r.PostgresletFullname, walGEncryptionSecretNamePostfix)
+		}
+		// libsodium keys are fixed-size keys of 32 bytes, see https://github.com/wal-g/wal-g#encryption
+		if len(k) != 32 {
+			return fmt.Errorf("wal_g encryption key must be exactly 32 bytes, got %v", len(k))
+		}
+		data["WALG_LIBSODIUM_KEY"] = k
 	}
 
 	s := &corev1.Secret{}
@@ -1227,4 +1243,22 @@ func (r *PostgresReconciler) deleteExporterSidecarService(ctx context.Context, n
 	log.Info("postgres-exporter service deleted")
 
 	return nil
+}
+
+func (r *PostgresReconciler) getWalGEncryptionSecret(ctx context.Context) (*corev1.Secret, error) {
+
+	ns := r.PostgresletNamespace
+	name := r.PostgresletFullname + walGEncryptionSecretNamePostfix
+
+	// fetch secret
+	s := &corev1.Secret{}
+	nn := types.NamespacedName{
+		Name:      name,
+		Namespace: ns,
+	}
+	if err := r.CtrlClient.Get(ctx, nn, s); err != nil {
+		return nil, fmt.Errorf("error while getting the backup secret from control plane cluster: %w", err)
+	}
+
+	return s, nil
 }

@@ -68,6 +68,7 @@ const (
 	etcdBackupSecretNameFlg        = "etcd-backup-secret-name" // nolint
 	etcdPSPNameFlg                 = "etcd-psp-name"
 	postgresletFullnameFlg         = "postgreslet-fullname"
+	enableWalGEncryptionFlg        = "enable-walg-encryption"
 )
 
 var (
@@ -116,6 +117,7 @@ func main() {
 		enableStandbyLeaderSelector bool
 		enableLegacyStandbySelector bool
 		deployEtcd                  bool
+		enableWalGEncryption        bool
 
 		portRangeStart int
 		portRangeSize  int
@@ -240,6 +242,9 @@ func main() {
 	viper.SetDefault(postgresletFullnameFlg, partitionID) // fall back to partition id
 	postgresletFullname = viper.GetString(postgresletFullnameFlg)
 
+	viper.SetDefault(enableWalGEncryptionFlg, false)
+	enableWalGEncryption = viper.GetBool(enableWalGEncryptionFlg)
+
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 
 	ctrl.Log.Info("flag",
@@ -275,6 +280,7 @@ func main() {
 		etcdBackupSecretNameFlg, etcdBackupSecretName,
 		etcdPSPNameFlg, etcdPSPName,
 		postgresletFullnameFlg, postgresletFullname,
+		enableWalGEncryptionFlg, enableWalGEncryption,
 	)
 
 	svcClusterConf := ctrl.GetConfigOrDie()
@@ -376,6 +382,8 @@ func main() {
 		PatroniTTL:                  patroniTTL,
 		PatroniLoopWait:             patroniLoopWait,
 		PatroniRetryTimeout:         patroniRetryTimeout,
+		EnableWalGEncryption:        enableWalGEncryption,
+		PostgresletFullname:         postgresletFullname,
 	}).SetupWithManager(ctrlPlaneClusterMgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Postgres")
 		os.Exit(1)
