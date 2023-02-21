@@ -1256,8 +1256,8 @@ func (r *PostgresReconciler) getWalGEncryptionSecret(ctx context.Context) (*core
 		Name:      name,
 		Namespace: ns,
 	}
-	if err := r.CtrlClient.Get(ctx, nn, s); err != nil {
-		return nil, fmt.Errorf("error while getting the backup secret from control plane cluster: %w", err)
+	if err := r.SvcClient.Get(ctx, nn, s); err != nil {
+		return nil, fmt.Errorf("error while getting the backup secret from service cluster: %w", err)
 	}
 
 	return s, nil
