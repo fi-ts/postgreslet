@@ -81,6 +81,8 @@ const (
 	defaultPostgresParamValueSSLMinProtocolVersion  = "TLSv1.2"
 	defaultPostgresParamValueSSLPreferServerCiphers = "on"
 	defaultPostgresParamValueSSLCiphers             = "ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384"
+	defaultPostgresParamValuePgStatStatementsTrack  = "TOP"
+	defaultPostgresParamValuePgStatStatementsMax    = "100"
 )
 
 var (
@@ -781,7 +783,7 @@ func enableAuditLogs(parameters map[string]string) {
 	parameters["pgaudit.log_parameter"] = "on"
 }
 
-// setDefaultPostgresParams configures default keepalive values
+// setDefaultPostgresParams configures default values
 func setDefaultPostgresParams(parameters map[string]string) {
 	parameters["tcp_keepalives_idle"] = defaultPostgresParamValueTCPKeepAlivesIdle
 	parameters["tcp_keepalives_interval"] = defaultPostgresParamValueTCPKeepAlivesInterval
@@ -789,6 +791,8 @@ func setDefaultPostgresParams(parameters map[string]string) {
 	parameters["ssl_min_protocol_version"] = defaultPostgresParamValueSSLMinProtocolVersion
 	parameters["ssl_prefer_server_ciphers"] = defaultPostgresParamValueSSLPreferServerCiphers
 	parameters["ssl_ciphers"] = defaultPostgresParamValueSSLCiphers
+	parameters["pg_stat_statements.track"] = defaultPostgresParamValuePgStatStatementsTrack
+	parameters["pg_stat_statements.max"] = defaultPostgresParamValuePgStatStatementsMax
 }
 
 // setPostgresParams add the provided params to the parameter map (but ignore params that are blocked)
