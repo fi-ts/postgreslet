@@ -339,13 +339,13 @@ func (p *Postgres) ToSvcLB(lbIP string, lbPort int32, enableStandbyLeaderSelecto
 		for _, src := range p.Spec.AccessList.SourceRanges {
 			lbsr = append(lbsr, src)
 		}
-
-	} else {
-		// block by default
-		lbsr = append(lbsr, "255.255.255.255/32")
 	}
 	for _, scsr := range standbyClustersSourceRanges {
 		lbsr = append(lbsr, scsr)
+	}
+	if len(lbsr) == 0 {
+		// block by default
+		lbsr = append(lbsr, "255.255.255.255/32")
 	}
 	lb.Spec.LoadBalancerSourceRanges = lbsr
 
