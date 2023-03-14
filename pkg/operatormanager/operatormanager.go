@@ -128,7 +128,7 @@ func (m *OperatorManager) InstallOrUpdateOperator(ctx context.Context, namespace
 	}
 
 	// Add our (initially empty) custom pod environment secret
-	if _, err := m.CreatePodEnvironmentSecret(ctx, namespace); err != nil {
+	if _, err := m.CreateOrGetPodEnvironmentSecret(ctx, namespace); err != nil {
 		return fmt.Errorf("error while creating pod environment secret %v: %w", namespace, err)
 	}
 
@@ -501,8 +501,8 @@ func (m *OperatorManager) CreatePodEnvironmentConfigMap(ctx context.Context, nam
 	return cm, nil
 }
 
-// CreatePodEnvironmentSecret creates a new Secret with additional environment variables for the pods
-func (m *OperatorManager) CreatePodEnvironmentSecret(ctx context.Context, namespace string) (*corev1.Secret, error) {
+// CreateOrGetPodEnvironmentSecret creates a new Secret with additional environment variables for the pods or simply returns it if it already exists
+func (m *OperatorManager) CreateOrGetPodEnvironmentSecret(ctx context.Context, namespace string) (*corev1.Secret, error) {
 	ns := types.NamespacedName{
 		Namespace: namespace,
 		Name:      PodEnvSecretName,

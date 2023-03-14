@@ -532,15 +532,14 @@ func (r *PostgresReconciler) updatePodEnvironmentSecret(ctx context.Context, p *
 		Name:      operatormanager.PodEnvCMName,
 		Namespace: p.ToPeripheralResourceNamespace(),
 	}
-	if err := r.SvcClient.Get(ctx, ns, s); err != nil {
-		if s, err = r.CreatePodEnvironmentSecret(ctx, ns.Namespace); err != nil {
-			return fmt.Errorf("error while creating the missing Pod Environment ConfigMap %v: %w", ns.Namespace, err)
-		}
-		log.Info("mising Pod Environment ConfigMap created!")
+
+	if s, err = r.CreateOrGetPodEnvironmentSecret(ctx, ns.Namespace); err != nil {
+		return fmt.Errorf("error while accessing the pod environment secret %v: %w", ns.Namespace, err)
 	}
+
 	s.Data = data
 	if err := r.SvcClient.Update(ctx, s); err != nil {
-		return fmt.Errorf("error while updating the pod environment configmap in service cluster: %w", err)
+		return fmt.Errorf("error while updating the pod environment secret in service cluster: %w", err)
 	}
 
 	return nil
