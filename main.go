@@ -68,6 +68,7 @@ const (
 	etcdBackupSecretNameFlg        = "etcd-backup-secret-name" // nolint
 	etcdPSPNameFlg                 = "etcd-psp-name"
 	postgresletFullnameFlg         = "postgreslet-fullname"
+	enableLBSourceRangesFlg        = "enable-lb-source-ranges"
 )
 
 var (
@@ -116,6 +117,7 @@ func main() {
 		enableStandbyLeaderSelector bool
 		enableLegacyStandbySelector bool
 		deployEtcd                  bool
+		enableLBSourceRanges        bool
 
 		portRangeStart int
 		portRangeSize  int
@@ -240,6 +242,9 @@ func main() {
 	viper.SetDefault(postgresletFullnameFlg, partitionID) // fall back to partition id
 	postgresletFullname = viper.GetString(postgresletFullnameFlg)
 
+	viper.SetDefault(enableLBSourceRangesFlg, true)
+	enableLBSourceRanges = viper.GetBool(enableLBSourceRangesFlg)
+
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 
 	ctrl.Log.Info("flag",
@@ -275,6 +280,7 @@ func main() {
 		etcdBackupSecretNameFlg, etcdBackupSecretName,
 		etcdPSPNameFlg, etcdPSPName,
 		postgresletFullnameFlg, postgresletFullname,
+		enableLBSourceRangesFlg, enableLBSourceRanges,
 	)
 
 	svcClusterConf := ctrl.GetConfigOrDie()
@@ -356,6 +362,8 @@ func main() {
 		PortRangeSize:               int32(portRangeSize),
 		EnableStandbyLeaderSelector: enableStandbyLeaderSelector,
 		EnableLegacyStandbySelector: enableLegacyStandbySelector,
+		StandbyClustersSourceRanges: standbyClusterSourceRanges,
+		EnableLBSourceRanges:        enableLBSourceRanges,
 	}
 	if err = (&controllers.PostgresReconciler{
 		CtrlClient:                  ctrlPlaneClusterMgr.GetClient(),
