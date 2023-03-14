@@ -70,6 +70,7 @@ const (
 	postgresletFullnameFlg                = "postgreslet-fullname"
 	enableLBSourceRangesFlg               = "enable-lb-source-ranges"
 	enableRandomStorageEncrytionSecretFlg = "enable-random-storage-encryption-secret"
+	enableWalGEncryptionFlg               = "enable-walg-encryption"
 )
 
 var (
@@ -120,6 +121,7 @@ func main() {
 		deployEtcd                         bool
 		enableLBSourceRanges               bool
 		enableRandomStorageEncrytionSecret bool
+		enableWalGEncryption               bool
 
 		portRangeStart int
 		portRangeSize  int
@@ -250,6 +252,9 @@ func main() {
 	viper.SetDefault(enableRandomStorageEncrytionSecretFlg, false)
 	enableRandomStorageEncrytionSecret = viper.GetBool(enableRandomStorageEncrytionSecretFlg)
 
+	viper.SetDefault(enableWalGEncryptionFlg, false)
+	enableWalGEncryption = viper.GetBool(enableWalGEncryptionFlg)
+
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 
 	ctrl.Log.Info("flag",
@@ -284,9 +289,10 @@ func main() {
 		etcdBackupSidecarImageFlg, etcdBackupSidecarImage,
 		etcdBackupSecretNameFlg, etcdBackupSecretName,
 		etcdPSPNameFlg, etcdPSPName,
-		postgresletFullnameFlg, postgresletFullname,
 		enableLBSourceRangesFlg, enableLBSourceRanges,
 		enableRandomStorageEncrytionSecretFlg, enableRandomStorageEncrytionSecret,
+		postgresletFullnameFlg, postgresletFullname,
+		enableWalGEncryptionFlg, enableWalGEncryption,
 	)
 
 	svcClusterConf := ctrl.GetConfigOrDie()
@@ -391,6 +397,8 @@ func main() {
 		PatroniLoopWait:                     patroniLoopWait,
 		PatroniRetryTimeout:                 patroniRetryTimeout,
 		EnableRandomStorageEncryptionSecret: enableRandomStorageEncrytionSecret,
+		EnableWalGEncryption:                enableWalGEncryption,
+		PostgresletFullname:                 postgresletFullname,
 	}).SetupWithManager(ctrlPlaneClusterMgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Postgres")
 		os.Exit(1)

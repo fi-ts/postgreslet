@@ -53,6 +53,8 @@ const (
 	postgresExporterServiceProjectIDAnnotationName string = pg.ProjectIDLabelName
 	storageEncryptionKeyName                       string = "storage-encryption-key"
 	storageEncryptionKeyFinalizerName              string = "postgres.database.fits.cloud/secret-finalizer"
+	walGEncryptionSecretNamePostfix                string = "-walg-encryption"
+	walGEncryptionSecretKeyName                    string = "key"
 )
 
 // requeue defines in how many seconds a requeue should happen
@@ -80,6 +82,8 @@ type PostgresReconciler struct {
 	PatroniLoopWait                     uint32
 	PatroniRetryTimeout                 uint32
 	EnableRandomStorageEncryptionSecret bool
+	EnableWalGEncryption                bool
+	PostgresletFullname                 string
 }
 
 // Reconcile is the entry point for postgres reconciliation.
@@ -403,6 +407,10 @@ func (r *PostgresReconciler) ensureZalandoDependencies(ctx context.Context, p *p
 		return fmt.Errorf("error while updating backup config: %w", err)
 	}
 
+	if err := r.updatePodEnvironmentSecret(ctx, p); err != nil {
+		return fmt.Errorf("error while updating backup config secret: %w", err)
+	}
+
 	return nil
 }
 
@@ -433,19 +441,12 @@ func (r *PostgresReconciler) updatePodEnvironmentConfigMap(ctx context.Context, 
 
 	// use the rest as provided in the secret
 	bucketName := backupConfig.S3BucketName
-	awsAccessKeyID := backupConfig.S3AccessKey
-	awsSecretAccessKey := backupConfig.S3SecretKey
 	backupSchedule := backupConfig.Schedule
 	backupNumToRetain := backupConfig.Retention
 
-	// s3 server side encryption SSE is enabled if the key is given
-	// TODO our s3 needs a small change to make this work
+	// s3 server side encryption SSE is disabled
+	// we use client side encryption
 	walgDisableSSE := "true"
-	walgSSE := ""
-	if backupConfig.S3EncryptionKey != nil {
-		walgDisableSSE = "false"
-		walgSSE = *backupConfig.S3EncryptionKey
-	}
 
 	// create updated content for pod environment configmap
 	data := map[string]string{
@@ -457,12 +458,9 @@ func (r *PostgresReconciler) updatePodEnvironmentConfigMap(ctx context.Context, 
 		"WALE_BACKUP_THRESHOLD_PERCENTAGE": "100",
 		"AWS_ENDPOINT":                     awsEndpoint,
 		"WALE_S3_ENDPOINT":                 walES3Endpoint, // same as above, but slightly modified
-		"AWS_ACCESS_KEY_ID":                awsAccessKeyID,
-		"AWS_SECRET_ACCESS_KEY":            awsSecretAccessKey,
 		"AWS_S3_FORCE_PATH_STYLE":          "true",
 		"AWS_REGION":                       region,         // now we can use AWS S3
-		"WALG_DISABLE_S3_SSE":              walgDisableSSE, // disable server side encryption if key is nil
-		"WALG_S3_SSE":                      walgSSE,        // server side encryption key
+		"WALG_DISABLE_S3_SSE":              walgDisableSSE, // server side encryption
 		"BACKUP_SCHEDULE":                  backupSchedule,
 		"BACKUP_NUM_TO_RETAIN":             backupNumToRetain,
 	}
@@ -486,6 +484,62 @@ func (r *PostgresReconciler) updatePodEnvironmentConfigMap(ctx context.Context, 
 	cm.Data = data
 	if err := r.SvcClient.Update(ctx, cm); err != nil {
 		return fmt.Errorf("error while updating the pod environment configmap in service cluster: %w", err)
+	}
+
+	return nil
+}
+
+func (r *PostgresReconciler) updatePodEnvironmentSecret(ctx context.Context, p *pg.Postgres) error {
+	log := r.Log.WithValues("postgres", p.Name)
+	if p.Spec.BackupSecretRef == "" {
+		log.Info("No configured backupSecretRef found, skipping configuration of postgres backup")
+		return nil
+	}
+
+	backupConfig, err := r.getBackupConfig(ctx, p.Namespace, p.Spec.BackupSecretRef)
+	if err != nil {
+		return err
+	}
+
+	awsAccessKeyID := backupConfig.S3AccessKey
+	awsSecretAccessKey := backupConfig.S3SecretKey
+
+	// create updated content for pod environment configmap
+	data := map[string][]byte{
+		"AWS_ACCESS_KEY_ID":     []byte(awsAccessKeyID),
+		"AWS_SECRET_ACCESS_KEY": []byte(awsSecretAccessKey),
+	}
+
+	// libsodium client side encryption key
+	if r.EnableWalGEncryption {
+		s, err := r.getWalGEncryptionSecret(ctx)
+		if err != nil {
+			return err
+		}
+		k, exists := s.Data[walGEncryptionSecretKeyName]
+		if !exists {
+			return fmt.Errorf("could not find key %v in secret %v/%v-%v", walGEncryptionSecretKeyName, r.PostgresletNamespace, r.PostgresletFullname, walGEncryptionSecretNamePostfix)
+		}
+		// libsodium keys are fixed-size keys of 32 bytes, see https://github.com/wal-g/wal-g#encryption
+		if len(k) != 32 {
+			return fmt.Errorf("wal_g encryption key must be exactly 32 bytes, got %v", len(k))
+		}
+		data["WALG_LIBSODIUM_KEY"] = k
+	}
+
+	var s *corev1.Secret
+	ns := types.NamespacedName{
+		Name:      operatormanager.PodEnvCMName,
+		Namespace: p.ToPeripheralResourceNamespace(),
+	}
+
+	if s, err = r.CreateOrGetPodEnvironmentSecret(ctx, ns.Namespace); err != nil {
+		return fmt.Errorf("error while accessing the pod environment secret %v: %w", ns.Namespace, err)
+	}
+
+	s.Data = data
+	if err := r.SvcClient.Update(ctx, s); err != nil {
+		return fmt.Errorf("error while updating the pod environment secret in service cluster: %w", err)
 	}
 
 	return nil
@@ -1204,6 +1258,24 @@ func (r *PostgresReconciler) deleteExporterSidecarService(ctx context.Context, n
 	log.Info("postgres-exporter service deleted")
 
 	return nil
+}
+
+func (r *PostgresReconciler) getWalGEncryptionSecret(ctx context.Context) (*corev1.Secret, error) {
+
+	ns := r.PostgresletNamespace
+	name := r.PostgresletFullname + walGEncryptionSecretNamePostfix
+
+	// fetch secret
+	s := &corev1.Secret{}
+	nn := types.NamespacedName{
+		Name:      name,
+		Namespace: ns,
+	}
+	if err := r.SvcClient.Get(ctx, nn, s); err != nil {
+		return nil, fmt.Errorf("error while getting the backup secret from service cluster: %w", err)
+	}
+
+	return s, nil
 }
 
 func (r *PostgresReconciler) ensureStorageEncryptionSecret(ctx context.Context, instance *pg.Postgres) error {
