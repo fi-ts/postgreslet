@@ -9,9 +9,11 @@ package controllers
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/big"
 	"net"
 	"net/http"
 	"net/url"
@@ -49,6 +51,8 @@ const (
 	postgresExporterServicePortName                string = "metrics"
 	postgresExporterServiceTenantAnnotationName    string = pg.TenantLabelName
 	postgresExporterServiceProjectIDAnnotationName string = pg.ProjectIDLabelName
+	storageEncryptionKeyName                       string = "storage-encryption-key"
+	storageEncryptionKeyFinalizerName              string = "postgres.database.fits.cloud/secret-finalizer"
 	walGEncryptionSecretNamePostfix                string = "-walg-encryption"
 	walGEncryptionSecretKeyName                    string = "key"
 )
@@ -67,18 +71,19 @@ type PostgresReconciler struct {
 	PartitionID, Tenant, StorageClass string
 	*operatormanager.OperatorManager
 	*lbmanager.LBManager
-	recorder                    record.EventRecorder
-	PgParamBlockList            map[string]bool
-	StandbyClustersSourceRanges []string
-	PostgresletNamespace        string
-	SidecarsConfigMapName       string
-	EnableNetPol                bool
-	EtcdHost                    string
-	PatroniTTL                  uint32
-	PatroniLoopWait             uint32
-	PatroniRetryTimeout         uint32
-	EnableWalGEncryption        bool
-	PostgresletFullname         string
+	recorder                            record.EventRecorder
+	PgParamBlockList                    map[string]bool
+	StandbyClustersSourceRanges         []string
+	PostgresletNamespace                string
+	SidecarsConfigMapName               string
+	EnableNetPol                        bool
+	EtcdHost                            string
+	PatroniTTL                          uint32
+	PatroniLoopWait                     uint32
+	PatroniRetryTimeout                 uint32
+	EnableRandomStorageEncryptionSecret bool
+	EnableWalGEncryption                bool
+	PostgresletFullname                 string
 }
 
 // Reconcile is the entry point for postgres reconciliation.
@@ -169,6 +174,11 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		}
 		log.Info("corresponding passwords secret deleted")
 
+		if err := r.deleteStorageEncryptionSecret(ctx, instance); err != nil {
+			return ctrl.Result{}, fmt.Errorf("error while deleting storage encryption secret: %w", err)
+		}
+		log.Info("storage encryption secret removed")
+
 		instance.RemoveFinalizer(pg.PostgresFinalizerName)
 		if err := r.CtrlClient.Update(ctx, instance); err != nil {
 			r.recorder.Eventf(instance, "Warning", "Self-Reconcilation", "failed to remove finalizer: %v", err)
@@ -253,6 +263,12 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	err := r.createOrUpdateExporterSidecarServiceMonitor(ctx, namespace, instance)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("error while creating sidecars servicemonitor %v: %w", namespace, err)
+	}
+
+	// Make sure the storage secret exist, if neccessary
+	if err := r.ensureStorageEncryptionSecret(ctx, instance); err != nil {
+		r.recorder.Eventf(instance, "Warning", "Error", "failed to create storage secret: %v", err)
+		return ctrl.Result{}, fmt.Errorf("error while creating storage secret: %w", err)
 	}
 
 	if err := r.createOrUpdateZalandoPostgresql(ctx, instance, log, globalSidecarsCM, r.PatroniTTL, r.PatroniLoopWait, r.PatroniRetryTimeout); err != nil {
@@ -1261,4 +1277,105 @@ func (r *PostgresReconciler) getWalGEncryptionSecret(ctx context.Context) (*core
 	}
 
 	return s, nil
+}
+
+func (r *PostgresReconciler) ensureStorageEncryptionSecret(ctx context.Context, instance *pg.Postgres) error {
+
+	if !r.EnableRandomStorageEncryptionSecret {
+		r.Log.Info("storage secret disabled, no action needed")
+		return nil
+	}
+
+	// Check if secrets exist local in SERVICE Cluster
+	n := storageEncryptionKeyName
+	ns := instance.ToPeripheralResourceNamespace()
+	s := &corev1.Secret{}
+	r.Log.Info("checking for storage secret", "namespace", ns, "name", n)
+	err := r.SvcClient.Get(ctx, types.NamespacedName{Namespace: ns, Name: n}, s)
+	if err == nil {
+		r.Log.Info("storage secret found, no action needed")
+		return nil
+	}
+
+	// we got an error other than not found, so we cannot continue!
+	if !apierrors.IsNotFound(err) {
+		return fmt.Errorf("error while fetching storage secret from service cluster: %w", err)
+	}
+
+	r.Log.Info("creating storage secret")
+
+	k, err := r.generateRandomString()
+	if err != nil {
+		return fmt.Errorf("error while generating random storage secret: %w", err)
+	}
+
+	postgresSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       n,
+			Namespace:  ns,
+			Finalizers: []string{storageEncryptionKeyFinalizerName},
+		},
+		StringData: map[string]string{
+			"host-encryption-passphrase": k,
+		},
+	}
+
+	if err := r.SvcClient.Create(ctx, postgresSecret); err != nil {
+		return fmt.Errorf("error while creating storage secret in service cluster: %w", err)
+	}
+	r.Log.Info("created storage secret", "secret", postgresSecret)
+
+	return nil
+
+}
+
+func (r *PostgresReconciler) generateRandomString() (string, error) {
+	const chars string = "!\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"
+	var size *big.Int = big.NewInt(int64(len(chars)))
+	b := make([]byte, 64)
+	for i := range b {
+		x, err := rand.Int(rand.Reader, size)
+		if err != nil {
+			return "", err
+		}
+		b[i] = chars[x.Int64()]
+	}
+	return string(b), nil
+}
+
+func (r *PostgresReconciler) deleteStorageEncryptionSecret(ctx context.Context, instance *pg.Postgres) error {
+
+	// Fetch secret
+	n := storageEncryptionKeyName
+	ns := instance.ToPeripheralResourceNamespace()
+	s := &corev1.Secret{}
+	r.Log.Info("Fetching storage secret", "namespace", ns, "name", n)
+	err := r.SvcClient.Get(ctx, types.NamespacedName{Namespace: ns, Name: n}, s)
+	if err != nil {
+		// TODO this would be blocking if we couldn't remove the finalizer!
+		return fmt.Errorf("error while fetching storage secret from service cluster: %w", err)
+	}
+
+	// Remove finalizer
+	s.ObjectMeta.Finalizers = removeElem(s.ObjectMeta.Finalizers, storageEncryptionKeyFinalizerName)
+	if err := r.SvcClient.Update(ctx, s); err != nil {
+		return fmt.Errorf("error while removing finalizer from storage secret in service cluster: %w", err)
+	}
+
+	// Delete secret
+	if err := r.SvcClient.Delete(ctx, s); err != nil {
+		return fmt.Errorf("error while deleting storage secret in service cluster: %w", err)
+	}
+
+	return nil
+}
+
+func removeElem(ss []string, s string) (out []string) {
+	for _, elem := range ss {
+		if elem == s {
+			continue
+		}
+		out = append(out, elem)
+	}
+	return
 }
