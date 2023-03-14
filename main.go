@@ -68,6 +68,7 @@ const (
 	etcdBackupSecretNameFlg               = "etcd-backup-secret-name" // nolint
 	etcdPSPNameFlg                        = "etcd-psp-name"
 	postgresletFullnameFlg                = "postgreslet-fullname"
+	enableLBSourceRangesFlg               = "enable-lb-source-ranges"
 	enableRandomStorageEncrytionSecretFlg = "enable-random-storage-encryption-secret"
 )
 
@@ -117,6 +118,7 @@ func main() {
 		enableStandbyLeaderSelector        bool
 		enableLegacyStandbySelector        bool
 		deployEtcd                         bool
+		enableLBSourceRanges               bool
 		enableRandomStorageEncrytionSecret bool
 
 		portRangeStart int
@@ -242,6 +244,9 @@ func main() {
 	viper.SetDefault(postgresletFullnameFlg, partitionID) // fall back to partition id
 	postgresletFullname = viper.GetString(postgresletFullnameFlg)
 
+	viper.SetDefault(enableLBSourceRangesFlg, true)
+	enableLBSourceRanges = viper.GetBool(enableLBSourceRangesFlg)
+
 	viper.SetDefault(enableRandomStorageEncrytionSecretFlg, false)
 	enableRandomStorageEncrytionSecret = viper.GetBool(enableRandomStorageEncrytionSecretFlg)
 
@@ -280,6 +285,7 @@ func main() {
 		etcdBackupSecretNameFlg, etcdBackupSecretName,
 		etcdPSPNameFlg, etcdPSPName,
 		postgresletFullnameFlg, postgresletFullname,
+		enableLBSourceRangesFlg, enableLBSourceRanges,
 		enableRandomStorageEncrytionSecretFlg, enableRandomStorageEncrytionSecret,
 	)
 
@@ -362,6 +368,8 @@ func main() {
 		PortRangeSize:               int32(portRangeSize),
 		EnableStandbyLeaderSelector: enableStandbyLeaderSelector,
 		EnableLegacyStandbySelector: enableLegacyStandbySelector,
+		StandbyClustersSourceRanges: standbyClusterSourceRanges,
+		EnableLBSourceRanges:        enableLBSourceRanges,
 	}
 	if err = (&controllers.PostgresReconciler{
 		CtrlClient:                          ctrlPlaneClusterMgr.GetClient(),
