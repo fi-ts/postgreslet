@@ -527,7 +527,7 @@ func (r *PostgresReconciler) updatePodEnvironmentSecret(ctx context.Context, p *
 		data["WALG_LIBSODIUM_KEY"] = k
 	}
 
-	s := &corev1.Secret{}
+	var s *corev1.Secret
 	ns := types.NamespacedName{
 		Name:      operatormanager.PodEnvCMName,
 		Namespace: p.ToPeripheralResourceNamespace(),
