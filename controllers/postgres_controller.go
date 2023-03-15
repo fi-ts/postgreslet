@@ -155,8 +155,10 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 
 		if err := r.removeStorageEncryptionSecretFinalizer(ctx, instance); err != nil {
 			log.Error(err, "error while remnoving finalizer from storage encryption secret")
+		} else {
+
+			log.Info("finalizer from storage encryption secret removed")
 		}
-		log.Info("finalizer from storage encryption secret removed")
 
 		deletable, err := r.IsOperatorDeletable(ctx, namespace)
 		if err != nil {
