@@ -153,6 +153,13 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 			log.Info("corresponding NetworkPolicy deleted")
 		}
 
+		if err := r.removeStorageEncryptionSecretFinalizer(ctx, instance); err != nil {
+			log.Error(err, "error while remnoving finalizer from storage encryption secret")
+		} else {
+
+			log.Info("finalizer from storage encryption secret removed")
+		}
+
 		deletable, err := r.IsOperatorDeletable(ctx, namespace)
 		if err != nil {
 			r.recorder.Eventf(instance, "Warning", "Error", "failed to check if the operator is idle: %v", err)
@@ -173,11 +180,6 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 			return ctrl.Result{}, err
 		}
 		log.Info("corresponding passwords secret deleted")
-
-		if err := r.deleteStorageEncryptionSecret(ctx, instance); err != nil {
-			return ctrl.Result{}, fmt.Errorf("error while deleting storage encryption secret: %w", err)
-		}
-		log.Info("storage encryption secret removed")
 
 		instance.RemoveFinalizer(pg.PostgresFinalizerName)
 		if err := r.CtrlClient.Update(ctx, instance); err != nil {
@@ -1342,7 +1344,7 @@ func (r *PostgresReconciler) generateRandomString() (string, error) {
 	return string(b), nil
 }
 
-func (r *PostgresReconciler) deleteStorageEncryptionSecret(ctx context.Context, instance *pg.Postgres) error {
+func (r *PostgresReconciler) removeStorageEncryptionSecretFinalizer(ctx context.Context, instance *pg.Postgres) error {
 
 	// Fetch secret
 	n := storageEncryptionKeyName
@@ -1359,11 +1361,6 @@ func (r *PostgresReconciler) deleteStorageEncryptionSecret(ctx context.Context, 
 	s.ObjectMeta.Finalizers = removeElem(s.ObjectMeta.Finalizers, storageEncryptionKeyFinalizerName)
 	if err := r.SvcClient.Update(ctx, s); err != nil {
 		return fmt.Errorf("error while removing finalizer from storage secret in service cluster: %w", err)
-	}
-
-	// Delete secret
-	if err := r.SvcClient.Delete(ctx, s); err != nil {
-		return fmt.Errorf("error while deleting storage secret in service cluster: %w", err)
 	}
 
 	return nil
