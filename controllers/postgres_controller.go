@@ -527,7 +527,6 @@ func (r *PostgresReconciler) updatePodEnvironmentSecret(ctx context.Context, p *
 			return fmt.Errorf("wal_g encryption key must be exactly 32 bytes, got %v", len(k))
 		}
 		data["WALG_LIBSODIUM_KEY"] = k
-		// TODO can we somehow obtain the remote key, e.g. when cloning from a different partition?
 		data["CLONE_WALG_LIBSODIUM_KEY"] = k
 	}
 
