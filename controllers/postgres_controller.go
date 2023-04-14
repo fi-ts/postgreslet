@@ -527,6 +527,12 @@ func (r *PostgresReconciler) updatePodEnvironmentSecret(ctx context.Context, p *
 			return fmt.Errorf("wal_g encryption key must be exactly 32 bytes, got %v", len(k))
 		}
 		data["WALG_LIBSODIUM_KEY"] = k
+
+		if p.Spec.PostgresRestore != nil {
+			data["CLONE_WALG_LIBSODIUM_KEY"] = k
+		} else {
+			delete(data, "CLONE_WALG_LIBSODIUM_KEY")
+		}
 	}
 
 	var s *corev1.Secret
