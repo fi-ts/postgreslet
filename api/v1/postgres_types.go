@@ -574,6 +574,8 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 	// Create database owner
 	z.Spec.Users = make(map[string]zalando.UserFlags)
 	z.Spec.Users[ownerName] = zalando.UserFlags{"createdb", "createrole"}
+	// Add auditor user
+	z.Spec.Users["auditor"] = zalando.UserFlags{"nologin"}
 
 	// Create default database
 	z.Spec.Databases = make(map[string]string)
