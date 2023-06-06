@@ -1391,7 +1391,7 @@ func (r *PostgresReconciler) ensureInitDBJob(ctx context.Context, instance *pg.P
 	if err := r.SvcClient.Get(ctx, ns, cm); err == nil {
 		// configmap already exists, nothing to do here
 		r.Log.Info("initdb ConfigMap already exists")
-		return nil
+		return nil // TODO return or update?
 	}
 
 	cm.Name = ns.Name
@@ -1407,6 +1407,13 @@ func (r *PostgresReconciler) ensureInitDBJob(ctx context.Context, instance *pg.P
 	r.Log.Info("new initdb ConfigMap created")
 
 	j := &batchv1.Job{}
+
+	if err := r.SvcClient.Get(ctx, ns, j); err == nil {
+		// job already exists, nothing to do here
+		r.Log.Info("initdb Job already exists")
+		return nil // TODO return or update?
+	}
+
 	j.Name = ns.Name
 	j.Namespace = ns.Namespace
 
@@ -1471,6 +1478,10 @@ func (r *PostgresReconciler) ensureInitDBJob(ctx context.Context, instance *pg.P
 			},
 		},
 		BackoffLimit: &backOffLimit,
+	}
+
+	if err := r.SvcClient.Create(ctx, j); err != nil {
+		return fmt.Errorf("error while creating the new initdb Job: %w", err)
 	}
 
 	return nil
