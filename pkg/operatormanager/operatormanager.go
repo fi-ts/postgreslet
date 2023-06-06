@@ -487,7 +487,7 @@ func (m *OperatorManager) CreatePodEnvironmentConfigMap(ctx context.Context, nam
 	}
 
 	if err := m.metadataAccessor.SetName(cm, PodEnvCMName); err != nil {
-		return nil, fmt.Errorf("error while setting the name of the new Pod Environment ConfigMap to %v: %w", namespace, err)
+		return nil, fmt.Errorf("error while setting the name of the new Pod Environment ConfigMap to %v: %w", PodEnvCMName, err)
 	}
 	if err := m.metadataAccessor.SetNamespace(cm, namespace); err != nil {
 		return nil, fmt.Errorf("error while setting the namespace of the new Pod Environment ConfigMap to %v: %w", namespace, err)
