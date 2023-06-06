@@ -22,6 +22,7 @@ import (
 
 	"github.com/go-logr/logr"
 	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/utils/pointer"
@@ -55,6 +56,9 @@ const (
 	storageEncryptionKeyFinalizerName              string = "postgres.database.fits.cloud/secret-finalizer"
 	walGEncryptionSecretNamePostfix                string = "-walg-encryption"
 	walGEncryptionSecretKeyName                    string = "key"
+	initDBName                                     string = "initdb"
+	initDBSQL                                      string = `|
+	SELECT 'Hello world';`
 )
 
 // requeue defines in how many seconds a requeue should happen
@@ -276,6 +280,11 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	if err := r.createOrUpdateZalandoPostgresql(ctx, instance, log, globalSidecarsCM, r.PatroniTTL, r.PatroniLoopWait, r.PatroniRetryTimeout); err != nil {
 		r.recorder.Eventf(instance, "Warning", "Error", "failed to create Zalando resource: %v", err)
 		return ctrl.Result{}, fmt.Errorf("failed to create or update zalando postgresql: %w", err)
+	}
+
+	if err := r.ensureInitDBJob(ctx, instance); err != nil {
+		r.recorder.Eventf(instance, "Warning", "Error", "failed to create initDB job resource: %v", err)
+		return ctrl.Result{}, fmt.Errorf("failed to create or update initdb job: %w", err)
 	}
 
 	if err := r.LBManager.CreateSvcLBIfNone(ctx, instance); err != nil {
@@ -1371,4 +1380,98 @@ func removeElem(ss []string, s string) (out []string) {
 		out = append(out, elem)
 	}
 	return
+}
+
+func (r *PostgresReconciler) ensureInitDBJob(ctx context.Context, instance *pg.Postgres) error {
+	ns := types.NamespacedName{
+		Namespace: instance.Namespace,
+		Name:      initDBName,
+	}
+	cm := &corev1.ConfigMap{}
+	if err := r.SvcClient.Get(ctx, ns, cm); err == nil {
+		// configmap already exists, nothing to do here
+		r.Log.Info("initdb ConfigMap already exists")
+		return nil
+	}
+
+	cm.Name = ns.Name
+	cm.Namespace = ns.Namespace
+	cm.Data = map[string]string{
+		"initdb.sql": initDBSQL,
+	}
+
+	if err := r.SvcClient.Create(ctx, cm); err != nil {
+		return fmt.Errorf("error while creating the new initdb ConfigMap: %w", err)
+	}
+
+	r.Log.Info("new initdb ConfigMap created")
+
+	j := &batchv1.Job{}
+	j.Name = ns.Name
+	j.Namespace = ns.Namespace
+
+	var backOffLimit int32 = 99
+	j.Spec = batchv1.JobSpec{
+		Template: corev1.PodTemplateSpec{
+			Spec: corev1.PodSpec{
+				Containers: []corev1.Container{
+					{
+						Name:    "psql",
+						Image:   "registry.fits.cloud/cloud-services/images/acid/spilo:2.1-p6_de-sync-standby-cluster_0.3.2_24eb43c", // TODO obtain current spilo image
+						Command: []string{"sh", "-c", "echo ${PGPASSWORD_SUPERUSER} | psql --host=${SCOPE} --port=5432 --username=${PGUSER_SUPERUSER} --file=/initdb.d/initdb.sql"},
+						Env: []corev1.EnvVar{
+							{
+								Name:  "PGUSER_SUPERUSER",
+								Value: "postgres",
+							},
+							{
+								Name: "PGPASSWORD_SUPERUSER",
+								ValueFrom: &corev1.EnvVarSource{
+									SecretKeyRef: &corev1.SecretKeySelector{
+										Key: "password",
+										LocalObjectReference: corev1.LocalObjectReference{
+											Name: "postgres." + instance.ToPeripheralResourceName() + ".credentials",
+										},
+									},
+								},
+							},
+							{
+								Name:  "SCOPE",
+								Value: instance.ToPeripheralResourceName(),
+							},
+						},
+						SecurityContext: &corev1.SecurityContext{
+							AllowPrivilegeEscalation: pointer.Bool(false),
+							Privileged:               pointer.Bool(false),
+							ReadOnlyRootFilesystem:   pointer.Bool(true),
+							RunAsUser:                pointer.Int64(101),
+							RunAsGroup:               pointer.Int64(101),
+						},
+						VolumeMounts: []corev1.VolumeMount{
+							{
+								Name:      initDBName + "-volume",
+								MountPath: "/initdb.d",
+							},
+						},
+					},
+				},
+				RestartPolicy: corev1.RestartPolicyNever,
+				Volumes: []corev1.Volume{
+					{
+						Name: initDBName + "-volume",
+						VolumeSource: corev1.VolumeSource{
+							ConfigMap: &corev1.ConfigMapVolumeSource{
+								LocalObjectReference: corev1.LocalObjectReference{
+									Name: initDBName,
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		BackoffLimit: &backOffLimit,
+	}
+
+	return nil
 }
