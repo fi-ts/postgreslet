@@ -56,7 +56,7 @@ const (
 	storageEncryptionKeyFinalizerName              string = "postgres.database.fits.cloud/secret-finalizer"
 	walGEncryptionSecretNamePostfix                string = "-walg-encryption"
 	walGEncryptionSecretKeyName                    string = "key"
-	initDBName                                     string = "initdb"
+	initDBName                                     string = "postgres-initdb"
 	initDBSQL                                      string = `|
 	SELECT 'Hello world';`
 )
