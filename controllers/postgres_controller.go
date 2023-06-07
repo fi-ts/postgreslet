@@ -1384,7 +1384,7 @@ func removeElem(ss []string, s string) (out []string) {
 
 func (r *PostgresReconciler) ensureInitDBJob(ctx context.Context, instance *pg.Postgres) error {
 	ns := types.NamespacedName{
-		Namespace: instance.Namespace,
+		Namespace: instance.ToPeripheralResourceNamespace(),
 		Name:      initDBName,
 	}
 	cm := &corev1.ConfigMap{}
