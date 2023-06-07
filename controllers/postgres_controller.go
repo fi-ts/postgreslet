@@ -57,8 +57,7 @@ const (
 	walGEncryptionSecretNamePostfix                string = "-walg-encryption"
 	walGEncryptionSecretKeyName                    string = "key"
 	initDBName                                     string = "postgres-initdb"
-	initDBSQL                                      string = `|
-	SELECT 'Hello world';`
+	initDBSQL                                      string = `SELECT 'Hello world';`
 )
 
 // requeue defines in how many seconds a requeue should happen
