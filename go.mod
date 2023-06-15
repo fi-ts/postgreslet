@@ -8,7 +8,7 @@ require (
 	github.com/metal-stack/firewall-controller v1.3.0
 	github.com/metal-stack/v v1.0.3
 	github.com/onsi/ginkgo v1.16.5
-	github.com/onsi/gomega v1.27.7
+	github.com/onsi/gomega v1.27.8
 	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.66.0
 	github.com/spf13/viper v1.16.0
 	github.com/zalando/postgres-operator v1.7.0
