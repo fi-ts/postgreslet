@@ -465,6 +465,7 @@ func (r *PostgresReconciler) updatePodEnvironmentConfigMap(ctx context.Context, 
 		"WALG_DISABLE_S3_SSE":              walgDisableSSE, // server side encryption
 		"BACKUP_SCHEDULE":                  backupSchedule,
 		"BACKUP_NUM_TO_RETAIN":             backupNumToRetain,
+		"WALG_UPLOAD_DISK_CONCURRENCY":     "16",
 	}
 
 	cm := &corev1.ConfigMap{}
