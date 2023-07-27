@@ -452,22 +452,25 @@ func (r *PostgresReconciler) updatePodEnvironmentConfigMap(ctx context.Context, 
 
 	// create updated content for pod environment configmap
 	data := map[string]string{
-		"USE_WALG_BACKUP":                  "true",
-		"USE_WALG_RESTORE":                 "true",
-		"WALE_S3_PREFIX":                   "s3://" + bucketName + "/$(SCOPE)",
-		"WALG_S3_PREFIX":                   "s3://" + bucketName + "/$(SCOPE)",
-		"CLONE_WALG_S3_PREFIX":             "s3://" + bucketName + "/$(CLONE_SCOPE)",
-		"WALE_BACKUP_THRESHOLD_PERCENTAGE": "100",
-		"AWS_ENDPOINT":                     awsEndpoint,
-		"WALE_S3_ENDPOINT":                 walES3Endpoint, // same as above, but slightly modified
-		"AWS_S3_FORCE_PATH_STYLE":          "true",
-		"AWS_REGION":                       region,         // now we can use AWS S3
-		"WALG_DISABLE_S3_SSE":              walgDisableSSE, // server side encryption
-		"BACKUP_SCHEDULE":                  backupSchedule,
-		"BACKUP_NUM_TO_RETAIN":             backupNumToRetain,
-		"WALG_UPLOAD_DISK_CONCURRENCY":     "16",
-		"WALG_UPLOAD_CONCURRENCY":          "32",
-		"WALG_DOWNLOAD_CONCURRENCY":        "32",
+		"USE_WALG_BACKUP":                    "true",
+		"USE_WALG_RESTORE":                   "true",
+		"WALE_S3_PREFIX":                     "s3://" + bucketName + "/$(SCOPE)",
+		"WALG_S3_PREFIX":                     "s3://" + bucketName + "/$(SCOPE)",
+		"CLONE_WALG_S3_PREFIX":               "s3://" + bucketName + "/$(CLONE_SCOPE)",
+		"WALE_BACKUP_THRESHOLD_PERCENTAGE":   "100",
+		"AWS_ENDPOINT":                       awsEndpoint,
+		"WALE_S3_ENDPOINT":                   walES3Endpoint, // same as above, but slightly modified
+		"AWS_S3_FORCE_PATH_STYLE":            "true",
+		"AWS_REGION":                         region,         // now we can use AWS S3
+		"WALG_DISABLE_S3_SSE":                walgDisableSSE, // server side encryption
+		"BACKUP_SCHEDULE":                    backupSchedule,
+		"BACKUP_NUM_TO_RETAIN":               backupNumToRetain,
+		"WALG_UPLOAD_DISK_CONCURRENCY":       "32",
+		"CLONE_WALG_UPLOAD_DISK_CONCURRENCY": "32",
+		"WALG_UPLOAD_CONCURRENCY":            "32",
+		"CLONE_WALG_UPLOAD_CONCURRENCY":      "32",
+		"WALG_DOWNLOAD_CONCURRENCY":          "32",
+		"CLONE_WALG_DOWNLOAD_CONCURRENCY":    "32",
 	}
 
 	cm := &corev1.ConfigMap{}
