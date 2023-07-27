@@ -466,6 +466,8 @@ func (r *PostgresReconciler) updatePodEnvironmentConfigMap(ctx context.Context, 
 		"BACKUP_SCHEDULE":                  backupSchedule,
 		"BACKUP_NUM_TO_RETAIN":             backupNumToRetain,
 		"WALG_UPLOAD_DISK_CONCURRENCY":     "16",
+		"WALG_UPLOAD_CONCURRENCY":          "32",
+		"WALG_DOWNLOAD_CONCURRENCY":        "32",
 	}
 
 	cm := &corev1.ConfigMap{}
