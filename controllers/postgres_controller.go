@@ -30,6 +30,7 @@ import (
 	coreosv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -441,6 +442,17 @@ func (r *PostgresReconciler) updatePodEnvironmentConfigMap(ctx context.Context, 
 	// region
 	region := backupConfig.S3Region
 
+	// set the WALG_UPLOAD_DISK_CONCURRENCY based on the configured cpu limits
+	q, err := resource.ParseQuantity(p.Spec.Size.CPU)
+	uploadDiskConcurrency := "1"
+	if q.Value() > 32 {
+		uploadDiskConcurrency = "32"
+	} else if q.Value() > 1 {
+		uploadDiskConcurrency = fmt.Sprint(q.Value())
+	}
+	uploadConcurrency := "32"
+	downloadConcurrency := "32"
+
 	// use the rest as provided in the secret
 	bucketName := backupConfig.S3BucketName
 	backupSchedule := backupConfig.Schedule
@@ -465,12 +477,12 @@ func (r *PostgresReconciler) updatePodEnvironmentConfigMap(ctx context.Context, 
 		"WALG_DISABLE_S3_SSE":                walgDisableSSE, // server side encryption
 		"BACKUP_SCHEDULE":                    backupSchedule,
 		"BACKUP_NUM_TO_RETAIN":               backupNumToRetain,
-		"WALG_UPLOAD_DISK_CONCURRENCY":       "32",
-		"CLONE_WALG_UPLOAD_DISK_CONCURRENCY": "32",
-		"WALG_UPLOAD_CONCURRENCY":            "32",
-		"CLONE_WALG_UPLOAD_CONCURRENCY":      "32",
-		"WALG_DOWNLOAD_CONCURRENCY":          "32",
-		"CLONE_WALG_DOWNLOAD_CONCURRENCY":    "32",
+		"WALG_UPLOAD_DISK_CONCURRENCY":       uploadDiskConcurrency,
+		"CLONE_WALG_UPLOAD_DISK_CONCURRENCY": uploadDiskConcurrency,
+		"WALG_UPLOAD_CONCURRENCY":            uploadConcurrency,
+		"CLONE_WALG_UPLOAD_CONCURRENCY":      uploadConcurrency,
+		"WALG_DOWNLOAD_CONCURRENCY":          downloadConcurrency,
+		"CLONE_WALG_DOWNLOAD_CONCURRENCY":    downloadConcurrency,
 	}
 
 	cm := &corev1.ConfigMap{}
