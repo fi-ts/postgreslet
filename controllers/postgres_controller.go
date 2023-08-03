@@ -444,6 +444,9 @@ func (r *PostgresReconciler) updatePodEnvironmentConfigMap(ctx context.Context, 
 
 	// set the WALG_UPLOAD_DISK_CONCURRENCY based on the configured cpu limits
 	q, err := resource.ParseQuantity(p.Spec.Size.CPU)
+	if err != nil {
+		return fmt.Errorf("error while parsing the postgres cpu size: %w", err)
+	}
 	uploadDiskConcurrency := "1"
 	if q.Value() > 32 {
 		uploadDiskConcurrency = "32"
