@@ -8,15 +8,15 @@ require (
 	github.com/metal-stack/firewall-controller v1.3.0
 	github.com/metal-stack/v v1.0.3
 	github.com/onsi/ginkgo v1.16.5
-	github.com/onsi/gomega v1.27.7
-	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.65.2
+	github.com/onsi/gomega v1.27.8
+	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.66.0
 	github.com/spf13/viper v1.16.0
 	github.com/zalando/postgres-operator v1.7.0
-	k8s.io/api v0.27.2
+	k8s.io/api v0.27.3
 	k8s.io/apiextensions-apiserver v0.27.2
-	k8s.io/apimachinery v0.27.2
-	k8s.io/client-go v0.27.2
-	k8s.io/utils v0.0.0-20230406110748-d93618cff8a2
+	k8s.io/apimachinery v0.27.3
+	k8s.io/client-go v0.27.3
+	k8s.io/utils v0.0.0-20230505201702-9f6742963106
 	sigs.k8s.io/controller-runtime v0.15.0
 )
 
@@ -78,7 +78,7 @@ require (
 	golang.org/x/oauth2 v0.7.0 // indirect
 	golang.org/x/sys v0.8.0 // indirect
 	golang.org/x/term v0.8.0 // indirect
-	golang.org/x/text v0.9.0 // indirect
+	golang.org/x/text v0.10.0 // indirect
 	golang.org/x/time v0.3.0 // indirect
 	golang.org/x/tools v0.9.1 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.3.0 // indirect
