@@ -19,6 +19,7 @@ type Options struct {
 	EnableLegacyStandbySelector bool
 	StandbyClustersSourceRanges []string
 	EnableLBSourceRanges        bool
+	EnableForceSharedIP         bool
 }
 
 // LBManager Responsible for the creation and deletion of externally accessible Services to access the Postgresql clusters managed by the Postgreslet.
@@ -35,12 +36,36 @@ func New(client client.Client, opt Options) *LBManager {
 	}
 }
 
-// CreateSvcLBIfNone Creates a new Service of type LoadBalancer for the given Postgres resource if neccessary
-func (m *LBManager) CreateSvcLBIfNone(ctx context.Context, in *api.Postgres) error {
+// ReconcileSvcLBs Creates or updates the LoadBalancer(s) for the given Postgres resource
+func (m *LBManager) ReconcileSvcLBs(ctx context.Context, in *api.Postgres) error {
+
+	err1 := m.CreateOrUpdateSharedSvcLB(ctx, in)
+
+	err2 := m.CreateOrUpdateDedicatedSvcLB(ctx, in)
+
+	if err1 != nil {
+		return fmt.Errorf("failed to created Service of type LoadBalancer for shared IP: %w", err1)
+	}
+
+	if err2 != nil {
+		return fmt.Errorf("failed to created Service of type LoadBalancer for dedicated IP: %w", err1)
+	}
+
+	return nil
+}
+
+// CreateOrUpdateSharedSvcLB Creates or updates a Service of type LoadBalancer with a shared ip for the given Postgres resource if neccessary
+func (m *LBManager) CreateOrUpdateSharedSvcLB(ctx context.Context, in *api.Postgres) error {
+	if m.options.EnableForceSharedIP != true && in.Spec.DedicatedLoadBalancerIP != nil && *in.Spec.DedicatedLoadBalancerIP != "" {
+		// TODO logging?
+		// TODO delete shared LB if neccessary (cleanup after possible config change)?
+		return nil
+	}
+
 	svc := &corev1.Service{}
 	if err := m.client.Get(ctx, client.ObjectKey{
 		Namespace: in.ToPeripheralResourceNamespace(),
-		Name:      in.ToSvcLBName(),
+		Name:      in.ToSharedSvcLBName(),
 	}, svc); err != nil {
 		if !apimach.IsNotFound(err) {
 			return fmt.Errorf("failed to fetch Service of type LoadBalancer: %w", err)
@@ -62,7 +87,7 @@ func (m *LBManager) CreateSvcLBIfNone(ctx context.Context, in *api.Postgres) err
 			lbIPToUse = ""
 		}
 
-		svc := in.ToSvcLB(lbIPToUse, nextFreePort, m.options.EnableStandbyLeaderSelector, m.options.EnableLegacyStandbySelector, m.options.StandbyClustersSourceRanges)
+		svc := in.ToSharedSvcLB(lbIPToUse, nextFreePort, m.options.EnableStandbyLeaderSelector, m.options.EnableLegacyStandbySelector, m.options.StandbyClustersSourceRanges)
 		if !m.options.EnableLBSourceRanges {
 			// leave empty / disable source ranges
 			svc.Spec.LoadBalancerSourceRanges = []string{}
@@ -73,7 +98,7 @@ func (m *LBManager) CreateSvcLBIfNone(ctx context.Context, in *api.Postgres) err
 		return nil
 	}
 
-	updated := in.ToSvcLB("", 0, m.options.EnableStandbyLeaderSelector, m.options.EnableLegacyStandbySelector, m.options.StandbyClustersSourceRanges)
+	updated := in.ToSharedSvcLB("", 0, m.options.EnableStandbyLeaderSelector, m.options.EnableLegacyStandbySelector, m.options.StandbyClustersSourceRanges)
 	// update the selector, and only the selector (we do NOT want the change the ip or port here!!!)
 	svc.Spec.Selector = updated.Spec.Selector
 	// also update the source ranges
@@ -86,17 +111,84 @@ func (m *LBManager) CreateSvcLBIfNone(ctx context.Context, in *api.Postgres) err
 	}
 
 	if err := m.client.Update(ctx, svc); err != nil {
-		return fmt.Errorf("failed to update Service of type LoadBalancer: %w", err)
+		return fmt.Errorf("failed to update Service of type LoadBalancer (shared): %w", err)
 	}
 
 	return nil
 }
 
-// DeleteSvcLB Deletes the corresponding Service of type LoadBalancer of the given Postgres resource.
-func (m *LBManager) DeleteSvcLB(ctx context.Context, in *api.Postgres) error {
+// CreateOrUpdateDedicatedSvcLB Creates or updates a Service of type LoadBalancer with a dedicated ip for the given Postgres resource if neccessary
+func (m *LBManager) CreateOrUpdateDedicatedSvcLB(ctx context.Context, in *api.Postgres) error {
+	if in.Spec.DedicatedLoadBalancerIP == nil || *in.Spec.DedicatedLoadBalancerIP == "" {
+		// TODO logging?
+		err := m.DeleteDedicatedSvcLB(ctx, in)
+		if err != nil {
+			// TODO log, but continue
+		}
+		return nil
+	}
+
+	svc := &corev1.Service{}
+	if err := m.client.Get(ctx, client.ObjectKey{
+		Namespace: in.ToPeripheralResourceNamespace(),
+		Name:      in.ToDedicatedSvcLBName(),
+	}, svc); err != nil {
+		if !apimach.IsNotFound(err) {
+			return fmt.Errorf("failed to fetch Service of type LoadBalancer: %w", err)
+		}
+
+		var nextFreePort int32 = 5432 // Default
+		// if in.Spec.DedicatedLoadBalancerPort != nil && *in.Spec.DedicatedLoadBalancerPort != 0 {
+		// 	nextFreePort = *in.Spec.DedicatedLoadBalancerPort
+		// }
+		var lbIPToUse string = *in.Spec.DedicatedLoadBalancerIP
+
+		svc := in.ToDedicatedSvcLB(lbIPToUse, nextFreePort, m.options.EnableStandbyLeaderSelector, m.options.EnableLegacyStandbySelector, m.options.StandbyClustersSourceRanges)
+		if !m.options.EnableLBSourceRanges {
+			// leave empty / disable source ranges
+			svc.Spec.LoadBalancerSourceRanges = []string{}
+		}
+		if err := m.client.Create(ctx, svc); err != nil {
+			return fmt.Errorf("failed to create Service of type LoadBalancer: %w", err)
+		}
+		return nil
+	}
+
+	updated := in.ToDedicatedSvcLB("", 0, m.options.EnableStandbyLeaderSelector, m.options.EnableLegacyStandbySelector, m.options.StandbyClustersSourceRanges)
+	// update the selector, and only the selector (we do NOT want the change the ip or port here!!!)
+	svc.Spec.Selector = updated.Spec.Selector
+	// also update the source ranges
+	if m.options.EnableLBSourceRanges {
+		// use the given source ranges
+		svc.Spec.LoadBalancerSourceRanges = updated.Spec.LoadBalancerSourceRanges
+	} else {
+		// leave empty / disable source ranges
+		svc.Spec.LoadBalancerSourceRanges = []string{}
+	}
+
+	if err := m.client.Update(ctx, svc); err != nil {
+		return fmt.Errorf("failed to update Service of type LoadBalancer (dedicated): %w", err)
+	}
+
+	return nil
+}
+
+// DeleteSharedSvcLB Deletes the corresponding Service of type LoadBalancer of the given Postgres resource.
+func (m *LBManager) DeleteSharedSvcLB(ctx context.Context, in *api.Postgres) error {
 	lb := &corev1.Service{}
 	lb.Namespace = in.ToPeripheralResourceNamespace()
-	lb.Name = in.ToSvcLBName()
+	lb.Name = in.ToSharedSvcLBName()
+	if err := m.client.Delete(ctx, lb); client.IgnoreNotFound(err) != nil { // todo: remove ignorenotfound
+		return err
+	}
+	return nil
+}
+
+// DeleteDedicatedSvcLB Deletes the corresponding Service of type LoadBalancer of the given Postgres resource.
+func (m *LBManager) DeleteDedicatedSvcLB(ctx context.Context, in *api.Postgres) error {
+	lb := &corev1.Service{}
+	lb.Namespace = in.ToPeripheralResourceNamespace()
+	lb.Name = in.ToDedicatedSvcLBName()
 	if err := m.client.Delete(ctx, lb); client.IgnoreNotFound(err) != nil { // todo: remove ignorenotfound
 		return err
 	}

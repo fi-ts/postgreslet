@@ -92,7 +92,7 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	}
 
 	lb := &corev1.Service{}
-	if err := r.SvcClient.Get(ctx, *owner.ToSvcLBNamespacedName(), lb); err == nil {
+	if err := r.SvcClient.Get(ctx, *owner.ToSharedSvcLBNamespacedName(), lb); err == nil {
 		owner.Status.Socket.IP = lb.Spec.LoadBalancerIP
 		owner.Status.Socket.Port = lb.Spec.Ports[0].Port
 

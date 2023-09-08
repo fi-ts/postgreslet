@@ -130,11 +130,16 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		}
 		log.Info("corresponding CRD ClusterwideNetworkPolicy deleted")
 
-		if err := r.LBManager.DeleteSvcLB(ctx, instance); err != nil {
-			r.recorder.Eventf(instance, "Warning", "Error", "failed to delete Service: %v", err)
+		if err := r.LBManager.DeleteSharedSvcLB(ctx, instance); err != nil {
+			r.recorder.Eventf(instance, "Warning", "Error", "failed to delete Service with shared ip: %v", err)
 			return ctrl.Result{}, err
 		}
-		log.Info("corresponding Service of type LoadBalancer deleted")
+
+		if err := r.LBManager.DeleteDedicatedSvcLB(ctx, instance); err != nil {
+			r.recorder.Eventf(instance, "Warning", "Error", "failed to delete Service with dedicated ip: %v", err)
+			return ctrl.Result{}, err
+		}
+		log.Info("corresponding Service(s) of type LoadBalancer deleted")
 
 		// delete the postgres-exporter service
 		if err := r.deleteExporterSidecarService(ctx, namespace); client.IgnoreNotFound(err) != nil {
@@ -278,7 +283,7 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, fmt.Errorf("failed to create or update zalando postgresql: %w", err)
 	}
 
-	if err := r.LBManager.CreateSvcLBIfNone(ctx, instance); err != nil {
+	if err := r.LBManager.ReconcileSvcLBs(ctx, instance); err != nil {
 		r.recorder.Eventf(instance, "Warning", "Error", "failed to create Service: %v", err)
 		return ctrl.Result{}, err
 	}
