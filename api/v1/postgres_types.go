@@ -232,6 +232,8 @@ type PostgresStatus struct {
 
 	Socket Socket `json:"socket,omitempty"`
 
+	// TODO additional sockets?!?
+
 	ChildName string `json:"childName,omitempty"`
 }
 
@@ -403,7 +405,7 @@ func (p *Postgres) ToSharedSvcLBNamespacedName() *types.NamespacedName {
 	}
 }
 
-func (p *Postgres) ToDedicatedSvcLB(lbIP string, lbPort int32, enableStandbyLeaderSelector bool, enableLegacyStandbySelector bool, standbyClustersSourceRanges []string) *corev1.Service {
+func (p *Postgres) ToDedicatedSvcLB(lbIP string, lbPort int32, standbyClustersSourceRanges []string) *corev1.Service {
 	lb := &corev1.Service{}
 	lb.Spec.Type = "LoadBalancer"
 
@@ -443,15 +445,8 @@ func (p *Postgres) ToDedicatedSvcLB(lbIP string, lbPort int32, enableStandbyLead
 	if p.IsReplicationPrimary() {
 		lb.Spec.Selector[SpiloRoleLabelName] = SpiloRoleLabelValueMaster
 	} else {
-		if enableStandbyLeaderSelector {
-			// Only set this value when we are NOT a primary and the StandbyLeaderSelector is enabled.
-			lb.Spec.Selector[SpiloRoleLabelName] = SpiloRoleLabelValueStandbyLeader
-		} else if enableLegacyStandbySelector {
-			lb.Spec.Selector[SpiloRoleLabelName] = SpiloRoleLabelValueMaster
-		} else {
-			// select the first pod in the statefulset
-			lb.Spec.Selector[StatefulsetPodNameLabelName] = p.ToPeripheralResourceName() + "-0"
-		}
+		// select the first pod in the statefulset
+		lb.Spec.Selector[StatefulsetPodNameLabelName] = p.ToPeripheralResourceName() + "-0"
 	}
 
 	if len(lbIP) > 0 {
