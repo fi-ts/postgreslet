@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	api "github.com/fi-ts/postgreslet/api/v1"
+	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	apimach "k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -26,6 +27,7 @@ type Options struct {
 type LBManager struct {
 	client  client.Client
 	options Options
+	log     logr.Logger
 }
 
 // New Creates a new LBManager with the given configuration
@@ -123,7 +125,7 @@ func (m *LBManager) CreateOrUpdateDedicatedSvcLB(ctx context.Context, in *api.Po
 		// TODO logging?
 		err := m.DeleteDedicatedSvcLB(ctx, in)
 		if err != nil {
-			// TODO log, but continue
+			m.log.Info("could not delete dedicated loadbalancer")
 		}
 		return nil
 	}
@@ -143,7 +145,7 @@ func (m *LBManager) CreateOrUpdateDedicatedSvcLB(ctx context.Context, in *api.Po
 		// }
 		var lbIPToUse string = *in.Spec.DedicatedLoadBalancerIP
 
-		svc := in.ToDedicatedSvcLB(lbIPToUse, nextFreePort, m.options.EnableStandbyLeaderSelector, m.options.EnableLegacyStandbySelector, m.options.StandbyClustersSourceRanges)
+		svc := in.ToDedicatedSvcLB(lbIPToUse, nextFreePort, m.options.StandbyClustersSourceRanges)
 		if !m.options.EnableLBSourceRanges {
 			// leave empty / disable source ranges
 			svc.Spec.LoadBalancerSourceRanges = []string{}
@@ -154,17 +156,11 @@ func (m *LBManager) CreateOrUpdateDedicatedSvcLB(ctx context.Context, in *api.Po
 		return nil
 	}
 
-	updated := in.ToDedicatedSvcLB("", 0, m.options.EnableStandbyLeaderSelector, m.options.EnableLegacyStandbySelector, m.options.StandbyClustersSourceRanges)
-	// update the selector, and only the selector (we do NOT want the change the ip or port here!!!)
+	updated := in.ToDedicatedSvcLB("", 0, m.options.StandbyClustersSourceRanges)
+	// update the selector, and only the selector
 	svc.Spec.Selector = updated.Spec.Selector
 	// also update the source ranges
-	if m.options.EnableLBSourceRanges {
-		// use the given source ranges
-		svc.Spec.LoadBalancerSourceRanges = updated.Spec.LoadBalancerSourceRanges
-	} else {
-		// leave empty / disable source ranges
-		svc.Spec.LoadBalancerSourceRanges = []string{}
-	}
+	svc.Spec.LoadBalancerSourceRanges = updated.Spec.LoadBalancerSourceRanges
 
 	if err := m.client.Update(ctx, svc); err != nil {
 		return fmt.Errorf("failed to update Service of type LoadBalancer (dedicated): %w", err)
