@@ -69,6 +69,7 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{}, fmt.Errorf("could not find the owner")
 	}
 
+	log.Info("updating status")
 	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		// get a fresh copy of the owner object
 		if err := r.CtrlClient.Get(ctx, types.NamespacedName{Name: owner.Name, Namespace: owner.Namespace}, owner); err != nil {
@@ -91,8 +92,15 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{}, retryErr
 	}
 
+	log.Info("updating socket")
+	var lbnn types.NamespacedName
+	if owner.Spec.DedicatedLoadBalancerIP != nil {
+		lbnn = *owner.ToDedicatedSvcLBNamespacedName()
+	} else {
+		lbnn = *owner.ToSharedSvcLBNamespacedName()
+	}
 	lb := &corev1.Service{}
-	if err := r.SvcClient.Get(ctx, *owner.ToSharedSvcLBNamespacedName(), lb); err == nil {
+	if err := r.SvcClient.Get(ctx, lbnn, lb); err == nil {
 		owner.Status.Socket.IP = lb.Spec.LoadBalancerIP
 		owner.Status.Socket.Port = lb.Spec.Ports[0].Port
 
@@ -122,6 +130,8 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	if err := r.createOrUpdateSecret(ctx, owner, secrets, log); err != nil {
 		return ctrl.Result{}, err
 	}
+
+	log.Info("status reconciled")
 
 	return ctrl.Result{}, nil
 }
