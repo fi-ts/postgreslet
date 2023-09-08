@@ -186,6 +186,12 @@ type PostgresSpec struct {
 
 	// PostgresParams additional parameters that are passed along to the postgres config
 	PostgresParams map[string]string `json:"postgresParams,omitempty"`
+
+	// DedicatedLoadBalancerIP The ip to use for the load balancer
+	DedicatedLoadBalancerIP *string `json:"dedicatedLoadBalancerIP,omitempty"`
+
+	// // DedicatedLoadBalancerPort The port to use for the load balancer
+	// DedicatedLoadBalancerPort *int32 `json:"dedicatedLoadBalancerPort,omitempty"`
 }
 
 // AccessList defines the type of restrictions to access the database
@@ -322,7 +328,7 @@ func (p *Postgres) ToKey() *types.NamespacedName {
 	}
 }
 
-func (p *Postgres) ToSvcLB(lbIP string, lbPort int32, enableStandbyLeaderSelector bool, enableLegacyStandbySelector bool, standbyClustersSourceRanges []string) *corev1.Service {
+func (p *Postgres) ToSharedSvcLB(lbIP string, lbPort int32, enableStandbyLeaderSelector bool, enableLegacyStandbySelector bool, standbyClustersSourceRanges []string) *corev1.Service {
 	lb := &corev1.Service{}
 	lb.Spec.Type = "LoadBalancer"
 
@@ -331,7 +337,7 @@ func (p *Postgres) ToSvcLB(lbIP string, lbPort int32, enableStandbyLeaderSelecto
 	}
 
 	lb.Namespace = p.ToPeripheralResourceNamespace()
-	lb.Name = p.ToSvcLBName()
+	lb.Name = p.ToSharedSvcLBName()
 	lb.SetLabels(SvcLoadBalancerLabel)
 
 	lbsr := []string{}
@@ -383,17 +389,90 @@ func (p *Postgres) ToSvcLB(lbIP string, lbPort int32, enableStandbyLeaderSelecto
 	return lb
 }
 
-// ToSvcLBName returns the name of the peripheral resource Service LoadBalancer.
+// ToSharedSvcLBName returns the name of the peripheral resource Service LoadBalancer.
 // It's different from all other peripheral resources because the operator
 // already generates one service with that name.
-func (p *Postgres) ToSvcLBName() string {
+func (p *Postgres) ToSharedSvcLBName() string {
 	return p.ToPeripheralResourceName() + "-external"
 }
 
-func (p *Postgres) ToSvcLBNamespacedName() *types.NamespacedName {
+func (p *Postgres) ToSharedSvcLBNamespacedName() *types.NamespacedName {
 	return &types.NamespacedName{
 		Namespace: p.ToPeripheralResourceNamespace(),
-		Name:      p.ToSvcLBName(),
+		Name:      p.ToSharedSvcLBName(),
+	}
+}
+
+func (p *Postgres) ToDedicatedSvcLB(lbIP string, lbPort int32, enableStandbyLeaderSelector bool, enableLegacyStandbySelector bool, standbyClustersSourceRanges []string) *corev1.Service {
+	lb := &corev1.Service{}
+	lb.Spec.Type = "LoadBalancer"
+
+	lb.Spec.ExternalTrafficPolicy = corev1.ServiceExternalTrafficPolicyTypeLocal
+
+	lb.Namespace = p.ToPeripheralResourceNamespace()
+	lb.Name = p.ToDedicatedSvcLBName()
+	lb.SetLabels(SvcLoadBalancerLabel)
+
+	lbsr := []string{}
+	if p.HasSourceRanges() {
+		for _, src := range p.Spec.AccessList.SourceRanges {
+			lbsr = append(lbsr, src)
+		}
+	}
+	for _, scsr := range standbyClustersSourceRanges {
+		lbsr = append(lbsr, scsr)
+	}
+	if len(lbsr) == 0 {
+		// block by default
+		lbsr = append(lbsr, "255.255.255.255/32")
+	}
+	lb.Spec.LoadBalancerSourceRanges = lbsr
+
+	port := corev1.ServicePort{}
+	port.Name = "postgresql"
+	port.Port = lbPort
+	port.Protocol = corev1.ProtocolTCP
+	port.TargetPort = intstr.FromInt(5432)
+	lb.Spec.Ports = []corev1.ServicePort{port}
+
+	lb.Spec.Selector = map[string]string{
+		ApplicationLabelName: ApplicationLabelValue,
+		"cluster-name":       p.ToPeripheralResourceName(),
+		"team":               p.generateTeamID(),
+	}
+	if p.IsReplicationPrimary() {
+		lb.Spec.Selector[SpiloRoleLabelName] = SpiloRoleLabelValueMaster
+	} else {
+		if enableStandbyLeaderSelector {
+			// Only set this value when we are NOT a primary and the StandbyLeaderSelector is enabled.
+			lb.Spec.Selector[SpiloRoleLabelName] = SpiloRoleLabelValueStandbyLeader
+		} else if enableLegacyStandbySelector {
+			lb.Spec.Selector[SpiloRoleLabelName] = SpiloRoleLabelValueMaster
+		} else {
+			// select the first pod in the statefulset
+			lb.Spec.Selector[StatefulsetPodNameLabelName] = p.ToPeripheralResourceName() + "-0"
+		}
+	}
+
+	if len(lbIP) > 0 {
+		// if no ip is set, a new loadbalancer will be created automatically
+		lb.Spec.LoadBalancerIP = lbIP
+	}
+
+	return lb
+}
+
+// ToSharedSvcLBName returns the name of the peripheral resource Service LoadBalancer.
+// It's different from all other peripheral resources because the operator
+// already generates one service with that name.
+func (p *Postgres) ToDedicatedSvcLBName() string {
+	return p.ToPeripheralResourceName() + "-dedicated"
+}
+
+func (p *Postgres) ToDedicatedSvcLBNamespacedName() *types.NamespacedName {
+	return &types.NamespacedName{
+		Namespace: p.ToPeripheralResourceNamespace(),
+		Name:      p.ToDedicatedSvcLBName(),
 	}
 }
 

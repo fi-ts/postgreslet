@@ -99,6 +99,9 @@ spec:
                       replication is used for the standby postgres
                     type: boolean
                 type: object
+              dedicatedLoadBalancerIP:
+                description: DedicatedLoadBalancerIP The ip to use for the load balancer
+                type: string
               description:
                 description: Description
                 type: string
