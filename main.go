@@ -53,7 +53,7 @@ const (
 	etcdHostFlg                           = "etcd-host"
 	crdValidationFlg                      = "enable-crd-validation"
 	operatorImageFlg                      = "operator-image"
-	pgParamBlockListFlg                   = "postgres-param-blocklist"
+	pgParamBlockListFlg                   = "postgres-param-blocklist" // nolint
 	majorVersionUpgradeModeFlg            = "major-version-upgrade-mode"
 	standbyClustersSourceRangesFlg        = "standby-clusters-source-ranges"
 	postgresletNamespaceFlg               = "postgreslet-namespace"
