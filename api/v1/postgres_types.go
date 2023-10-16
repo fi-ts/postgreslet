@@ -322,7 +322,7 @@ func (p *Postgres) ToKey() *types.NamespacedName {
 	}
 }
 
-func (p *Postgres) ToSvcLB(lbIP string, lbPort int32, enableStandbyLeaderSelector bool, enableLegacyStandbySelector bool) *corev1.Service {
+func (p *Postgres) ToSvcLB(lbIP string, lbPort int32, enableStandbyLeaderSelector bool, enableLegacyStandbySelector bool, standbyClustersSourceRanges []string) *corev1.Service {
 	lb := &corev1.Service{}
 	lb.Spec.Type = "LoadBalancer"
 
@@ -334,7 +334,20 @@ func (p *Postgres) ToSvcLB(lbIP string, lbPort int32, enableStandbyLeaderSelecto
 	lb.Name = p.ToSvcLBName()
 	lb.SetLabels(SvcLoadBalancerLabel)
 
-	// svc.Spec.LoadBalancerSourceRanges // todo: Do we need to set this?
+	lbsr := []string{}
+	if p.HasSourceRanges() {
+		for _, src := range p.Spec.AccessList.SourceRanges {
+			lbsr = append(lbsr, src)
+		}
+	}
+	for _, scsr := range standbyClustersSourceRanges {
+		lbsr = append(lbsr, scsr)
+	}
+	if len(lbsr) == 0 {
+		// block by default
+		lbsr = append(lbsr, "255.255.255.255/32")
+	}
+	lb.Spec.LoadBalancerSourceRanges = lbsr
 
 	port := corev1.ServicePort{}
 	port.Name = "postgresql"

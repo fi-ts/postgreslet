@@ -9,10 +9,12 @@ package controllers
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"math/big"
 	"net"
 	"net/http"
 	"net/url"
@@ -51,6 +53,10 @@ const (
 	postgresExporterServicePortName                string = "metrics"
 	postgresExporterServiceTenantAnnotationName    string = pg.TenantLabelName
 	postgresExporterServiceProjectIDAnnotationName string = pg.ProjectIDLabelName
+	storageEncryptionKeyName                       string = "storage-encryption-key"
+	storageEncryptionKeyFinalizerName              string = "postgres.database.fits.cloud/secret-finalizer"
+	walGEncryptionSecretNamePostfix                string = "-walg-encryption"
+	walGEncryptionSecretKeyName                    string = "key"
 )
 
 // requeue defines in how many seconds a requeue should happen
@@ -67,17 +73,20 @@ type PostgresReconciler struct {
 	PartitionID, Tenant, StorageClass string
 	*operatormanager.OperatorManager
 	*lbmanager.LBManager
-	recorder                         record.EventRecorder
-	PgParamBlockList                 map[string]bool
-	StandbyClustersSourceRanges      []string
-	PostgresletNamespace             string
-	SidecarsConfigMapName            string
-	EnableNetPol                     bool
-	EtcdHost                         string
-	PatroniTTL                       uint32
-	PatroniLoopWait                  uint32
-	PatroniRetryTimeout              uint32
-	ReplicationChangeRequeueDuration time.Duration
+	recorder                            record.EventRecorder
+	PgParamBlockList                    map[string]bool
+	StandbyClustersSourceRanges         []string
+	PostgresletNamespace                string
+	SidecarsConfigMapName               string
+	EnableNetPol                        bool
+	EtcdHost                            string
+	PatroniTTL                          uint32
+	PatroniLoopWait                     uint32
+	PatroniRetryTimeout                 uint32
+	ReplicationChangeRequeueDuration    time.Duration
+	EnableRandomStorageEncryptionSecret bool
+	EnableWalGEncryption                bool
+	PostgresletFullname                 string
 }
 
 type PatroniStandbyCluster struct {
@@ -135,7 +144,7 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		}
 		log.Info("corresponding CRD ClusterwideNetworkPolicy deleted")
 
-		if err := r.DeleteSvcLB(ctx, instance); err != nil {
+		if err := r.LBManager.DeleteSvcLB(ctx, instance); err != nil {
 			r.recorder.Eventf(instance, "Warning", "Error", "failed to delete Service: %v", err)
 			return ctrl.Result{}, err
 		}
@@ -158,7 +167,14 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 			log.Info("corresponding NetworkPolicy deleted")
 		}
 
-		deletable, err := r.IsOperatorDeletable(ctx, namespace)
+		if err := r.removeStorageEncryptionSecretFinalizer(ctx, instance); err != nil {
+			log.Error(err, "error while remnoving finalizer from storage encryption secret")
+		} else {
+
+			log.Info("finalizer from storage encryption secret removed")
+		}
+
+		deletable, err := r.OperatorManager.IsOperatorDeletable(ctx, namespace)
 		if err != nil {
 			r.recorder.Eventf(instance, "Warning", "Error", "failed to check if the operator is idle: %v", err)
 			return ctrl.Result{}, fmt.Errorf("error while checking if the operator is idle: %w", err)
@@ -168,7 +184,7 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 			log.Info("operator not yet deletable, requeueing")
 			return ctrl.Result{Requeue: true}, nil
 		}
-		if err := r.UninstallOperator(ctx, namespace); err != nil {
+		if err := r.OperatorManager.UninstallOperator(ctx, namespace); err != nil {
 			r.recorder.Eventf(instance, "Warning", "Error", "failed to uninstall operator: %v", err)
 			return ctrl.Result{}, fmt.Errorf("error while uninstalling operator: %w", err)
 		}
@@ -261,12 +277,18 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, fmt.Errorf("error while creating sidecars servicemonitor %v: %w", namespace, err)
 	}
 
+	// Make sure the storage secret exist, if neccessary
+	if err := r.ensureStorageEncryptionSecret(ctx, instance); err != nil {
+		r.recorder.Eventf(instance, "Warning", "Error", "failed to create storage secret: %v", err)
+		return ctrl.Result{}, fmt.Errorf("error while creating storage secret: %w", err)
+	}
+
 	if err := r.createOrUpdateZalandoPostgresql(ctx, instance, log, globalSidecarsCM, r.PatroniTTL, r.PatroniLoopWait, r.PatroniRetryTimeout); err != nil {
 		r.recorder.Eventf(instance, "Warning", "Error", "failed to create Zalando resource: %v", err)
 		return ctrl.Result{}, fmt.Errorf("failed to create or update zalando postgresql: %w", err)
 	}
 
-	if err := r.CreateSvcLBIfNone(ctx, instance); err != nil {
+	if err := r.LBManager.CreateSvcLBIfNone(ctx, instance); err != nil {
 		r.recorder.Eventf(instance, "Warning", "Error", "failed to create Service: %v", err)
 		return ctrl.Result{}, err
 	}
@@ -384,19 +406,23 @@ func (r *PostgresReconciler) deleteUserPasswordsSecret(ctx context.Context, inst
 // ensureZalandoDependencies makes sure Zalando resources are installed in the service-cluster.
 func (r *PostgresReconciler) ensureZalandoDependencies(ctx context.Context, p *pg.Postgres) error {
 	namespace := p.ToPeripheralResourceNamespace()
-	isInstalled, err := r.IsOperatorInstalled(ctx, namespace)
+	isInstalled, err := r.OperatorManager.IsOperatorInstalled(ctx, namespace)
 	if err != nil {
 		return fmt.Errorf("error while querying if zalando dependencies are installed: %w", err)
 	}
 
 	if !isInstalled {
-		if err := r.InstallOrUpdateOperator(ctx, namespace); err != nil {
+		if err := r.OperatorManager.InstallOrUpdateOperator(ctx, namespace); err != nil {
 			return fmt.Errorf("error while installing zalando dependencies: %w", err)
 		}
 	}
 
 	if err := r.updatePodEnvironmentConfigMap(ctx, p); err != nil {
 		return fmt.Errorf("error while updating backup config: %w", err)
+	}
+
+	if err := r.updatePodEnvironmentSecret(ctx, p); err != nil {
+		return fmt.Errorf("error while updating backup config secret: %w", err)
 	}
 
 	return nil
@@ -429,19 +455,12 @@ func (r *PostgresReconciler) updatePodEnvironmentConfigMap(ctx context.Context, 
 
 	// use the rest as provided in the secret
 	bucketName := backupConfig.S3BucketName
-	awsAccessKeyID := backupConfig.S3AccessKey
-	awsSecretAccessKey := backupConfig.S3SecretKey
 	backupSchedule := backupConfig.Schedule
 	backupNumToRetain := backupConfig.Retention
 
-	// s3 server side encryption SSE is enabled if the key is given
-	// TODO our s3 needs a small change to make this work
+	// s3 server side encryption SSE is disabled
+	// we use client side encryption
 	walgDisableSSE := "true"
-	walgSSE := ""
-	if backupConfig.S3EncryptionKey != nil {
-		walgDisableSSE = "false"
-		walgSSE = *backupConfig.S3EncryptionKey
-	}
 
 	// create updated content for pod environment configmap
 	data := map[string]string{
@@ -453,12 +472,9 @@ func (r *PostgresReconciler) updatePodEnvironmentConfigMap(ctx context.Context, 
 		"WALE_BACKUP_THRESHOLD_PERCENTAGE": "100",
 		"AWS_ENDPOINT":                     awsEndpoint,
 		"WALE_S3_ENDPOINT":                 walES3Endpoint, // same as above, but slightly modified
-		"AWS_ACCESS_KEY_ID":                awsAccessKeyID,
-		"AWS_SECRET_ACCESS_KEY":            awsSecretAccessKey,
 		"AWS_S3_FORCE_PATH_STYLE":          "true",
 		"AWS_REGION":                       region,         // now we can use AWS S3
-		"WALG_DISABLE_S3_SSE":              walgDisableSSE, // disable server side encryption if key is nil
-		"WALG_S3_SSE":                      walgSSE,        // server side encryption key
+		"WALG_DISABLE_S3_SSE":              walgDisableSSE, // server side encryption
 		"BACKUP_SCHEDULE":                  backupSchedule,
 		"BACKUP_NUM_TO_RETAIN":             backupNumToRetain,
 	}
@@ -474,7 +490,7 @@ func (r *PostgresReconciler) updatePodEnvironmentConfigMap(ctx context.Context, 
 		// operatormanager.OperatorManager.UpdateAllManagedOperators does not call InstallOrUpdateOperator)
 		// we previously aborted here (before the postgresql resource was updated with the new labels), meaning we would
 		// simply restart the loop without solving the problem.
-		if cm, err = r.CreatePodEnvironmentConfigMap(ctx, ns.Namespace); err != nil {
+		if cm, err = r.OperatorManager.CreatePodEnvironmentConfigMap(ctx, ns.Namespace); err != nil {
 			return fmt.Errorf("error while creating the missing Pod Environment ConfigMap %v: %w", ns.Namespace, err)
 		}
 		log.Info("mising Pod Environment ConfigMap created!")
@@ -482,6 +498,68 @@ func (r *PostgresReconciler) updatePodEnvironmentConfigMap(ctx context.Context, 
 	cm.Data = data
 	if err := r.SvcClient.Update(ctx, cm); err != nil {
 		return fmt.Errorf("error while updating the pod environment configmap in service cluster: %w", err)
+	}
+
+	return nil
+}
+
+func (r *PostgresReconciler) updatePodEnvironmentSecret(ctx context.Context, p *pg.Postgres) error {
+	log := r.Log.WithValues("postgres", p.Name)
+	if p.Spec.BackupSecretRef == "" {
+		log.Info("No configured backupSecretRef found, skipping configuration of postgres backup")
+		return nil
+	}
+
+	backupConfig, err := r.getBackupConfig(ctx, p.Namespace, p.Spec.BackupSecretRef)
+	if err != nil {
+		return err
+	}
+
+	awsAccessKeyID := backupConfig.S3AccessKey
+	awsSecretAccessKey := backupConfig.S3SecretKey
+
+	// create updated content for pod environment configmap
+	data := map[string][]byte{
+		"AWS_ACCESS_KEY_ID":     []byte(awsAccessKeyID),
+		"AWS_SECRET_ACCESS_KEY": []byte(awsSecretAccessKey),
+	}
+
+	// libsodium client side encryption key
+	if r.EnableWalGEncryption {
+		s, err := r.getWalGEncryptionSecret(ctx)
+		if err != nil {
+			return err
+		}
+		k, exists := s.Data[walGEncryptionSecretKeyName]
+		if !exists {
+			return fmt.Errorf("could not find key %v in secret %v/%v-%v", walGEncryptionSecretKeyName, r.PostgresletNamespace, r.PostgresletFullname, walGEncryptionSecretNamePostfix)
+		}
+		// libsodium keys are fixed-size keys of 32 bytes, see https://github.com/wal-g/wal-g#encryption
+		if len(k) != 32 {
+			return fmt.Errorf("wal_g encryption key must be exactly 32 bytes, got %v", len(k))
+		}
+		data["WALG_LIBSODIUM_KEY"] = k
+
+		if p.Spec.PostgresRestore != nil {
+			data["CLONE_WALG_LIBSODIUM_KEY"] = k
+		} else {
+			delete(data, "CLONE_WALG_LIBSODIUM_KEY")
+		}
+	}
+
+	var s *corev1.Secret
+	ns := types.NamespacedName{
+		Name:      operatormanager.PodEnvCMName,
+		Namespace: p.ToPeripheralResourceNamespace(),
+	}
+
+	if s, err = r.OperatorManager.CreateOrGetPodEnvironmentSecret(ctx, ns.Namespace); err != nil {
+		return fmt.Errorf("error while accessing the pod environment secret %v: %w", ns.Namespace, err)
+	}
+
+	s.Data = data
+	if err := r.SvcClient.Update(ctx, s); err != nil {
+		return fmt.Errorf("error while updating the pod environment secret in service cluster: %w", err)
 	}
 
 	return nil
@@ -1130,27 +1208,22 @@ func (r *PostgresReconciler) createOrUpdateExporterSidecarServices(ctx context.C
 		exporterServiceTargetPort = exporterServicePort
 	}
 
-	pes := &corev1.Service{}
-
-	if err := r.SetName(pes, postgresExporterServiceName); err != nil {
-		return fmt.Errorf("error while setting the name of the postgres-exporter service to %v: %w", namespace, err)
-	}
-	if err := r.SetNamespace(pes, namespace); err != nil {
-		return fmt.Errorf("error while setting the namespace of the postgres-exporter service to %v: %w", namespace, err)
-	}
 	labels := map[string]string{
 		// pg.ApplicationLabelName: pg.ApplicationLabelValue, // TODO check if we still need that label, IsOperatorDeletable won't work anymore if we set it.
 		"app": "postgres-exporter",
-	}
-	if err := r.SetLabels(pes, labels); err != nil {
-		return fmt.Errorf("error while setting the labels of the postgres-exporter service to %v: %w", labels, err)
 	}
 	annotations := map[string]string{
 		postgresExporterServiceTenantAnnotationName:    in.Spec.Tenant,
 		postgresExporterServiceProjectIDAnnotationName: in.Spec.ProjectID,
 	}
-	if err := r.SetAnnotations(pes, annotations); err != nil {
-		return fmt.Errorf("error while setting the annotations of the postgres-exporter service to %v: %w", annotations, err)
+
+	pes := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        postgresExporterServiceName,
+			Namespace:   namespace,
+			Labels:      labels,
+			Annotations: annotations,
+		},
 	}
 
 	pes.Spec.Ports = []corev1.ServicePort{
@@ -1212,28 +1285,25 @@ func (r *PostgresReconciler) deleteNetPol(ctx context.Context, instance *pg.Post
 func (r *PostgresReconciler) createOrUpdateExporterSidecarServiceMonitor(ctx context.Context, namespace string, in *pg.Postgres) error {
 	log := r.Log.WithValues("namespace", namespace)
 
-	pesm := &coreosv1.ServiceMonitor{}
-
-	// TODO what's the correct name?
-	if err := r.SetName(pesm, postgresExporterServiceName); err != nil {
-		return fmt.Errorf("error while setting the name of the postgres-exporter servicemonitor to %v: %w", namespace, err)
-	}
-	if err := r.SetNamespace(pesm, namespace); err != nil {
-		return fmt.Errorf("error while setting the namespace of the postgres-exporter servicemonitor to %v: %w", namespace, err)
-	}
 	labels := map[string]string{
 		"app":     "postgres-exporter",
 		"release": "prometheus",
 	}
-	if err := r.SetLabels(pesm, labels); err != nil {
-		return fmt.Errorf("error while setting the namespace of the postgres-exporter servicemonitor to %v: %w", namespace, err)
-	}
+
 	annotations := map[string]string{
 		postgresExporterServiceTenantAnnotationName:    in.Spec.Tenant,
 		postgresExporterServiceProjectIDAnnotationName: in.Spec.ProjectID,
 	}
-	if err := r.SetAnnotations(pesm, annotations); err != nil {
-		return fmt.Errorf("error while setting the annotations of the postgres-exporter service monitor to %v: %w", annotations, err)
+
+	// TODO what's the correct name?
+
+	pesm := &coreosv1.ServiceMonitor{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        postgresExporterServiceName,
+			Namespace:   namespace,
+			Labels:      labels,
+			Annotations: annotations,
+		},
 	}
 
 	pesm.Spec.Endpoints = []coreosv1.Endpoint{
@@ -1281,12 +1351,11 @@ func (r *PostgresReconciler) createOrUpdateExporterSidecarServiceMonitor(ctx con
 func (r *PostgresReconciler) deleteExporterSidecarService(ctx context.Context, namespace string) error {
 	log := r.Log.WithValues("namespace", namespace)
 
-	s := &corev1.Service{}
-	if err := r.SetName(s, postgresExporterServiceName); err != nil {
-		return fmt.Errorf("error while setting the name of the postgres-exporter service to delete to %v: %w", postgresExporterServiceName, err)
-	}
-	if err := r.SetNamespace(s, namespace); err != nil {
-		return fmt.Errorf("error while setting the namespace of the postgres-exporter service to delete to %v: %w", namespace, err)
+	s := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      postgresExporterServiceName,
+			Namespace: namespace,
+		},
 	}
 	if err := r.SvcClient.Delete(ctx, s); err != nil {
 		return fmt.Errorf("error while deleting the postgres-exporter service: %w", err)
@@ -1294,4 +1363,118 @@ func (r *PostgresReconciler) deleteExporterSidecarService(ctx context.Context, n
 	log.Info("postgres-exporter service deleted")
 
 	return nil
+}
+
+func (r *PostgresReconciler) getWalGEncryptionSecret(ctx context.Context) (*corev1.Secret, error) {
+
+	ns := r.PostgresletNamespace
+	name := r.PostgresletFullname + walGEncryptionSecretNamePostfix
+
+	// fetch secret
+	s := &corev1.Secret{}
+	nn := types.NamespacedName{
+		Name:      name,
+		Namespace: ns,
+	}
+	if err := r.SvcClient.Get(ctx, nn, s); err != nil {
+		return nil, fmt.Errorf("error while getting the backup secret from service cluster: %w", err)
+	}
+
+	return s, nil
+}
+
+func (r *PostgresReconciler) ensureStorageEncryptionSecret(ctx context.Context, instance *pg.Postgres) error {
+
+	if !r.EnableRandomStorageEncryptionSecret {
+		r.Log.Info("storage secret disabled, no action needed")
+		return nil
+	}
+
+	// Check if secrets exist local in SERVICE Cluster
+	n := storageEncryptionKeyName
+	ns := instance.ToPeripheralResourceNamespace()
+	s := &corev1.Secret{}
+	r.Log.Info("checking for storage secret", "namespace", ns, "name", n)
+	err := r.SvcClient.Get(ctx, types.NamespacedName{Namespace: ns, Name: n}, s)
+	if err == nil {
+		r.Log.Info("storage secret found, no action needed")
+		return nil
+	}
+
+	// we got an error other than not found, so we cannot continue!
+	if !apierrors.IsNotFound(err) {
+		return fmt.Errorf("error while fetching storage secret from service cluster: %w", err)
+	}
+
+	r.Log.Info("creating storage secret")
+
+	k, err := r.generateRandomString()
+	if err != nil {
+		return fmt.Errorf("error while generating random storage secret: %w", err)
+	}
+
+	postgresSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       n,
+			Namespace:  ns,
+			Finalizers: []string{storageEncryptionKeyFinalizerName},
+		},
+		StringData: map[string]string{
+			"host-encryption-passphrase": k,
+		},
+	}
+
+	if err := r.SvcClient.Create(ctx, postgresSecret); err != nil {
+		return fmt.Errorf("error while creating storage secret in service cluster: %w", err)
+	}
+	r.Log.Info("created storage secret", "secret", postgresSecret)
+
+	return nil
+
+}
+
+func (r *PostgresReconciler) generateRandomString() (string, error) {
+	const chars string = "!\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"
+	var size *big.Int = big.NewInt(int64(len(chars)))
+	b := make([]byte, 64)
+	for i := range b {
+		x, err := rand.Int(rand.Reader, size)
+		if err != nil {
+			return "", err
+		}
+		b[i] = chars[x.Int64()]
+	}
+	return string(b), nil
+}
+
+func (r *PostgresReconciler) removeStorageEncryptionSecretFinalizer(ctx context.Context, instance *pg.Postgres) error {
+
+	// Fetch secret
+	n := storageEncryptionKeyName
+	ns := instance.ToPeripheralResourceNamespace()
+	s := &corev1.Secret{}
+	r.Log.Info("Fetching storage secret", "namespace", ns, "name", n)
+	err := r.SvcClient.Get(ctx, types.NamespacedName{Namespace: ns, Name: n}, s)
+	if err != nil {
+		// TODO this would be blocking if we couldn't remove the finalizer!
+		return fmt.Errorf("error while fetching storage secret from service cluster: %w", err)
+	}
+
+	// Remove finalizer
+	s.ObjectMeta.Finalizers = removeElem(s.ObjectMeta.Finalizers, storageEncryptionKeyFinalizerName)
+	if err := r.SvcClient.Update(ctx, s); err != nil {
+		return fmt.Errorf("error while removing finalizer from storage secret in service cluster: %w", err)
+	}
+
+	return nil
+}
+
+func removeElem(ss []string, s string) (out []string) {
+	for _, elem := range ss {
+		if elem == s {
+			continue
+		}
+		out = append(out, elem)
+	}
+	return
 }
