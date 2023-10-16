@@ -54,21 +54,21 @@ run: generate fmt vet manifests install-configmap-sidecars install-crd-cwnp
 
 # Install CRDs into a cluster
 install: manifests
-	kustomize build config/crd | kubectl --kubeconfig kubeconfig apply -f -
+	kubectl kustomize config/crd | kubectl --kubeconfig kubeconfig apply -f -
 
 # Uninstall CRDs from a cluster
 uninstall: manifests
-	kustomize build config/crd | kubectl --kubeconfig kubeconfig delete -f -
+	kubectl kustomize config/crd | kubectl --kubeconfig kubeconfig delete -f -
 
 # Deploy controller in the configured Kubernetes cluster in ~/.kube/config
 deploy: install-crd-cwnp manifests secret kind-load-image
-	cd config/manager && kustomize edit set image controller=${IMG}:${VERSION}
-	kustomize build config/default | kubectl apply -f -
+	cd config/manager && kubectl kustomize edit set image controller=${IMG}:${VERSION}
+	kubectl kustomize config/default | kubectl apply -f -
 
 # clean up deployed resources in the configured Kubernetes cluster in ~/.kube/config
 cleanup: manifests
-	cd config/manager && kustomize edit set image controller=${IMG}:${VERSION}
-	kustomize build config/default | kubectl delete -f -
+	cd config/manager && kubectl kustomize edit set image controller=${IMG}:${VERSION}
+	kubectl kustomize config/default | kubectl delete -f -
 
 # Generate manifests e.g. CRD, RBAC etc.
 manifests: controller-gen
