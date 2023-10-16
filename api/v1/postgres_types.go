@@ -81,8 +81,8 @@ const (
 	defaultPostgresParamValueSSLMinProtocolVersion  = "TLSv1.2"
 	defaultPostgresParamValueSSLPreferServerCiphers = "on"
 	defaultPostgresParamValueSSLCiphers             = "ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384"
-	defaultPostgresParamValueWalKeepSegements       = "256"
-	defaultPostgresParamValueWalKeepSize            = "4GB"
+	defaultPostgresParamValueWalKeepSegements       = "64"
+	defaultPostgresParamValueWalKeepSize            = "1GB"
 )
 
 var (
