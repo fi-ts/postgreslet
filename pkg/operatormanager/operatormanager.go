@@ -427,6 +427,8 @@ func (m *OperatorManager) editConfigMap(cm *corev1.ConfigMap, namespace string, 
 	cm.Data["replication_username"] = "standby"
 
 	cm.Data["enable_pod_antiaffinity"] = strconv.FormatBool(options.PodAntiaffinity)
+
+	cm.Data["secret_name_template"] = "{namespace}.{username}.{cluster}.credentials"
 }
 
 // ensureCleanMetadata ensures obj has clean metadata
