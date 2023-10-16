@@ -217,7 +217,7 @@ two-kind-clusters:
 	#
 	## control-plane-cluster
 	########################
-	kind create cluster --name ctrl --kubeconfig ./kubeconfig
+	kind create cluster --name ctrl --kubeconfig ./kubeconfig --image kindest/node:v1.24.15
 	container_ip=$$(docker inspect --format='{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' 'ctrl-control-plane') ;\
 	kubectl --kubeconfig=kubeconfig config set-cluster 'kind-ctrl' --server="https://$${container_ip}:6443"
 	make install
@@ -225,7 +225,7 @@ two-kind-clusters:
 	#
 	## service-cluster
 	########################
-	kind create cluster
+	kind create cluster --image kindest/node:v1.24.15
 	sed 's/z.Spec.Volume.StorageClass/\/\/z.Spec.Volume.StorageClass/' -i api/v1/postgres_types.go
 	make kind-load-image
 	sed 's/\/\/z.Spec.Volume.StorageClass/z.Spec.Volume.StorageClass/' -i api/v1/postgres_types.go
