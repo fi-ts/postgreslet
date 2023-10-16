@@ -243,6 +243,7 @@ destroy-two-kind-clusters:
 
 install-crd-servicemonitor:
 	kubectl apply -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/v0.45.0/example/prometheus-operator-crd/monitoring.coreos.com_servicemonitors.yaml
+	kubectl apply -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/v0.45.0/example/prometheus-operator-crd/monitoring.coreos.com_podmonitors.yaml
 
 reinstall-postgreslet: kind-load-image
 	# helm repo add metal-stack https://helm.metal-stack.io # stable repo
