@@ -1,0 +1,325 @@
+
+
+apiVersion: v1
+kind: List
+metadata: {}
+items:
+- kind: ServiceAccount
+  apiVersion: v1
+  metadata:
+    labels:
+      postgres.database.fits.cloud/partition-id: sample
+      postgres.database.fits.cloud/managed-by: postgreslet
+      postgres.database.fits.cloud/component: etcd
+    name: patroni-etcd
+    namespace: postgreslet-system
+- kind: Role
+  apiVersion: rbac.authorization.k8s.io/v1
+  metadata:
+    labels:
+      postgres.database.fits.cloud/partition-id: sample
+      postgres.database.fits.cloud/managed-by: postgreslet
+      postgres.database.fits.cloud/component: etcd
+    name: patroni-etcd
+    namespace: postgreslet-system
+  rules:
+  - apiGroups:
+    - extensions
+    resourceNames:
+    - postgreslet
+    resources:
+    - podsecuritypolicies
+    verbs:
+    - use
+- kind: RoleBinding
+  apiVersion: rbac.authorization.k8s.io/v1
+  metadata:
+    labels:
+      postgres.database.fits.cloud/partition-id: sample
+      postgres.database.fits.cloud/managed-by: postgreslet
+      postgres.database.fits.cloud/component: etcd
+    name: patroni-etcd
+    namespace: postgreslet-system
+  roleRef:
+    apiGroup: rbac.authorization.k8s.io
+    kind: Role
+    name: patroni-etcd
+  subjects:
+  - kind: ServiceAccount
+    name: patroni-etcd
+    namespace: postgreslet-system
+- kind: ConfigMap
+  apiVersion: v1
+  metadata:
+    labels:
+      postgres.database.fits.cloud/partition-id: sample
+      postgres.database.fits.cloud/managed-by: postgreslet
+      postgres.database.fits.cloud/component: etcd
+    name: backup-restore-sidecar-config-etcd
+    namespace: postgreslet-system
+  data:
+    config.yaml: |
+      # SAMPLE VALUES, WILL BE OVERWRITTEN
+      db: etcd
+      db-data-directory: /data/etcd/
+      backup-provider: s3
+      backup-cron-schedule: "*/1 * * * *"
+      object-prefix: etcd-psql
+      compression-method: tarlz4
+- kind: StatefulSet
+  apiVersion: apps/v1
+  metadata:
+    labels:
+      postgres.database.fits.cloud/partition-id: sample
+      postgres.database.fits.cloud/managed-by: postgreslet
+      postgres.database.fits.cloud/component: etcd
+    name: etcd-psql
+    namespace: postgreslet-system
+  spec:
+    podManagementPolicy: OrderedReady
+    replicas: 1
+    revisionHistoryLimit: 10
+    selector:
+      matchLabels:
+        postgres.database.fits.cloud/partition-id: sample
+        postgres.database.fits.cloud/managed-by: postgreslet
+        postgres.database.fits.cloud/component: etcd
+        postgres.database.fits.cloud/name: etcd-psql
+    serviceName: etcd-psql-client
+    template:
+      metadata:
+        labels:
+          postgres.database.fits.cloud/partition-id: sample
+          postgres.database.fits.cloud/managed-by: postgreslet
+          postgres.database.fits.cloud/component: etcd
+          postgres.database.fits.cloud/name: etcd-psql
+      spec:
+        serviceAccountName: patroni-etcd
+        containers:
+        - image: quay.io/coreos/etcd:v3.5.4
+          # can also be gcr.io/etcd-development/etcd
+          env:
+          - name: ETCD_ENABLE_V2
+            value: "true"
+          - name: ETCD_ADVERTISE_CLIENT_URLS
+            value: http://etcd-psql-headless.ft-etcd-psql.svc.cluster.local:2379,http://etcd-psql.ft-etcd-psql.svc.cluster.local:2379
+          - name: ETCD_LISTEN_CLIENT_URLS
+            value: http://0.0.0.0:2379
+          - name: ETCD_INITIAL_ADVERTISE_PEER_URLS
+            value: http://etcd-psql-headless.ft-etcd-psql.svc.cluster.local:2380
+          - name: ETCD_LISTEN_PEER_URLS
+            value: http://0.0.0.0:2380
+          - name: ETCD_INITIAL_CLUSTER
+            value: default=http://etcd-psql-headless.ft-etcd-psql.svc.cluster.local:2380
+          name: etcd
+          command:
+          - tini
+          - --
+          args:
+          - sh
+          - -c
+          - backup-restore-sidecar wait && etcd --data-dir=/data/etcd --listen-metrics-urls http://0.0.0.0:2381
+          imagePullPolicy: IfNotPresent
+          livenessProbe:
+            exec:
+              command:
+              - /usr/local/bin/etcdctl
+              - endpoint
+              - health
+            failureThreshold: 3
+            initialDelaySeconds: 15
+            periodSeconds: 5
+            successThreshold: 1
+            timeoutSeconds: 1
+          readinessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /health
+              port: 2381
+              scheme: HTTP
+            initialDelaySeconds: 15
+            periodSeconds: 5
+            successThreshold: 1
+            timeoutSeconds: 1
+          ports:
+          - containerPort: 2380
+            name: server
+            protocol: TCP
+          - containerPort: 2379
+            name: client
+            protocol: TCP
+          resources:
+            limits:
+              cpu: 900m
+              memory: 3G
+            requests:
+              cpu: 300m
+              memory: 1G
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+          - mountPath: /data
+            name: etcd
+          - name: bin-provision
+            subPath: backup-restore-sidecar
+            mountPath: /usr/local/bin/backup-restore-sidecar
+          - name: backup-restore-sidecar-config
+            mountPath: /etc/backup-restore-sidecar
+          - name: bin-provision
+            subPath: tini
+            mountPath: /usr/local/bin/tini
+        - image:  quay.io/coreos/etcd:v3.5.4
+          name: backup-restore-sidecar
+          env:
+            - name: BACKUP_RESTORE_SIDECAR_S3_BUCKET_NAME
+              valueFrom:
+                secretKeyRef:
+                  key: bucketName
+                  name: etcd-backup-restore-s3-config
+            - name: BACKUP_RESTORE_SIDECAR_S3_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  key: endpoint
+                  name: etcd-backup-restore-s3-config
+            - name: BACKUP_RESTORE_SIDECAR_S3_REGION
+              valueFrom:
+                secretKeyRef:
+                  key: region
+                  name: etcd-backup-restore-s3-config
+            - name: BACKUP_RESTORE_SIDECAR_S3_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  key: access-key
+                  name: etcd-backup-restore-s3-config
+            - name: BACKUP_RESTORE_SIDECAR_S3_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  key: secret-key
+                  name: etcd-backup-restore-s3-config
+          command:
+          - tini
+          - --
+          args:
+          - sh
+          - -c
+          - mkdir -p /data/etcd && backup-restore-sidecar start --log-level debug
+          volumeMounts:
+          - name: etcd
+            mountPath: /data
+          - name: bin-provision
+            subPath: backup-restore-sidecar
+            mountPath: /usr/local/bin/backup-restore-sidecar
+          - name: backup-restore-sidecar-config
+            mountPath: /etc/backup-restore-sidecar
+          - name: bin-provision
+            subPath: tini
+            mountPath: /usr/local/bin/tini
+          - name: bin-provision
+            subPath: certs
+            mountPath: /etc/ssl/certs
+        initContainers:
+        - name: backup-restore-sidecar-provider
+          image: ghcr.io/metal-stack/backup-restore-sidecar:latest
+          imagePullPolicy: IfNotPresent
+          command:
+          - cp
+          - -r
+          - /etc/ssl/certs
+          - /backup-restore-sidecar
+          - /ubuntu/tini
+          - /bin-provision
+          ports:
+          - containerPort: 2112
+          volumeMounts:
+          - name: bin-provision
+            mountPath: /bin-provision
+        volumes:
+        - name: backup-restore-sidecar-config
+          configMap:
+            name: backup-restore-sidecar-config-etcd
+        - name: bin-provision
+          emptyDir: {}
+        - emptyDir:
+            sizeLimit: 1Gi
+          name: etcd
+- kind: Service
+  apiVersion: v1
+  metadata:
+    labels:
+      postgres.database.fits.cloud/partition-id: sample
+      postgres.database.fits.cloud/managed-by: postgreslet
+      postgres.database.fits.cloud/component: etcd
+      postgres.database.fits.cloud/name: backup-restore-sidecar-svc
+    name: backup-restore-sidecar-svc
+    namespace: postgreslet-system
+  spec:
+    ports:
+    - name: metrics
+      port: 2112
+      protocol: TCP
+      targetPort: 2112
+    selector:
+      postgres.database.fits.cloud/partition-id: sample
+      postgres.database.fits.cloud/managed-by: postgreslet
+      postgres.database.fits.cloud/component: etcd
+      postgres.database.fits.cloud/name: etcd-psql
+    sessionAffinity: None
+    type: ClusterIP
+- kind: Service
+  apiVersion: v1
+  metadata:
+    labels:
+      postgres.database.fits.cloud/partition-id: sample
+      postgres.database.fits.cloud/managed-by: postgreslet
+      postgres.database.fits.cloud/component: etcd
+      postgres.database.fits.cloud/name: etcd-psql
+    name: etcd-psql
+    namespace: postgreslet-system
+  spec:
+    ports:
+    - name: client
+      port: 2379
+      protocol: TCP
+      targetPort: client
+    - name: server
+      port: 2380
+      protocol: TCP
+      targetPort: server
+    selector:
+      postgres.database.fits.cloud/partition-id: sample
+      postgres.database.fits.cloud/managed-by: postgreslet
+      postgres.database.fits.cloud/component: etcd
+      postgres.database.fits.cloud/name: etcd-psql
+    sessionAffinity: None
+    type: ClusterIP
+- kind: Service
+  apiVersion: v1
+  metadata:
+    labels:
+      postgres.database.fits.cloud/partition-id: sample
+      postgres.database.fits.cloud/managed-by: postgreslet
+      postgres.database.fits.cloud/component: etcd
+      postgres.database.fits.cloud/name: etcd-psql-headless
+    name: etcd-psql-headless
+    namespace: postgreslet-system
+  spec:
+    clusterIP: None
+    clusterIPs:
+    - None
+    ports:
+    - name: client
+      port: 2379
+      protocol: TCP
+      targetPort: client
+    - name: server
+      port: 2380
+      protocol: TCP
+      targetPort: server
+    publishNotReadyAddresses: true
+    selector:
+      postgres.database.fits.cloud/partition-id: sample
+      postgres.database.fits.cloud/managed-by: postgreslet
+      postgres.database.fits.cloud/component: etcd
+      postgres.database.fits.cloud/name: etcd-psql
+    sessionAffinity: None
+    type: ClusterIP

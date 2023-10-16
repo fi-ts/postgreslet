@@ -13,7 +13,6 @@ import (
 	. "github.com/onsi/gomega"
 	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
 	core "k8s.io/api/core/v1"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 )
 
@@ -59,7 +58,7 @@ var _ = Describe("postgres controller", func() {
 				return svcClusterClient.Get(newCtx(), types.NamespacedName{
 					Namespace: instance.ToPeripheralResourceNamespace(),
 					Name:      instance.ToSvcLBName(),
-				}, &corev1.Service{}) == nil
+				}, &core.Service{}) == nil
 			}, timeout, interval).Should(BeTrue())
 		})
 
@@ -77,7 +76,7 @@ var _ = Describe("postgres controller", func() {
 				return ctrlClusterClient.Get(newCtx(), types.NamespacedName{
 					Namespace: instance.Namespace,
 					Name:      instance.ToUserPasswordsSecretName(),
-				}, &corev1.Secret{}) == nil
+				}, &core.Secret{}) == nil
 			}, timeout, interval).Should(BeTrue())
 		})
 	})
@@ -98,7 +97,7 @@ var _ = Describe("postgres controller", func() {
 				return svcClusterClient.Get(newCtx(), types.NamespacedName{
 					Namespace: instance.ToPeripheralResourceNamespace(),
 					Name:      instance.ToSvcLBName(),
-				}, &corev1.Service{}) == nil
+				}, &core.Service{}) == nil
 			}, timeout, interval).ShouldNot(BeTrue())
 		})
 
@@ -114,7 +113,7 @@ var _ = Describe("postgres controller", func() {
 				return ctrlClusterClient.Get(newCtx(), types.NamespacedName{
 					Namespace: instance.Namespace,
 					Name:      instance.ToUserPasswordsSecretName(),
-				}, &corev1.Secret{}) == nil
+				}, &core.Secret{}) == nil
 			}, timeout, interval).ShouldNot(BeTrue())
 		})
 	})
