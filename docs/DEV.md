@@ -3,7 +3,7 @@
 ```bash
 # Create a local control-cluster. This step is optional if you already have a working kubeconfig/cluster
 # IMPORTANT: update the apiServerAddress to your needs so the service-cluster from down below can access the control-cluster.
-kind create cluster --name ctrl --kubeconfig ./kubeconfig --config ctrl-cluster-config
+kind create cluster --name ctrl --kubeconfig ./kubeconfig
 
 # Copy the kubeconfig of the control-cluster to the project folder and name it `kubeconfig`.
 # When using kind as describe above, this file was already created

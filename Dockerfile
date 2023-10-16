@@ -1,4 +1,4 @@
-ARG baseImage="golang:1.18"
+ARG baseImage="golang:1.20"
 # Build the manager binary
 FROM ${baseImage} as builder
 
@@ -18,7 +18,7 @@ RUN make
 
 # Start obj-cache
 # https://medium.com/windmill-engineering/tips-tricks-for-making-your-golang-container-builds-10x-faster-4cc618a43827
-FROM golang:1.18 as obj-cache
+FROM golang:1.20 as obj-cache
 COPY --from=builder /root/.cache /root/.cache
 
 # Use distroless as minimal base image to package the manager binary
@@ -27,6 +27,7 @@ FROM gcr.io/distroless/static:nonroot
 WORKDIR /
 COPY --from=builder /workspace/bin/manager .
 COPY external/svc-postgres-operator.yaml external/svc-postgres-operator.yaml
+COPY external/svc-etcd.yaml external/svc-etcd.yaml
 USER nonroot:nonroot
 
 ENTRYPOINT ["/manager"]

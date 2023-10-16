@@ -54,21 +54,21 @@ run: generate fmt vet manifests install-configmap-sidecars install-crd-cwnp
 
 # Install CRDs into a cluster
 install: manifests
-	kustomize build config/crd | kubectl --kubeconfig kubeconfig apply -f -
+	kubectl kustomize config/crd | kubectl --kubeconfig kubeconfig apply -f -
 
 # Uninstall CRDs from a cluster
 uninstall: manifests
-	kustomize build config/crd | kubectl --kubeconfig kubeconfig delete -f -
+	kubectl kustomize config/crd | kubectl --kubeconfig kubeconfig delete -f -
 
 # Deploy controller in the configured Kubernetes cluster in ~/.kube/config
 deploy: install-crd-cwnp manifests secret kind-load-image
-	cd config/manager && kustomize edit set image controller=${IMG}:${VERSION}
-	kustomize build config/default | kubectl apply -f -
+	cd config/manager && kubectl kustomize edit set image controller=${IMG}:${VERSION}
+	kubectl kustomize config/default | kubectl apply -f -
 
 # clean up deployed resources in the configured Kubernetes cluster in ~/.kube/config
 cleanup: manifests
-	cd config/manager && kustomize edit set image controller=${IMG}:${VERSION}
-	kustomize build config/default | kubectl delete -f -
+	cd config/manager && kubectl kustomize edit set image controller=${IMG}:${VERSION}
+	kubectl kustomize config/default | kubectl delete -f -
 
 # Generate manifests e.g. CRD, RBAC etc.
 manifests: controller-gen
@@ -217,7 +217,7 @@ two-kind-clusters:
 	#
 	## control-plane-cluster
 	########################
-	kind create cluster --name ctrl --kubeconfig ./kubeconfig
+	kind create cluster --name ctrl --kubeconfig ./kubeconfig --image kindest/node:v1.24.15
 	container_ip=$$(docker inspect --format='{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' 'ctrl-control-plane') ;\
 	kubectl --kubeconfig=kubeconfig config set-cluster 'kind-ctrl' --server="https://$${container_ip}:6443"
 	make install
@@ -225,7 +225,7 @@ two-kind-clusters:
 	#
 	## service-cluster
 	########################
-	kind create cluster
+	kind create cluster --image kindest/node:v1.24.15
 	sed 's/z.Spec.Volume.StorageClass/\/\/z.Spec.Volume.StorageClass/' -i api/v1/postgres_types.go
 	make kind-load-image
 	sed 's/\/\/z.Spec.Volume.StorageClass/z.Spec.Volume.StorageClass/' -i api/v1/postgres_types.go
@@ -243,6 +243,7 @@ destroy-two-kind-clusters:
 
 install-crd-servicemonitor:
 	kubectl apply -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/v0.45.0/example/prometheus-operator-crd/monitoring.coreos.com_servicemonitors.yaml
+	kubectl apply -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/v0.45.0/example/prometheus-operator-crd/monitoring.coreos.com_podmonitors.yaml
 
 reinstall-postgreslet: kind-load-image
 	# helm repo add metal-stack https://helm.metal-stack.io # stable repo
