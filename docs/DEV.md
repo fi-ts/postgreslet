@@ -15,7 +15,8 @@ kind create cluster
 
 # Build and install our CRD in the control-cluster.
 # This step uses the "external" kubeconfig we copied to ./kubeconfig earlier. This can be configured in the Makefile
-make generate && make manifests && make install
+make generate && make manifests
+kubectl kustomize --kubeconfig kubeconfig config/crd | kubectl apply --kubeconfig kubeconfig -f -
 
 # Run the postgreslet in the service-cluster
 # This step uses the current-context of your default kubeconfig (e.g. ~/.kube/config)
@@ -33,7 +34,7 @@ kubectl get postgresql,pod -A
 kubectl --kubeconfig kubeconfig delete -f config/samples/complete.yaml
 
 # Uninstall the dependencies of this project from the remote control-cluster.
-make uninstall
+kubectl kustomize --kubeconfig kubeconfig config/crd | kubectl delete --kubeconfig kubeconfig -f -
 ```
 
 ## Install a local kubeconfig as secret in the service-cluster
