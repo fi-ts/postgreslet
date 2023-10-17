@@ -188,7 +188,7 @@ type PostgresSpec struct {
 	PostgresParams map[string]string `json:"postgresParams,omitempty"`
 
 	// DedicatedLoadBalancerIP The ip to use for the load balancer
-	DedicatedLoadBalancerIP *string `json:"dedicatedLoadBalancerIP,omitempty"`
+	DedicatedLoadBalancerIP *string `json:"dedicatedLoadBalancerIP"`
 
 	// // DedicatedLoadBalancerPort The port to use for the load balancer
 	// DedicatedLoadBalancerPort *int32 `json:"dedicatedLoadBalancerPort,omitempty"`
