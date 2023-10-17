@@ -56,7 +56,7 @@ jobs:
 
     - name: Figure out if running fork PR
       id: fork
-      run: '["${{ secrets.DOCKER_REGISTRY_TOKEN }}" == ""] && echo "is_fork_pr=true" >> $GITHUB_OUTPUT || echo "is_fork_pr=false" >> $GITHUB_OUTPUT"'
+      run: '["${{ secrets.DOCKER_REGISTRY_TOKEN }}" != ""] && echo "is_fork_pr=false" >> $GITHUB_OUTPUT"'
 
     - name: Docker Login
       uses: docker/login-action@v3
