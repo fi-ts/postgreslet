@@ -81,6 +81,8 @@ const (
 	defaultPostgresParamValueSSLMinProtocolVersion  = "TLSv1.2"
 	defaultPostgresParamValueSSLPreferServerCiphers = "on"
 	defaultPostgresParamValueSSLCiphers             = "ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384"
+	defaultPostgresParamValueWalKeepSegements       = "64"
+	defaultPostgresParamValueWalKeepSize            = "1GB"
 )
 
 var (
@@ -615,7 +617,7 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 		enableAuditLogs(z.Spec.PostgresqlParam.Parameters)
 	}
 	// set some default postgres parameters
-	setDefaultPostgresParams(z.Spec.PostgresqlParam.Parameters)
+	setDefaultPostgresParams(z.Spec.PostgresqlParam.Parameters, p.Spec.Version)
 	// now set the given generic parameters (and potentially allow overwriting of default postgres params or audit log params)
 	setPostgresParams(z.Spec.PostgresqlParam.Parameters, p.Spec.PostgresParams, pgParamBlockList)
 	// finally, overwrite the (special to us) shared buffer parameter
@@ -648,6 +650,8 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 	// Create database owner
 	z.Spec.Users = make(map[string]zalando.UserFlags)
 	z.Spec.Users[ownerName] = zalando.UserFlags{"createdb", "createrole"}
+	// Add auditor user
+	z.Spec.Users["auditor"] = zalando.UserFlags{"nologin"}
 
 	// Create default database
 	z.Spec.Databases = make(map[string]string)
@@ -869,13 +873,31 @@ func enableAuditLogs(parameters map[string]string) {
 }
 
 // setDefaultPostgresParams configures default keepalive values
-func setDefaultPostgresParams(parameters map[string]string) {
+func setDefaultPostgresParams(parameters map[string]string, version string) {
+	// set default parameters
 	parameters["tcp_keepalives_idle"] = defaultPostgresParamValueTCPKeepAlivesIdle
 	parameters["tcp_keepalives_interval"] = defaultPostgresParamValueTCPKeepAlivesInterval
 	parameters["log_file_mode"] = defaultPostgresParamValueLogFileMode
-	parameters["ssl_min_protocol_version"] = defaultPostgresParamValueSSLMinProtocolVersion
+
 	parameters["ssl_prefer_server_ciphers"] = defaultPostgresParamValueSSLPreferServerCiphers
 	parameters["ssl_ciphers"] = defaultPostgresParamValueSSLCiphers
+
+	// set version specific parameters
+	v, err := strconv.Atoi(version)
+	if err != nil {
+		return
+	}
+	// Postgres 12 and up
+	if v >= 12 {
+		parameters["ssl_min_protocol_version"] = defaultPostgresParamValueSSLMinProtocolVersion
+	}
+	// Postgres 13 and up
+	if v >= 13 {
+		parameters["wal_keep_size"] = defaultPostgresParamValueWalKeepSize
+	} else {
+		parameters["wal_keep_segments"] = defaultPostgresParamValueWalKeepSegements
+	}
+
 }
 
 // setPostgresParams add the provided params to the parameter map (but ignore params that are blocked)
