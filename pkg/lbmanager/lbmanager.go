@@ -157,10 +157,8 @@ func (m *LBManager) CreateOrUpdateDedicatedSvcLB(ctx context.Context, in *api.Po
 	}
 
 	updated := in.ToDedicatedSvcLB("", 0, m.options.StandbyClustersSourceRanges)
-	// update the selector, and only the selector
-	svc.Spec.Selector = updated.Spec.Selector
-	// also update the source ranges
-	svc.Spec.LoadBalancerSourceRanges = updated.Spec.LoadBalancerSourceRanges
+	// replace the whole spec
+	svc.Spec = updated.Spec
 
 	if err := m.client.Update(ctx, svc); err != nil {
 		return fmt.Errorf("failed to update Service of type LoadBalancer (dedicated): %w", err)
