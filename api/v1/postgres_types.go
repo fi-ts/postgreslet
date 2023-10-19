@@ -192,8 +192,8 @@ type PostgresSpec struct {
 	// DedicatedLoadBalancerIP The ip to use for the load balancer
 	DedicatedLoadBalancerIP *string `json:"dedicatedLoadBalancerIP,omitempty"`
 
-	// // DedicatedLoadBalancerPort The port to use for the load balancer
-	// DedicatedLoadBalancerPort *int32 `json:"dedicatedLoadBalancerPort,omitempty"`
+	// DedicatedLoadBalancerPort The port to use for the load balancer
+	DedicatedLoadBalancerPort *int32 `json:"dedicatedLoadBalancerPort,omitempty"`
 }
 
 // AccessList defines the type of restrictions to access the database

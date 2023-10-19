@@ -140,9 +140,9 @@ func (m *LBManager) CreateOrUpdateDedicatedSvcLB(ctx context.Context, in *api.Po
 		}
 
 		var nextFreePort int32 = 5432 // Default
-		// if in.Spec.DedicatedLoadBalancerPort != nil && *in.Spec.DedicatedLoadBalancerPort != 0 {
-		// 	nextFreePort = *in.Spec.DedicatedLoadBalancerPort
-		// }
+		if in.Spec.DedicatedLoadBalancerPort != nil && *in.Spec.DedicatedLoadBalancerPort != 0 {
+			nextFreePort = *in.Spec.DedicatedLoadBalancerPort
+		}
 		var lbIPToUse string = *in.Spec.DedicatedLoadBalancerIP
 
 		svc := in.ToDedicatedSvcLB(lbIPToUse, nextFreePort, m.options.StandbyClustersSourceRanges)
