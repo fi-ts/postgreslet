@@ -418,6 +418,7 @@ func main() {
 		Scheme:                svcClusterMgr.GetScheme(),
 		PartitionID:           partitionID,
 		ControlPlaneNamespace: controlPlaneNamespace,
+		EnableForceSharedIP:   enableForceSharedIP,
 	}).SetupWithManager(svcClusterMgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Status")
 		os.Exit(1)

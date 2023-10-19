@@ -34,6 +34,7 @@ type StatusReconciler struct {
 	Scheme                *runtime.Scheme
 	PartitionID           string
 	ControlPlaneNamespace string
+	EnableForceSharedIP   bool
 }
 
 // Reconcile updates the status of the remote Postgres object based on the status of the local zalando object.
@@ -93,30 +94,67 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	}
 
 	log.Info("updating socket")
-	var lbnn types.NamespacedName
-	if owner.Spec.DedicatedLoadBalancerIP != nil {
-		lbnn = *owner.ToDedicatedSvcLBNamespacedName()
-	} else {
-		lbnn = *owner.ToSharedSvcLBNamespacedName()
-	}
-	lb := &corev1.Service{}
-	if err := r.SvcClient.Get(ctx, lbnn, lb); err == nil {
+	if owner.Spec.DedicatedLoadBalancerIP == nil {
+		// no dedicated load balancer configured, use the shared one
+		shared := &corev1.Service{}
+		if err := r.SvcClient.Get(ctx, *owner.ToSharedSvcLBNamespacedName(), shared); err == nil {
+			// update IP and port
+			owner.Status.Socket.IP = shared.Spec.LoadBalancerIP
+			owner.Status.Socket.Port = shared.Spec.Ports[0].Port
 
-		// use the IP actually in use by the service or don't set anything at all
-		if lb.Status.LoadBalancer.Ingress != nil && len(lb.Status.LoadBalancer.Ingress) == 1 {
-			owner.Status.Socket.IP = lb.Spec.LoadBalancerIP
-			owner.Status.Socket.Port = lb.Spec.Ports[0].Port
+			if err := r.CtrlClient.Status().Update(ctx, owner); err != nil {
+				return ctrl.Result{}, fmt.Errorf("failed to update postgres status socket: %w", err)
+			}
+			log.Info("postgres status socket updated")
 		} else {
+			// Todo: Handle errors other than `NotFound`
+			log.Info("unable to fetch the shared LoadBalancer to update postgres status socket")
+		}
+	} else {
+		// get dedicated
+		dedicated := &corev1.Service{}
+		derr := r.SvcClient.Get(ctx, *owner.ToDedicatedSvcLBNamespacedName(), dedicated)
+
+		// get shared (if enabled)
+		var shared *corev1.Service
+		var serr error
+		if r.EnableForceSharedIP {
+			shared = &corev1.Service{}
+			serr = r.SvcClient.Get(ctx, *owner.ToSharedSvcLBNamespacedName(), shared)
+			if serr != nil {
+				log.Info("failed to fetch shared loadbalancer")
+			}
+		}
+
+		if derr == nil && dedicated.Status.LoadBalancer.Ingress != nil && len(dedicated.Status.LoadBalancer.Ingress) == 1 {
+			// the dedicated load balancer is usable, use it for status
+			owner.Status.Socket.IP = dedicated.Spec.LoadBalancerIP
+			owner.Status.Socket.Port = dedicated.Spec.Ports[0].Port
+
+			// if available, set shared loadbalancer as additional socket
+			if serr == nil && r.EnableForceSharedIP {
+				additionalSocket := pg.Socket{
+					IP:   shared.Spec.LoadBalancerIP,
+					Port: shared.Spec.Ports[0].Port,
+				}
+				owner.Status.AdditionalSockets = []pg.Socket{additionalSocket}
+			}
+
+		} else if r.EnableForceSharedIP && serr == nil {
+			// we failed to fetch the dedicated load balancer or it was not ready yet: use the shared loadbalancer as fallback
+			owner.Status.Socket.IP = shared.Spec.LoadBalancerIP
+			owner.Status.Socket.Port = shared.Spec.Ports[0].Port
+		} else {
+			// neither the dedicated nor the shared loadbalancer are available: use empty socket
 			owner.Status.Socket = pg.Socket{}
 		}
 
+		// actually perform the status update
 		if err := r.CtrlClient.Status().Update(ctx, owner); err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to update lbSocket of Postgres: %w", err)
+			return ctrl.Result{}, fmt.Errorf("failed to update postgres status socket: %w", err)
 		}
 		log.Info("postgres status socket updated")
-	} else {
-		// Todo: Handle errors other than `NotFound`
-		log.Info("unable to fetch the corresponding Service of type LoadBalancer")
+
 	}
 
 	// TODO also update the port/ip of databases mentioned in owner.Spec.PostgresConnectionInfo so that e.g. CWNP are always up to date

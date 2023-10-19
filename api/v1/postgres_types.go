@@ -234,7 +234,7 @@ type PostgresStatus struct {
 
 	Socket Socket `json:"socket,omitempty"`
 
-	// TODO additional sockets?!?
+	AdditionalSockets []Socket `json:"additionalsockets,omitempty"`
 
 	ChildName string `json:"childName,omitempty"`
 }
@@ -452,7 +452,6 @@ func (p *Postgres) ToDedicatedSvcLB(lbIP string, lbPort int32, standbyClustersSo
 	}
 
 	if len(lbIP) > 0 {
-		// if no ip is set, a new loadbalancer will be created automatically
 		lb.Spec.LoadBalancerIP = lbIP
 	}
 
