@@ -50,7 +50,7 @@ func (m *LBManager) ReconcileSvcLBs(ctx context.Context, in *api.Postgres) error
 	}
 
 	if err2 != nil {
-		return fmt.Errorf("failed to created Service of type LoadBalancer for dedicated IP: %w", err1)
+		return fmt.Errorf("failed to created Service of type LoadBalancer for dedicated IP: %w", err2)
 	}
 
 	return nil
