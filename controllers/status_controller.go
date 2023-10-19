@@ -102,58 +102,71 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 			owner.Status.Socket.IP = shared.Spec.LoadBalancerIP
 			owner.Status.Socket.Port = shared.Spec.Ports[0].Port
 
-			if err := r.CtrlClient.Status().Update(ctx, owner); err != nil {
-				return ctrl.Result{}, fmt.Errorf("failed to update postgres status socket: %w", err)
-			}
-			log.Info("postgres status socket updated")
 		} else {
 			// Todo: Handle errors other than `NotFound`
 			log.Info("unable to fetch the shared LoadBalancer to update postgres status socket")
+			owner.Status.Socket = pg.Socket{}
 		}
+
+		if err := r.CtrlClient.Status().Update(ctx, owner); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to update simple postgres status socket: %w", err)
+		}
+		log.Info("simple postgres status socket updated")
+
 	} else {
-		// get dedicated
+		// dedicated load balancer configured, so we fetch it
 		dedicated := &corev1.Service{}
 		derr := r.SvcClient.Get(ctx, *owner.ToDedicatedSvcLBNamespacedName(), dedicated)
 
-		// get shared (if enabled)
-		var shared *corev1.Service
-		var serr error
 		if r.EnableForceSharedIP {
-			shared = &corev1.Service{}
-			serr = r.SvcClient.Get(ctx, *owner.ToSharedSvcLBNamespacedName(), shared)
-			if serr != nil {
-				log.Info("failed to fetch shared loadbalancer")
+
+			// we still have a shared load balancer, so we keep using this one as primary socket
+			shared := &corev1.Service{}
+			serr := r.SvcClient.Get(ctx, *owner.ToSharedSvcLBNamespacedName(), shared)
+			if serr == nil {
+				// the shared load balancer is usable, use it for status
+				owner.Status.Socket.IP = shared.Spec.LoadBalancerIP
+				owner.Status.Socket.Port = shared.Spec.Ports[0].Port
+				log.Info("using shared loadbalancer as primary status socket")
+			} else {
+				// we couldn't use the shared load balancer, use empty socket instead
+				log.Info("failed to use shared loadbalancer as primary status socket")
+				owner.Status.Socket = pg.Socket{}
 			}
-		}
 
-		if derr == nil && dedicated.Status.LoadBalancer.Ingress != nil && len(dedicated.Status.LoadBalancer.Ingress) == 1 {
-			// the dedicated load balancer is usable, use it for status
-			owner.Status.Socket.IP = dedicated.Spec.LoadBalancerIP
-			owner.Status.Socket.Port = dedicated.Spec.Ports[0].Port
-
-			// if available, set shared loadbalancer as additional socket
-			if serr == nil && r.EnableForceSharedIP {
+			// now we use the dedicated load balancer as additional socket
+			if derr == nil && dedicated.Status.LoadBalancer.Ingress != nil && len(dedicated.Status.LoadBalancer.Ingress) == 1 {
+				// the dedicated load balancer is usable, use it for status
 				additionalSocket := pg.Socket{
-					IP:   shared.Spec.LoadBalancerIP,
-					Port: shared.Spec.Ports[0].Port,
+					IP:   dedicated.Spec.LoadBalancerIP,
+					Port: dedicated.Spec.Ports[0].Port,
 				}
 				owner.Status.AdditionalSockets = []pg.Socket{additionalSocket}
+				log.Info("using dedicated loadbalancer as additional status socket")
+			} else {
+				log.Info("failed to use dedicated loadbalancer as additional status socket")
 			}
 
-		} else if r.EnableForceSharedIP && serr == nil {
-			// we failed to fetch the dedicated load balancer or it was not ready yet: use the shared loadbalancer as fallback
-			owner.Status.Socket.IP = shared.Spec.LoadBalancerIP
-			owner.Status.Socket.Port = shared.Spec.Ports[0].Port
 		} else {
-			// neither the dedicated nor the shared loadbalancer are available: use empty socket
-			owner.Status.Socket = pg.Socket{}
+
+			// no more shared load balancer, only use the dedicated one
+			if derr == nil && dedicated.Status.LoadBalancer.Ingress != nil && len(dedicated.Status.LoadBalancer.Ingress) == 1 {
+				// the dedicated load balancer is usable, use it for status
+				owner.Status.Socket.IP = dedicated.Spec.LoadBalancerIP
+				owner.Status.Socket.Port = dedicated.Spec.Ports[0].Port
+				log.Info("using dedicated loadbalancer as primary status socket")
+			} else {
+				// we couldn't use the dedicated load balancer, use empty socket instead
+				log.Info("failed to use dedicated loadbalancer as primary status socket")
+				owner.Status.Socket = pg.Socket{}
+			}
 		}
 
 		// actually perform the status update
 		if err := r.CtrlClient.Status().Update(ctx, owner); err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to update postgres status socket: %w", err)
+			return ctrl.Result{}, fmt.Errorf("failed to update advanced postgres status socket: %w", err)
 		}
-		log.Info("postgres status socket updated")
+		log.Info("advanced postgres status socket updated")
 
 	}
 
