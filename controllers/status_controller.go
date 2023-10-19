@@ -102,11 +102,13 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	lb := &corev1.Service{}
 	if err := r.SvcClient.Get(ctx, lbnn, lb); err == nil {
 
-		// TODO check status!!! if pending, don't use (or even remove)
-		// THe problem is that, when the Svc is pending, the IP might not actually be in use (e.g. because the network is wrong), so multiple postgres instances might be assigned this ip
-		// (as we only validate if it is actually in use by checking the tags of the ip).
-		owner.Status.Socket.IP = lb.Spec.LoadBalancerIP
-		owner.Status.Socket.Port = lb.Spec.Ports[0].Port
+		// use the IP actually in use by the service or don't set anything at all
+		if lb.Status.LoadBalancer.Ingress != nil && len(lb.Status.LoadBalancer.Ingress) == 1 {
+			owner.Status.Socket.IP = lb.Spec.LoadBalancerIP
+			owner.Status.Socket.Port = lb.Spec.Ports[0].Port
+		} else {
+			owner.Status.Socket = pg.Socket{}
+		}
 
 		if err := r.CtrlClient.Status().Update(ctx, owner); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to update lbSocket of Postgres: %w", err)
