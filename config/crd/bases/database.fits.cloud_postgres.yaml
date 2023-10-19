@@ -102,6 +102,11 @@ spec:
               dedicatedLoadBalancerIP:
                 description: DedicatedLoadBalancerIP The ip to use for the load balancer
                 type: string
+              dedicatedLoadBalancerPort:
+                description: DedicatedLoadBalancerPort The port to use for the load
+                  balancer
+                format: int32
+                type: integer
               description:
                 description: Description
                 type: string
