@@ -130,37 +130,37 @@ func (m *LBManager) CreateOrUpdateDedicatedSvcLB(ctx context.Context, in *api.Po
 		return nil
 	}
 
-	svc := &corev1.Service{}
+	var nextFreePort int32 = 5432 // Default
+	if in.Spec.DedicatedLoadBalancerPort != nil && *in.Spec.DedicatedLoadBalancerPort != 0 {
+		nextFreePort = *in.Spec.DedicatedLoadBalancerPort
+	}
+	var lbIPToUse string = *in.Spec.DedicatedLoadBalancerIP
+
+	new := in.ToDedicatedSvcLB(lbIPToUse, nextFreePort, m.options.StandbyClustersSourceRanges)
+	if !m.options.EnableLBSourceRanges {
+		// leave empty / disable source ranges
+		new.Spec.LoadBalancerSourceRanges = []string{}
+	}
+
+	existing := &corev1.Service{}
 	if err := m.client.Get(ctx, client.ObjectKey{
 		Namespace: in.ToPeripheralResourceNamespace(),
 		Name:      in.ToDedicatedSvcLBName(),
-	}, svc); err != nil {
+	}, existing); err != nil {
 		if !apimach.IsNotFound(err) {
 			return fmt.Errorf("failed to fetch Service of type LoadBalancer: %w", err)
 		}
 
-		var nextFreePort int32 = 5432 // Default
-		if in.Spec.DedicatedLoadBalancerPort != nil && *in.Spec.DedicatedLoadBalancerPort != 0 {
-			nextFreePort = *in.Spec.DedicatedLoadBalancerPort
-		}
-		var lbIPToUse string = *in.Spec.DedicatedLoadBalancerIP
-
-		svc := in.ToDedicatedSvcLB(lbIPToUse, nextFreePort, m.options.StandbyClustersSourceRanges)
-		if !m.options.EnableLBSourceRanges {
-			// leave empty / disable source ranges
-			svc.Spec.LoadBalancerSourceRanges = []string{}
-		}
-		if err := m.client.Create(ctx, svc); err != nil {
+		if err := m.client.Create(ctx, new); err != nil {
 			return fmt.Errorf("failed to create Service of type LoadBalancer: %w", err)
 		}
 		return nil
 	}
 
-	updated := in.ToDedicatedSvcLB(*in.Spec.DedicatedLoadBalancerIP, *in.Spec.DedicatedLoadBalancerPort, m.options.StandbyClustersSourceRanges)
 	// replace the whole spec
-	svc.Spec = updated.Spec
+	existing.Spec = new.Spec
 
-	if err := m.client.Update(ctx, svc); err != nil {
+	if err := m.client.Update(ctx, existing); err != nil {
 		return fmt.Errorf("failed to update Service of type LoadBalancer (dedicated): %w", err)
 	}
 
