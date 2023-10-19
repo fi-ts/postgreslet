@@ -156,7 +156,7 @@ func (m *LBManager) CreateOrUpdateDedicatedSvcLB(ctx context.Context, in *api.Po
 		return nil
 	}
 
-	updated := in.ToDedicatedSvcLB("", 0, m.options.StandbyClustersSourceRanges)
+	updated := in.ToDedicatedSvcLB(*in.Spec.DedicatedLoadBalancerIP, *in.Spec.DedicatedLoadBalancerPort, m.options.StandbyClustersSourceRanges)
 	// replace the whole spec
 	svc.Spec = updated.Spec
 
