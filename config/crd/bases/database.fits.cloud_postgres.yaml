@@ -99,6 +99,14 @@ spec:
                       replication is used for the standby postgres
                     type: boolean
                 type: object
+              dedicatedLoadBalancerIP:
+                description: DedicatedLoadBalancerIP The ip to use for the load balancer
+                type: string
+              dedicatedLoadBalancerPort:
+                description: DedicatedLoadBalancerPort The port to use for the load
+                  balancer
+                format: int32
+                type: integer
               description:
                 description: Description
                 type: string
@@ -169,6 +177,17 @@ spec:
           status:
             description: PostgresStatus defines the observed state of Postgres
             properties:
+              additionalSockets:
+                items:
+                  description: Socket represents load-balancer socket of Postgres
+                  properties:
+                    ip:
+                      type: string
+                    port:
+                      format: int32
+                      type: integer
+                  type: object
+                type: array
               childName:
                 type: string
               description:
