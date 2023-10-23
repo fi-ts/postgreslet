@@ -40,19 +40,20 @@ func New(client client.Client, opt Options) *LBManager {
 
 // ReconcileSvcLBs Creates or updates the LoadBalancer(s) for the given Postgres resource
 func (m *LBManager) ReconcileSvcLBs(ctx context.Context, in *api.Postgres) error {
-
-	err1 := m.CreateOrUpdateSharedSvcLB(ctx, in)
-
-	err2 := m.CreateOrUpdateDedicatedSvcLB(ctx, in)
-
-	if err1 != nil {
-		return fmt.Errorf("failed to created Service of type LoadBalancer for shared IP: %w", err1)
+	var errs []error
+	err := m.CreateOrUpdateSharedSvcLB(ctx, in)
+	if err != nil {
+		errs = append(errs, fmt.Errorf("failed to created Service of type LoadBalancer for shared IP: %w", err))
 	}
 
-	if err2 != nil {
-		return fmt.Errorf("failed to created Service of type LoadBalancer for dedicated IP: %w", err2)
+	err = m.CreateOrUpdateDedicatedSvcLB(ctx, in)
+	if err != nil {
+		errs = append(errs, fmt.Errorf("failed to created Service of type LoadBalancer for dedicated IP: %w", err))
 	}
 
+	if len(errs) > 0 {
+		return errors.Join(errs...)
+	}
 	return nil
 }
 
