@@ -145,6 +145,7 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 				log.Info("using dedicated loadbalancer as additional status socket")
 			} else {
 				log.Info("failed to use dedicated loadbalancer as additional status socket")
+				owner.Status.Socket = pg.Socket{}
 			}
 
 		} else {
