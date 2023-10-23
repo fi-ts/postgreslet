@@ -83,6 +83,13 @@ const (
 	defaultPostgresParamValueSSLCiphers             = "ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384"
 	defaultPostgresParamValueWalKeepSegements       = "64"
 	defaultPostgresParamValueWalKeepSize            = "1GB"
+
+	// PostgresAutoAssignedIPNamePrefix a prefix to add to the generated random name
+	PostgresAutoAssignedIPNamePrefix = "pgaas-autoassign-"
+	// PostgresAutoAssignedIPLabelKey tag to identify ips auto-assigned for a postgres
+	PostgresAutoAssignedIPLabelKey = "postgres.database.fits.cloud/auto-assigned-ip"
+	// PostgresAutoAssignedIPLabel tag to identify ips auto-assigned for a postgres
+	PostgresAutoAssignedIPLabel = PostgresAutoAssignedIPLabelKey + "=true"
 )
 
 var (
