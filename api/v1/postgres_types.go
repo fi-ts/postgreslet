@@ -241,7 +241,7 @@ type PostgresStatus struct {
 
 	Socket Socket `json:"socket,omitempty"`
 
-	AdditionalSockets []Socket `json:"additionalsockets,omitempty"`
+	AdditionalSockets []Socket `json:"additionalSockets,omitempty"`
 
 	ChildName string `json:"childName,omitempty"`
 }
