@@ -952,11 +952,19 @@ func (r *PostgresReconciler) httpPatchPatroni(ctx context.Context, instance *pg.
 	podPort := "8008"
 	path := "config"
 
+	type WalEStandby struct {
+		Command                       string `json:"host"`
+		NoMaster                      int    `json:"no_master"`
+		Retries                       int    `json:"retries"`
+		ThresholdBackupSizePercentage int    `json:"threshold_backup_size_percentage"`
+		ThresholdMegabytes            int    `json:"threshold_megabytes"`
+	}
 	type PatroniStandbyCluster struct {
-		CreateReplicaMethods []string `json:"create_replica_methods"`
-		Host                 string   `json:"host"`
-		Port                 int      `json:"port"`
-		ApplicationName      string   `json:"application_name"`
+		CreateReplicaMethods []string    `json:"create_replica_methods"`
+		Host                 string      `json:"host"`
+		Port                 int         `json:"port"`
+		ApplicationName      string      `json:"application_name"`
+		WalEStandby          WalEStandby `json:"wal_e_standby"`
 	}
 	type PatroniConfigRequest struct {
 		StandbyCluster             *PatroniStandbyCluster `json:"standby_cluster"`
@@ -980,10 +988,17 @@ func (r *PostgresReconciler) httpPatchPatroni(ctx context.Context, instance *pg.
 		// TODO check values first
 		request = PatroniConfigRequest{
 			StandbyCluster: &PatroniStandbyCluster{
-				CreateReplicaMethods: []string{"basebackup_fast_xlog"},
+				CreateReplicaMethods: []string{"wal_e_standby", "basebackup_fast_xlog"},
 				Host:                 instance.Spec.PostgresConnection.ConnectionIP,
 				Port:                 int(instance.Spec.PostgresConnection.ConnectionPort),
 				ApplicationName:      instance.ObjectMeta.Name,
+				WalEStandby: WalEStandby{
+					Command:                       "envdir /run/etc/wal-e.d/env-standby bash /scripts/wale_restore.sh",
+					NoMaster:                      1,
+					Retries:                       2,
+					ThresholdBackupSizePercentage: 100,
+					ThresholdMegabytes:            102400,
+				},
 			},
 			SynchronousNodesAdditional: nil,
 		}
