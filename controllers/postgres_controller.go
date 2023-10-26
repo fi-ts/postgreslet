@@ -958,6 +958,7 @@ func (r *PostgresReconciler) httpPatchPatroni(ctx context.Context, instance *pg.
 		Retries                       int    `json:"retries"`
 		ThresholdBackupSizePercentage int    `json:"threshold_backup_size_percentage"`
 		ThresholdMegabytes            int    `json:"threshold_megabytes"`
+		DataDir                       string `json:"datadir"`
 	}
 	type PatroniStandbyCluster struct {
 		CreateReplicaMethods []string    `json:"create_replica_methods"`
@@ -998,6 +999,7 @@ func (r *PostgresReconciler) httpPatchPatroni(ctx context.Context, instance *pg.
 					Retries:                       2,
 					ThresholdBackupSizePercentage: 100,
 					ThresholdMegabytes:            102400,
+					DataDir:                       "/home/postgres/pgdata/pgroot/data",
 				},
 			},
 			SynchronousNodesAdditional: nil,
