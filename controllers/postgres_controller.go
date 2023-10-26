@@ -539,6 +539,7 @@ func (r *PostgresReconciler) updatePodEnvironmentSecret(ctx context.Context, p *
 	}
 
 	// libsodium client side encryption key
+	var k []byte
 	if r.EnableWalGEncryption {
 		s, err := r.getWalGEncryptionSecret(ctx)
 		if err != nil {
@@ -558,6 +559,71 @@ func (r *PostgresReconciler) updatePodEnvironmentSecret(ctx context.Context, p *
 			data["CLONE_WALG_LIBSODIUM_KEY"] = k
 		} else {
 			delete(data, "CLONE_WALG_LIBSODIUM_KEY")
+		}
+	}
+
+	// check if is standby
+	if p.IsReplicationTarget() {
+		// if standby, fetch backup secret of primary
+		primary := &pg.Postgres{}
+		ns := types.NamespacedName{
+			Name:      p.Spec.PostgresConnection.ConnectedPostgresID,
+			Namespace: p.Namespace,
+		}
+		if err := r.CtrlClient.Get(ctx, ns, primary); err != nil {
+			if apierrors.IsNotFound(err) {
+				// the instance was updated, but does not exist anymore -> do nothing, it was probably deleted
+				return nil
+			}
+
+			r.recorder.Eventf(primary, "Warning", "Error", "failed to get resource: %v", err)
+			return err
+		}
+		log.Info("postgres fetched", "postgres", primary)
+
+		if primary.Spec.BackupSecretRef == "" {
+			log.Info("No configured backupSecretRef found, skipping configuration of postgres backup")
+			return nil
+		}
+
+		primaryBackupConfig, err := r.getBackupConfig(ctx, primary.Namespace, primary.Spec.BackupSecretRef)
+		if err != nil {
+			return err
+		}
+		primaryS3url, err := url.Parse(primaryBackupConfig.S3Endpoint)
+		if err != nil {
+			return fmt.Errorf("error while parsing the s3 endpoint url in the backup secret: %w", err)
+		}
+		// use the s3 endpoint as provided
+		primaryAwsEndpoint := primaryS3url.String()
+		// modify the scheme to 'https+path'
+		primaryS3url.Scheme = "https+path"
+		// use the modified s3 endpoint
+		primaryWalES3Endpoint := primaryS3url.String()
+		// region
+		primaryRegion := primaryBackupConfig.S3Region
+
+		// s3 server side encryption SSE is disabled
+		// we use client side encryption
+		primaryWalgDisableSSE := "true"
+
+		// if available, set STANDBY_ variables:
+
+		primaryAwsAccessKeyID := primaryBackupConfig.S3AccessKey
+		primaryAwsSecretAccessKey := primaryBackupConfig.S3SecretKey
+
+		// create updated content for pod environment configmap
+		data["STANDBY_AWS_ACCESS_KEY_ID"] = []byte(primaryAwsAccessKeyID)
+		data["STANDBY_AWS_SECRET_ACCESS_KEY"] = []byte(primaryAwsSecretAccessKey)
+
+		data["STANDBY_AWS_ENDPOINT"] = []byte(primaryAwsEndpoint)
+		data["STANDBY_WALE_S3_ENDPOINT"] = []byte(primaryWalES3Endpoint) // same as above, but slightly modified
+		data["STANDBY_AWS_S3_FORCE_PATH_STYLE"] = []byte("true")
+		data["STANDBY_AWS_REGION"] = []byte(primaryRegion)                  // now we can use AWS S3
+		data["STANDBY_WALG_DISABLE_S3_SSE"] = []byte(primaryWalgDisableSSE) // server side encryption
+
+		if r.EnableWalGEncryption {
+			data["STANDBY_WALG_LIBSODIUM_KEY"] = k
 		}
 	}
 
