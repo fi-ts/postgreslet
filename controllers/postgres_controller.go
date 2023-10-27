@@ -87,7 +87,7 @@ type PostgresReconciler struct {
 	PostgresletFullname                 string
 }
 
-type PatroniWalEStandby struct {
+type PatroniS3Bootstrap struct {
 	Command                       string `json:"host"`
 	NoMaster                      int    `json:"no_master"`
 	Retries                       int    `json:"retries"`
@@ -106,7 +106,7 @@ type PatroniStandbyCluster struct {
 	Host                 string             `json:"host,omitempty"`
 	Port                 int                `json:"port,omitempty"`
 	ApplicationName      string             `json:"application_name,omitempty"`
-	WalEStandby          PatroniWalEStandby `json:"wal_e_standby,omitempty"`
+	S3Bootstrap          PatroniS3Bootstrap `json:"s3_bootstrap,omitempty"`
 	Bootstrap            PatroniBootstrap   `json:"bootstrap,omitempty"`
 }
 type PatroniConfigRequest struct {
@@ -1065,11 +1065,11 @@ func (r *PostgresReconciler) httpPatchPatroni(ctx context.Context, instance *pg.
 		// TODO check values first
 		request = PatroniConfigRequest{
 			StandbyCluster: &PatroniStandbyCluster{
-				// CreateReplicaMethods: []string{"wal_e_standby", "basebackup_fast_xlog"},
+				// CreateReplicaMethods: []string{"s3_bootstrap", "basebackup_fast_xlog"},
 				Host:            instance.Spec.PostgresConnection.ConnectionIP,
 				Port:            int(instance.Spec.PostgresConnection.ConnectionPort),
 				ApplicationName: instance.ObjectMeta.Name,
-				WalEStandby: PatroniWalEStandby{
+				S3Bootstrap: PatroniS3Bootstrap{
 					Command:                       "envdir /run/etc/wal-e.d/env-standby bash /scripts/wale_restore.sh",
 					NoMaster:                      1,
 					Retries:                       2,
@@ -1082,7 +1082,7 @@ func (r *PostgresReconciler) httpPatchPatroni(ctx context.Context, instance *pg.
 			Bootstrap: PatroniBootstrap{
 				DCS: PatroniDCS{
 					StandbyCluster: &PatroniStandbyCluster{
-						CreateReplicaMethods: []string{"wal_e_standby", "basebackup_fast_xlog"},
+						CreateReplicaMethods: []string{"s3_bootstrap", "basebackup_fast_xlog"},
 					},
 				},
 			},
