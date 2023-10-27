@@ -87,36 +87,6 @@ type PostgresReconciler struct {
 	PostgresletFullname                 string
 }
 
-//	type PatroniS3Bootstrap struct {
-//		Command                       string `json:"host"`
-//		NoMaster                      int    `json:"no_master"`
-//		Retries                       int    `json:"retries"`
-//		ThresholdBackupSizePercentage int    `json:"threshold_backup_size_percentage"`
-//		ThresholdMegabytes            int    `json:"threshold_megabytes"`
-//		DataDir                       string `json:"datadir"`
-//	}
-//
-//	type PatroniDCS struct {
-//		StandbyCluster *PatroniStandbyCluster `json:"standby_cluster"`
-//	}
-//
-//	type PatroniBootstrap struct {
-//		DCS PatroniDCS `json:"dcs"`
-//	}
-type PatroniStandbyCluster struct {
-	// CreateReplicaMethods *[]string           `json:"create_replica_methods,omitempty"`
-	Host            *string `json:"host,omitempty"`
-	Port            *int    `json:"port,omitempty"`
-	ApplicationName *string `json:"application_name,omitempty"`
-	// S3Bootstrap          *PatroniS3Bootstrap `json:"s3_bootstrap,omitempty"`
-	// Bootstrap            *PatroniBootstrap   `json:"bootstrap,omitempty"`
-}
-type PatroniConfigRequest struct {
-	StandbyCluster             *PatroniStandbyCluster `json:"standby_cluster"`
-	SynchronousNodesAdditional *string                `json:"synchronous_nodes_additional"`
-	// Bootstrap                  *PatroniBootstrap      `json:"bootstrap"`
-}
-
 // Reconcile is the entry point for postgres reconciliation.
 // +kubebuilder:rbac:groups=database.fits.cloud,resources=postgres,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=database.fits.cloud,resources=postgres/status,verbs=get;update;patch
@@ -1059,6 +1029,17 @@ func (r *PostgresReconciler) httpPatchPatroni(ctx context.Context, instance *pg.
 	podPort := "8008"
 	path := "config"
 
+	type PatroniStandbyCluster struct {
+		CreateReplicaMethods []string `json:"create_replica_methods"`
+		Host                 string   `json:"host"`
+		Port                 int      `json:"port"`
+		ApplicationName      string   `json:"application_name"`
+	}
+	type PatroniConfigRequest struct {
+		StandbyCluster             *PatroniStandbyCluster `json:"standby_cluster"`
+		SynchronousNodesAdditional *string                `json:"synchronous_nodes_additional"`
+	}
+
 	r.Log.Info("Preparing request")
 	var request PatroniConfigRequest
 	if instance.IsReplicationPrimary() {
@@ -1076,27 +1057,11 @@ func (r *PostgresReconciler) httpPatchPatroni(ctx context.Context, instance *pg.
 		// TODO check values first
 		request = PatroniConfigRequest{
 			StandbyCluster: &PatroniStandbyCluster{
-				// CreateReplicaMethods: &[]string{"s3_bootstrap", "basebackup_fast_xlog"},
-				Host:            &instance.Spec.PostgresConnection.ConnectionIP,
-				Port:            pointer.Int(int(instance.Spec.PostgresConnection.ConnectionPort)),
-				ApplicationName: &instance.ObjectMeta.Name,
-				// S3Bootstrap: &PatroniS3Bootstrap{
-				// 	Command:                       "envdir /run/etc/wal-e.d/env-standby bash /scripts/wale_restore.sh",
-				// 	NoMaster:                      1,
-				// 	Retries:                       2,
-				// 	ThresholdBackupSizePercentage: 100,
-				// 	ThresholdMegabytes:            102400,
-				// 	DataDir:                       "/home/postgres/pgdata/pgroot/data",
-				// },
+				Host:            instance.Spec.PostgresConnection.ConnectionIP,
+				Port:            int(instance.Spec.PostgresConnection.ConnectionPort),
+				ApplicationName: instance.ObjectMeta.Name,
 			},
 			SynchronousNodesAdditional: nil,
-			// Bootstrap: &PatroniBootstrap{
-			// 	DCS: PatroniDCS{
-			// 		StandbyCluster: &PatroniStandbyCluster{
-			// 			CreateReplicaMethods: &[]string{"s3_bootstrap", "basebackup_fast_xlog"},
-			// 		},
-			// 	},
-			// },
 		}
 	}
 	r.Log.Info("Prepared request", "request", request)
