@@ -631,6 +631,8 @@ func (r *PostgresReconciler) updatePodEnvironmentSecret(ctx context.Context, p *
 		// region
 		primaryRegion := primaryBackupConfig.S3Region
 
+		primaryWalGS3Prefix := "s3://" + primaryBackupConfig.S3BucketName + "/" + primary.ToPeripheralResourceName()
+
 		// s3 server side encryption SSE is disabled
 		// we use client side encryption
 		primaryWalgDisableSSE := "true"
@@ -645,12 +647,19 @@ func (r *PostgresReconciler) updatePodEnvironmentSecret(ctx context.Context, p *
 		data["STANDBY_AWS_SECRET_ACCESS_KEY"] = []byte(primaryAwsSecretAccessKey)
 
 		data["STANDBY_AWS_ENDPOINT"] = []byte(primaryAwsEndpoint)
-		data["STANDBY_WALE_S3_ENDPOINT"] = []byte(primaryWalES3Endpoint) // same as above, but slightly modified
+		data["STANDBY_WALE_S3_ENDPOINT"] = []byte(primaryWalES3Endpoint)     // same as above, but slightly modified
+		data["STANDBY_WALG_S3_ENDPOINT"] = []byte(primaryWalES3Endpoint)     // same as above, but slightly modified
+		data["STANDBY_AWS_WALG_S3_ENDPOINT"] = []byte(primaryWalES3Endpoint) // same as above, but slightly modified
 		data["STANDBY_AWS_S3_FORCE_PATH_STYLE"] = []byte("true")
 		data["STANDBY_AWS_REGION"] = []byte(primaryRegion)                  // now we can use AWS S3
 		data["STANDBY_WALG_DISABLE_S3_SSE"] = []byte(primaryWalgDisableSSE) // server side encryption
+		data["STANDBY_WALG_S3_SSE"] = []byte("")                            // server side encryption
 
 		data["STANDBY_WITH_WALG"] = []byte("true")
+		data["STANDBY_USE_WALG_BACKUP"] = []byte("true")
+		data["STANDBY_USE_WALG_RESTORE"] = []byte("true")
+
+		data["STANDBY_WALG_S3_PREFIX"] = []byte(primaryWalGS3Prefix)
 
 		if r.EnableWalGEncryption {
 			data["STANDBY_WALG_LIBSODIUM_KEY"] = k
