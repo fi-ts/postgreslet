@@ -588,6 +588,10 @@ func (r *PostgresReconciler) updatePodEnvironmentSecret(ctx context.Context, p *
 		} else {
 			delete(data, "CLONE_WALG_LIBSODIUM_KEY")
 		}
+
+		if p.IsReplicationTarget() {
+			data["STANDBY_WALG_LIBSODIUM_KEY"] = k
+		}
 	}
 
 	// check if is standby
@@ -661,9 +665,6 @@ func (r *PostgresReconciler) updatePodEnvironmentSecret(ctx context.Context, p *
 
 		data["STANDBY_WALG_S3_PREFIX"] = []byte(primaryWalGS3Prefix)
 
-		if r.EnableWalGEncryption {
-			data["STANDBY_WALG_LIBSODIUM_KEY"] = k
-		}
 	}
 
 	var s *corev1.Secret
