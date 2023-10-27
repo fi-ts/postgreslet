@@ -87,6 +87,34 @@ type PostgresReconciler struct {
 	PostgresletFullname                 string
 }
 
+type PatroniWalEStandby struct {
+	Command                       string `json:"host"`
+	NoMaster                      int    `json:"no_master"`
+	Retries                       int    `json:"retries"`
+	ThresholdBackupSizePercentage int    `json:"threshold_backup_size_percentage"`
+	ThresholdMegabytes            int    `json:"threshold_megabytes"`
+	DataDir                       string `json:"datadir"`
+}
+type PatroniDCS struct {
+	StandbyCluster *PatroniStandbyCluster `json:"standby_cluster"`
+}
+type PatroniBootstrap struct {
+	DCS PatroniDCS `json:"dcs"`
+}
+type PatroniStandbyCluster struct {
+	CreateReplicaMethods []string           `json:"create_replica_methods,omitempty"`
+	Host                 string             `json:"host,omitempty"`
+	Port                 int                `json:"port,omitempty"`
+	ApplicationName      string             `json:"application_name,omitempty"`
+	WalEStandby          PatroniWalEStandby `json:"wal_e_standby,omitempty"`
+	Bootstrap            PatroniBootstrap   `json:"bootstrap,omitempty"`
+}
+type PatroniConfigRequest struct {
+	StandbyCluster             *PatroniStandbyCluster `json:"standby_cluster"`
+	SynchronousNodesAdditional *string                `json:"synchronous_nodes_additional"`
+	Bootstrap                  PatroniBootstrap       `json:"bootstrap"`
+}
+
 // Reconcile is the entry point for postgres reconciliation.
 // +kubebuilder:rbac:groups=database.fits.cloud,resources=postgres,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=database.fits.cloud,resources=postgres/status,verbs=get;update;patch
@@ -622,6 +650,8 @@ func (r *PostgresReconciler) updatePodEnvironmentSecret(ctx context.Context, p *
 		data["STANDBY_AWS_REGION"] = []byte(primaryRegion)                  // now we can use AWS S3
 		data["STANDBY_WALG_DISABLE_S3_SSE"] = []byte(primaryWalgDisableSSE) // server side encryption
 
+		data["STANDBY_WITH_WALG"] = []byte("true")
+
 		if r.EnableWalGEncryption {
 			data["STANDBY_WALG_LIBSODIUM_KEY"] = k
 		}
@@ -1018,26 +1048,6 @@ func (r *PostgresReconciler) httpPatchPatroni(ctx context.Context, instance *pg.
 	podPort := "8008"
 	path := "config"
 
-	type WalEStandby struct {
-		Command                       string `json:"host"`
-		NoMaster                      int    `json:"no_master"`
-		Retries                       int    `json:"retries"`
-		ThresholdBackupSizePercentage int    `json:"threshold_backup_size_percentage"`
-		ThresholdMegabytes            int    `json:"threshold_megabytes"`
-		DataDir                       string `json:"datadir"`
-	}
-	type PatroniStandbyCluster struct {
-		CreateReplicaMethods []string    `json:"create_replica_methods"`
-		Host                 string      `json:"host"`
-		Port                 int         `json:"port"`
-		ApplicationName      string      `json:"application_name"`
-		WalEStandby          WalEStandby `json:"wal_e_standby"`
-	}
-	type PatroniConfigRequest struct {
-		StandbyCluster             *PatroniStandbyCluster `json:"standby_cluster"`
-		SynchronousNodesAdditional *string                `json:"synchronous_nodes_additional"`
-	}
-
 	r.Log.Info("Preparing request")
 	var request PatroniConfigRequest
 	if instance.IsReplicationPrimary() {
@@ -1055,11 +1065,11 @@ func (r *PostgresReconciler) httpPatchPatroni(ctx context.Context, instance *pg.
 		// TODO check values first
 		request = PatroniConfigRequest{
 			StandbyCluster: &PatroniStandbyCluster{
-				CreateReplicaMethods: []string{"wal_e_standby", "basebackup_fast_xlog"},
-				Host:                 instance.Spec.PostgresConnection.ConnectionIP,
-				Port:                 int(instance.Spec.PostgresConnection.ConnectionPort),
-				ApplicationName:      instance.ObjectMeta.Name,
-				WalEStandby: WalEStandby{
+				// CreateReplicaMethods: []string{"wal_e_standby", "basebackup_fast_xlog"},
+				Host:            instance.Spec.PostgresConnection.ConnectionIP,
+				Port:            int(instance.Spec.PostgresConnection.ConnectionPort),
+				ApplicationName: instance.ObjectMeta.Name,
+				WalEStandby: PatroniWalEStandby{
 					Command:                       "envdir /run/etc/wal-e.d/env-standby bash /scripts/wale_restore.sh",
 					NoMaster:                      1,
 					Retries:                       2,
@@ -1069,6 +1079,13 @@ func (r *PostgresReconciler) httpPatchPatroni(ctx context.Context, instance *pg.
 				},
 			},
 			SynchronousNodesAdditional: nil,
+			Bootstrap: PatroniBootstrap{
+				DCS: PatroniDCS{
+					StandbyCluster: &PatroniStandbyCluster{
+						CreateReplicaMethods: []string{"wal_e_standby", "basebackup_fast_xlog"},
+					},
+				},
+			},
 		}
 	}
 	r.Log.Info("Prepared request", "request", request)
