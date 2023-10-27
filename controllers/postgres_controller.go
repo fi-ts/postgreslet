@@ -567,7 +567,6 @@ func (r *PostgresReconciler) updatePodEnvironmentSecret(ctx context.Context, p *
 	}
 
 	// libsodium client side encryption key
-	var k []byte
 	if r.EnableWalGEncryption {
 		s, err := r.getWalGEncryptionSecret(ctx)
 		if err != nil {
