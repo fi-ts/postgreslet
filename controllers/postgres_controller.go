@@ -102,17 +102,17 @@ type PatroniBootstrap struct {
 	DCS PatroniDCS `json:"dcs"`
 }
 type PatroniStandbyCluster struct {
-	CreateReplicaMethods []string           `json:"create_replica_methods,omitempty"`
-	Host                 string             `json:"host,omitempty"`
-	Port                 int                `json:"port,omitempty"`
-	ApplicationName      string             `json:"application_name,omitempty"`
-	S3Bootstrap          PatroniS3Bootstrap `json:"s3_bootstrap,omitempty"`
-	Bootstrap            PatroniBootstrap   `json:"bootstrap,omitempty"`
+	CreateReplicaMethods *[]string           `json:"create_replica_methods,omitempty"`
+	Host                 *string             `json:"host,omitempty"`
+	Port                 *int                `json:"port,omitempty"`
+	ApplicationName      *string             `json:"application_name,omitempty"`
+	S3Bootstrap          *PatroniS3Bootstrap `json:"s3_bootstrap,omitempty"`
+	Bootstrap            *PatroniBootstrap   `json:"bootstrap,omitempty"`
 }
 type PatroniConfigRequest struct {
 	StandbyCluster             *PatroniStandbyCluster `json:"standby_cluster"`
 	SynchronousNodesAdditional *string                `json:"synchronous_nodes_additional"`
-	Bootstrap                  PatroniBootstrap       `json:"bootstrap"`
+	Bootstrap                  *PatroniBootstrap      `json:"bootstrap"`
 }
 
 // Reconcile is the entry point for postgres reconciliation.
@@ -1065,11 +1065,11 @@ func (r *PostgresReconciler) httpPatchPatroni(ctx context.Context, instance *pg.
 		// TODO check values first
 		request = PatroniConfigRequest{
 			StandbyCluster: &PatroniStandbyCluster{
-				// CreateReplicaMethods: []string{"s3_bootstrap", "basebackup_fast_xlog"},
-				Host:            instance.Spec.PostgresConnection.ConnectionIP,
-				Port:            int(instance.Spec.PostgresConnection.ConnectionPort),
-				ApplicationName: instance.ObjectMeta.Name,
-				S3Bootstrap: PatroniS3Bootstrap{
+				CreateReplicaMethods: &[]string{"s3_bootstrap", "basebackup_fast_xlog"},
+				Host:                 &instance.Spec.PostgresConnection.ConnectionIP,
+				Port:                 pointer.Int(int(instance.Spec.PostgresConnection.ConnectionPort)),
+				ApplicationName:      &instance.ObjectMeta.Name,
+				S3Bootstrap: &PatroniS3Bootstrap{
 					Command:                       "envdir /run/etc/wal-e.d/env-standby bash /scripts/wale_restore.sh",
 					NoMaster:                      1,
 					Retries:                       2,
@@ -1079,10 +1079,10 @@ func (r *PostgresReconciler) httpPatchPatroni(ctx context.Context, instance *pg.
 				},
 			},
 			SynchronousNodesAdditional: nil,
-			Bootstrap: PatroniBootstrap{
+			Bootstrap: &PatroniBootstrap{
 				DCS: PatroniDCS{
 					StandbyCluster: &PatroniStandbyCluster{
-						CreateReplicaMethods: []string{"s3_bootstrap", "basebackup_fast_xlog"},
+						CreateReplicaMethods: &[]string{"s3_bootstrap", "basebackup_fast_xlog"},
 					},
 				},
 			},
