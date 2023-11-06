@@ -493,6 +493,12 @@ func (r *PostgresReconciler) updatePodEnvironmentConfigMap(ctx context.Context, 
 		"CLONE_WALG_DOWNLOAD_CONCURRENCY":    downloadConcurrency,
 	}
 
+	if p.IsReplicationTarget() {
+		data["STANDBY_WALG_UPLOAD_DISK_CONCURRENCY"] = uploadDiskConcurrency
+		data["STANDBY_WALG_UPLOAD_CONCURRENCY"] = uploadConcurrency
+		data["STANDBY_WALG_DOWNLOAD_CONCURRENCY"] = downloadConcurrency
+	}
+
 	cm := &corev1.ConfigMap{}
 	ns := types.NamespacedName{
 		Name:      operatormanager.PodEnvCMName,
