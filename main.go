@@ -71,6 +71,7 @@ const (
 	enableLBSourceRangesFlg               = "enable-lb-source-ranges"
 	enableRandomStorageEncrytionSecretFlg = "enable-random-storage-encryption-secret"
 	enableWalGEncryptionFlg               = "enable-walg-encryption"
+	enableForceSharedIPFlg                = "enable-force-shared-ip"
 )
 
 var (
@@ -122,6 +123,7 @@ func main() {
 		enableLBSourceRanges               bool
 		enableRandomStorageEncrytionSecret bool
 		enableWalGEncryption               bool
+		enableForceSharedIP                bool
 
 		portRangeStart int
 		portRangeSize  int
@@ -255,6 +257,9 @@ func main() {
 	viper.SetDefault(enableWalGEncryptionFlg, false)
 	enableWalGEncryption = viper.GetBool(enableWalGEncryptionFlg)
 
+	viper.SetDefault(enableForceSharedIPFlg, true) // TODO switch to false?
+	enableForceSharedIP = viper.GetBool(enableForceSharedIPFlg)
+
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 
 	ctrl.Log.Info("flag",
@@ -293,6 +298,7 @@ func main() {
 		enableRandomStorageEncrytionSecretFlg, enableRandomStorageEncrytionSecret,
 		postgresletFullnameFlg, postgresletFullname,
 		enableWalGEncryptionFlg, enableWalGEncryption,
+		enableForceSharedIPFlg, enableForceSharedIP,
 	)
 
 	svcClusterConf := ctrl.GetConfigOrDie()
@@ -376,6 +382,7 @@ func main() {
 		EnableLegacyStandbySelector: enableLegacyStandbySelector,
 		StandbyClustersSourceRanges: standbyClusterSourceRanges,
 		EnableLBSourceRanges:        enableLBSourceRanges,
+		EnableForceSharedIP:         enableForceSharedIP,
 	}
 	if err = (&controllers.PostgresReconciler{
 		CtrlClient:                          ctrlPlaneClusterMgr.GetClient(),
@@ -411,6 +418,7 @@ func main() {
 		Scheme:                svcClusterMgr.GetScheme(),
 		PartitionID:           partitionID,
 		ControlPlaneNamespace: controlPlaneNamespace,
+		EnableForceSharedIP:   enableForceSharedIP,
 	}).SetupWithManager(svcClusterMgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Status")
 		os.Exit(1)
