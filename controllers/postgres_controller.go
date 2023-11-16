@@ -85,6 +85,7 @@ type PostgresReconciler struct {
 	EnableRandomStorageEncryptionSecret bool
 	EnableWalGEncryption                bool
 	PostgresletFullname                 string
+	EnableBootstrapStandbyFromS3        bool
 }
 
 // Reconcile is the entry point for postgres reconciliation.
@@ -493,7 +494,7 @@ func (r *PostgresReconciler) updatePodEnvironmentConfigMap(ctx context.Context, 
 		"CLONE_WALG_DOWNLOAD_CONCURRENCY":    downloadConcurrency,
 	}
 
-	if p.IsReplicationTarget() {
+	if r.EnableBootstrapStandbyFromS3 && p.IsReplicationTarget() {
 		data["STANDBY_WALG_UPLOAD_DISK_CONCURRENCY"] = uploadDiskConcurrency
 		data["STANDBY_WALG_UPLOAD_CONCURRENCY"] = uploadConcurrency
 		data["STANDBY_WALG_DOWNLOAD_CONCURRENCY"] = downloadConcurrency
@@ -567,13 +568,13 @@ func (r *PostgresReconciler) updatePodEnvironmentSecret(ctx context.Context, p *
 		}
 
 		// we also need that (hopefully identical) key to bootstrap from files in S3
-		if p.IsReplicationTarget() {
+		if r.EnableBootstrapStandbyFromS3 && p.IsReplicationTarget() {
 			data["STANDBY_WALG_LIBSODIUM_KEY"] = k
 		}
 	}
 
 	// add STANDBY_* variables for bootstrapping from S3
-	if p.IsReplicationTarget() {
+	if r.EnableBootstrapStandbyFromS3 && p.IsReplicationTarget() {
 		standbyEnvs := r.getStandbyEnvs(ctx, p)
 		for name, value := range standbyEnvs {
 			data[name] = value
