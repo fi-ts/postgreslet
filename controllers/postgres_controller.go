@@ -58,7 +58,7 @@ const (
 	walGEncryptionSecretNamePostfix                string = "-walg-encryption"
 	walGEncryptionSecretKeyName                    string = "key"
 	initDBName                                     string = "postgres-initdb"
-	initDBSQL                                      string = `SELECT 'Hello world';`
+	initDBSQLDummy                                 string = `SELECT 'NOOP';`
 )
 
 // requeue defines in how many seconds a requeue should happen
@@ -88,6 +88,8 @@ type PostgresReconciler struct {
 	EnableRandomStorageEncryptionSecret bool
 	EnableWalGEncryption                bool
 	PostgresletFullname                 string
+	PostgresImage                       string
+	InitjobConfigMapName                string
 }
 
 // Reconcile is the entry point for postgres reconciliation.
@@ -1479,20 +1481,41 @@ func (r *PostgresReconciler) ensureInitDBJob(ctx context.Context, instance *pg.P
 	if err := r.SvcClient.Get(ctx, ns, cm); err == nil {
 		// configmap already exists, nothing to do here
 		r.Log.Info("initdb ConfigMap already exists")
-		return nil // TODO return or update?
-	}
+		// return nil // TODO return or update?
+	} else {
+		cm.Name = ns.Name
+		cm.Namespace = ns.Namespace
+		cm.Data = map[string]string{}
 
-	cm.Name = ns.Name
-	cm.Namespace = ns.Namespace
-	cm.Data = map[string]string{
-		"initdb.sql": initDBSQL,
-	}
+		// only execute SQL when encountering a **new** database, not for standbies or clones
+		if instance.Spec.PostgresConnection == nil && instance.Spec.PostgresRestore == nil {
+			// TODO fetch central init job and copy its contents
 
-	if err := r.SvcClient.Create(ctx, cm); err != nil {
-		return fmt.Errorf("error while creating the new initdb ConfigMap: %w", err)
-	}
+			// try to fetch the global initjjob configmap
+			cns := types.NamespacedName{
+				Namespace: r.PostgresletNamespace,
+				Name:      r.InitjobConfigMapName,
+			}
+			globalInitjobCM := &corev1.ConfigMap{}
+			if err := r.SvcClient.Get(ctx, cns, globalInitjobCM); err == nil {
+				cm.Data = globalInitjobCM.Data
+			} else {
+				r.Log.Error(err, "global initdb ConfigMap could not be loaded, using dummy data")
+				// fall back to dummy data
+				cm.Data["initdb.sql"] = initDBSQLDummy
+			}
 
-	r.Log.Info("new initdb ConfigMap created")
+		} else {
+			// use dummy job for standbies and clones
+			cm.Data["initdb.sql"] = initDBSQLDummy
+		}
+
+		if err := r.SvcClient.Create(ctx, cm); err != nil {
+			return fmt.Errorf("error while creating the new initdb ConfigMap: %w", err)
+		}
+
+		r.Log.Info("new initdb ConfigMap created")
+	}
 
 	j := &batchv1.Job{}
 
@@ -1512,7 +1535,7 @@ func (r *PostgresReconciler) ensureInitDBJob(ctx context.Context, instance *pg.P
 				Containers: []corev1.Container{
 					{
 						Name:    "psql",
-						Image:   "registry.fits.cloud/cloud-services/images/acid/spilo:2.1-p6_de-sync-standby-cluster_0.3.2_24eb43c", // TODO obtain current spilo image
+						Image:   r.PostgresImage,
 						Command: []string{"sh", "-c", "echo ${PGPASSWORD_SUPERUSER} | psql --host=${SCOPE} --port=5432 --username=${PGUSER_SUPERUSER} --file=/initdb.d/initdb.sql"},
 						Env: []corev1.EnvVar{
 							{

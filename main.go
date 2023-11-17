@@ -72,6 +72,7 @@ const (
 	enableRandomStorageEncrytionSecretFlg = "enable-random-storage-encryption-secret"
 	enableWalGEncryptionFlg               = "enable-walg-encryption"
 	enableForceSharedIPFlg                = "enable-force-shared-ip"
+	initjobCMNameFlg                      = "initjob-configmap-name"
 )
 
 var (
@@ -112,6 +113,7 @@ func main() {
 		etcdBackupSecretName    string
 		etcdPSPName             string
 		postgresletFullname     string
+		initjobCMName           string
 
 		enableLeaderElection               bool
 		enableCRDValidation                bool
@@ -260,6 +262,9 @@ func main() {
 	viper.SetDefault(enableForceSharedIPFlg, true) // TODO switch to false?
 	enableForceSharedIP = viper.GetBool(enableForceSharedIPFlg)
 
+	viper.SetDefault(initjobCMNameFlg, "postgreslet-postgres-initjob")
+	initjobCMName = viper.GetString(initjobCMNameFlg)
+
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 
 	ctrl.Log.Info("flag",
@@ -299,6 +304,7 @@ func main() {
 		postgresletFullnameFlg, postgresletFullname,
 		enableWalGEncryptionFlg, enableWalGEncryption,
 		enableForceSharedIPFlg, enableForceSharedIP,
+		initjobCMNameFlg, initjobCMName,
 	)
 
 	svcClusterConf := ctrl.GetConfigOrDie()
@@ -406,6 +412,8 @@ func main() {
 		EnableRandomStorageEncryptionSecret: enableRandomStorageEncrytionSecret,
 		EnableWalGEncryption:                enableWalGEncryption,
 		PostgresletFullname:                 postgresletFullname,
+		PostgresImage:                       postgresImage,
+		InitjobConfigMapName:                initjobCMName,
 	}).SetupWithManager(ctrlPlaneClusterMgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Postgres")
 		os.Exit(1)
