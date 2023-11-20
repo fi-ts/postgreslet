@@ -612,6 +612,8 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 	// Add the newly introduced label only here, not in  p.ToZalandoPostgresqlMatchingLabels() (so that the selectors using  p.ToZalandoPostgresqlMatchingLabels() will still work untill all postgres resources have that new label)
 	// TODO once all the custom resources have that new label, move this part to p.ToZalandoPostgresqlMatchingLabels()
 	z.Labels[PartitionIDLabelName] = p.Spec.PartitionID
+	// TODO REMOVE temp label
+	z.Labels["postgres.database.fits.cloud/temp-changing-label"] = time.Now().Format(time.RFC3339)
 
 	z.Spec.NumberOfInstances = p.Spec.NumberOfInstances
 	z.Spec.PostgresqlParam.PgVersion = p.Spec.Version

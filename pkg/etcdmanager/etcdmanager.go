@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	pg "github.com/fi-ts/postgreslet/api/v1"
 	"github.com/go-logr/logr"
@@ -314,6 +315,9 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 		v.Spec.Template.ObjectMeta.Labels[pg.ManagedByLabelName] = m.options.PostgresletFullname
 		v.Spec.Template.ObjectMeta.Labels[etcdComponentLabelName] = etcdComponentLabelValue
 		v.Spec.Template.ObjectMeta.Labels[pg.NameLabelName] = stsName
+		// TODO REMOVE ME
+		// add an ever-changing label to force a rolling update each time we reconcile etcd
+		v.Spec.Template.ObjectMeta.Labels["postgres.database.fits.cloud/temp-changing-label"] = time.Now().Format(time.RFC3339)
 
 		m.log.Info("Updating selector")
 		// spec.selector.matchLabels
