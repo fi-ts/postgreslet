@@ -317,7 +317,7 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 		v.Spec.Template.ObjectMeta.Labels[pg.NameLabelName] = stsName
 		// TODO REMOVE ME
 		// add an ever-changing label to force a rolling update each time we reconcile etcd
-		v.Spec.Template.ObjectMeta.Labels["postgres.database.fits.cloud/temp-changing-label"] = time.Now().Format(time.RFC3339)
+		v.Spec.Template.ObjectMeta.Labels["postgres.database.fits.cloud/temp-changing-label"] = fmt.Sprint(time.Now().Unix())
 
 		m.log.Info("Updating selector")
 		// spec.selector.matchLabels
