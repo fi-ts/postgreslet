@@ -85,6 +85,7 @@ type PostgresReconciler struct {
 	EnableRandomStorageEncryptionSecret bool
 	EnableWalGEncryption                bool
 	PostgresletFullname                 string
+	EnableBootstrapStandbyFromS3        bool
 }
 
 // Reconcile is the entry point for postgres reconciliation.
@@ -493,6 +494,12 @@ func (r *PostgresReconciler) updatePodEnvironmentConfigMap(ctx context.Context, 
 		"CLONE_WALG_DOWNLOAD_CONCURRENCY":    downloadConcurrency,
 	}
 
+	if r.EnableBootstrapStandbyFromS3 && p.IsReplicationTarget() {
+		data["STANDBY_WALG_UPLOAD_DISK_CONCURRENCY"] = uploadDiskConcurrency
+		data["STANDBY_WALG_UPLOAD_CONCURRENCY"] = uploadConcurrency
+		data["STANDBY_WALG_DOWNLOAD_CONCURRENCY"] = downloadConcurrency
+	}
+
 	cm := &corev1.ConfigMap{}
 	ns := types.NamespacedName{
 		Name:      operatormanager.PodEnvCMName,
@@ -559,6 +566,19 @@ func (r *PostgresReconciler) updatePodEnvironmentSecret(ctx context.Context, p *
 		} else {
 			delete(data, "CLONE_WALG_LIBSODIUM_KEY")
 		}
+
+		// we also need that (hopefully identical) key to bootstrap from files in S3
+		if r.EnableBootstrapStandbyFromS3 && p.IsReplicationTarget() {
+			data["STANDBY_WALG_LIBSODIUM_KEY"] = k
+		}
+	}
+
+	// add STANDBY_* variables for bootstrapping from S3
+	if r.EnableBootstrapStandbyFromS3 && p.IsReplicationTarget() {
+		standbyEnvs := r.getStandbyEnvs(ctx, p)
+		for name, value := range standbyEnvs {
+			data[name] = value
+		}
 	}
 
 	var s *corev1.Secret
@@ -577,6 +597,80 @@ func (r *PostgresReconciler) updatePodEnvironmentSecret(ctx context.Context, p *
 	}
 
 	return nil
+}
+
+// getStandbyEnvs Fetches all the required info from the remote primary postgres and fills all ENVS required for bootstrapping from S3
+func (r *PostgresReconciler) getStandbyEnvs(ctx context.Context, p *pg.Postgres) map[string][]byte {
+	standbyEnvs := map[string][]byte{}
+
+	// fetch backup secret of primary
+	primary := &pg.Postgres{}
+	ns := types.NamespacedName{
+		Name:      p.Spec.PostgresConnection.ConnectedPostgresID,
+		Namespace: p.Namespace,
+	}
+	if err := r.CtrlClient.Get(ctx, ns, primary); err != nil {
+		if apierrors.IsNotFound(err) {
+			// the instance was updated, but does not exist anymore -> do nothing, it was probably deleted
+			return standbyEnvs
+		}
+
+		r.recorder.Eventf(primary, "Warning", "Error", "failed to get referenced primary postgres: %v", err)
+		return standbyEnvs
+	}
+
+	if primary.Spec.BackupSecretRef == "" {
+		r.recorder.Eventf(primary, "Warning", "Error", "No backupSecretRef for primary postgres found, skipping configuration of wal_e bootstrapping")
+		return standbyEnvs
+	}
+
+	primaryBackupConfig, err := r.getBackupConfig(ctx, primary.Namespace, primary.Spec.BackupSecretRef)
+	if err != nil {
+		r.recorder.Eventf(primary, "Warning", "Error", "failed to get referenced primary backup config, skipping configuration of wal_e bootstrapping: %v", err)
+		return standbyEnvs
+	}
+	primaryS3url, err := url.Parse(primaryBackupConfig.S3Endpoint)
+	if err != nil {
+		r.recorder.Eventf(primary, "Warning", "Error", "error while parsing the s3 endpoint url in the backup secret: %w", err)
+		return standbyEnvs
+	}
+
+	// use the s3 endpoint as provided
+	primaryAwsEndpoint := primaryS3url.String()
+	// modify the scheme to 'https+path'
+	primaryS3url.Scheme = "https+path"
+	// use the modified s3 endpoint
+	primaryWalES3Endpoint := primaryS3url.String()
+	// region
+	primaryRegion := primaryBackupConfig.S3Region
+	// s3 prefix
+	primaryWalGS3Prefix := "s3://" + primaryBackupConfig.S3BucketName + "/" + primary.ToPeripheralResourceName()
+	// s3 server side encryption SSE is disabled, we use client side encryption
+	// see STANDBY_WALG_LIBSODIUM_KEY above
+	primaryWalgDisableSSE := "true"
+	// aws access key
+	primaryAwsAccessKeyID := primaryBackupConfig.S3AccessKey
+	// aws secret key
+	primaryAwsSecretAccessKey := primaryBackupConfig.S3SecretKey
+
+	// create updated content for pod environment configmap
+	// this is a bit confusing: those are used to bootstrap a remote standby, so they have to point to the primary!
+	standbyEnvs["STANDBY_AWS_ACCESS_KEY_ID"] = []byte(primaryAwsAccessKeyID)
+	standbyEnvs["STANDBY_AWS_SECRET_ACCESS_KEY"] = []byte(primaryAwsSecretAccessKey)
+	standbyEnvs["STANDBY_AWS_ENDPOINT"] = []byte(primaryAwsEndpoint)
+	standbyEnvs["STANDBY_AWS_S3_FORCE_PATH_STYLE"] = []byte("true")
+	standbyEnvs["STANDBY_AWS_REGION"] = []byte(primaryRegion)
+	standbyEnvs["STANDBY_AWS_WALG_S3_ENDPOINT"] = []byte(primaryWalES3Endpoint)
+	standbyEnvs["STANDBY_USE_WALG_BACKUP"] = []byte("true")
+	standbyEnvs["STANDBY_USE_WALG_RESTORE"] = []byte("true")
+	standbyEnvs["STANDBY_WALE_S3_ENDPOINT"] = []byte(primaryWalES3Endpoint)
+	standbyEnvs["STANDBY_WALG_DISABLE_S3_SSE"] = []byte(primaryWalgDisableSSE)
+	standbyEnvs["STANDBY_WALG_S3_ENDPOINT"] = []byte(primaryWalES3Endpoint)
+	standbyEnvs["STANDBY_WALG_S3_PREFIX"] = []byte(primaryWalGS3Prefix)
+	standbyEnvs["STANDBY_WALG_S3_SSE"] = []byte("")
+	standbyEnvs["STANDBY_WITH_WALG"] = []byte("true")
+
+	return standbyEnvs
 }
 
 func (r *PostgresReconciler) isManagedByUs(obj *pg.Postgres) bool {

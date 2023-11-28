@@ -858,6 +858,14 @@ func (p *Postgres) IsReplicationPrimary() bool {
 	return false
 }
 
+func (p *Postgres) IsReplicationTarget() bool {
+	if p.Spec.PostgresConnection != nil && p.Spec.PostgresConnection.ReplicationPrimary == false {
+		// sth is configured and we are not the leader
+		return true
+	}
+	return false
+}
+
 // enableAuditLogs configures this postgres instances audit logging
 func enableAuditLogs(parameters map[string]string) {
 	// default values: bg_mon,pg_stat_statements,pgextwlist,pg_auth_mon,set_user,timescaledb,pg_cron,pg_stat_kcache
