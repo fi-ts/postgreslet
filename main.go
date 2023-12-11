@@ -12,6 +12,7 @@ import (
 	"net"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/metal-stack/v"
 	coreosv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
@@ -36,6 +37,7 @@ import (
 
 const (
 	// envPrefix               = "pg"
+
 	metricsAddrSvcMgrFlg                  = "metrics-addr-svc-mgr"
 	metricsAddrCtrlMgrFlg                 = "metrics-addr-ctrl-mgr"
 	enableLeaderElectionFlg               = "enable-leader-election"
@@ -68,6 +70,7 @@ const (
 	etcdBackupSecretNameFlg               = "etcd-backup-secret-name" // nolint
 	etcdPSPNameFlg                        = "etcd-psp-name"
 	postgresletFullnameFlg                = "postgreslet-fullname"
+	replicationChangeRequeueTimeFlg       = "replication-change-requeue-time-in-seconds"
 	enableLBSourceRangesFlg               = "enable-lb-source-ranges"
 	enableRandomStorageEncrytionSecretFlg = "enable-random-storage-encryption-secret"
 	enableWalGEncryptionFlg               = "enable-walg-encryption"
@@ -127,8 +130,9 @@ func main() {
 		enableForceSharedIP                bool
 		enableBootstrapStandbyFromS3       bool
 
-		portRangeStart int
-		portRangeSize  int
+		portRangeStart                        int
+		portRangeSize                         int
+		replicationChangeRequeueTimeInSeconds int
 
 		patroniTTL          uint32
 		patroniLoopWait     uint32
@@ -250,6 +254,10 @@ func main() {
 	viper.SetDefault(postgresletFullnameFlg, partitionID) // fall back to partition id
 	postgresletFullname = viper.GetString(postgresletFullnameFlg)
 
+	viper.SetDefault(replicationChangeRequeueTimeFlg, 10)
+	replicationChangeRequeueTimeInSeconds = viper.GetInt(replicationChangeRequeueTimeFlg)
+	replicationChangeRequeueDuration := time.Duration(replicationChangeRequeueTimeInSeconds) * time.Second
+
 	viper.SetDefault(enableLBSourceRangesFlg, true)
 	enableLBSourceRanges = viper.GetBool(enableLBSourceRangesFlg)
 
@@ -302,6 +310,7 @@ func main() {
 		enableLBSourceRangesFlg, enableLBSourceRanges,
 		enableRandomStorageEncrytionSecretFlg, enableRandomStorageEncrytionSecret,
 		postgresletFullnameFlg, postgresletFullname,
+		replicationChangeRequeueTimeFlg, replicationChangeRequeueTimeInSeconds,
 		enableWalGEncryptionFlg, enableWalGEncryption,
 		enableForceSharedIPFlg, enableForceSharedIP,
 		enableBootstrapStandbyFromS3Flg, enableBootstrapStandbyFromS3,
@@ -409,6 +418,7 @@ func main() {
 		PatroniTTL:                          patroniTTL,
 		PatroniLoopWait:                     patroniLoopWait,
 		PatroniRetryTimeout:                 patroniRetryTimeout,
+		ReplicationChangeRequeueDuration:    replicationChangeRequeueDuration,
 		EnableRandomStorageEncryptionSecret: enableRandomStorageEncrytionSecret,
 		EnableWalGEncryption:                enableWalGEncryption,
 		PostgresletFullname:                 postgresletFullname,
