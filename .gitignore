@@ -24,7 +24,9 @@ bin
 *~
 
 # control-plane kubeconfig file
-*kubeconfig
+kubeconfig
+kubeconfig-ctrl
+kubeconfig-svc
 
 # helm files
 charts/postgreslet/Chart.lock
