@@ -16,7 +16,7 @@ BUILDDATE := $(shell date -Iseconds)
 VERSION := $(or ${DOCKER_TAG},latest)
 
 # Postgres operator variables for YAML download
-POSTGRES_OPERATOR_VERSION ?= v1.6.0
+POSTGRES_OPERATOR_VERSION ?= v1.10.1
 POSTGRES_OPERATOR_URL ?= https://raw.githubusercontent.com/zalando/postgres-operator/$(POSTGRES_OPERATOR_VERSION)/manifests
 POSTGRES_CRD_URL ?= https://raw.githubusercontent.com/zalando/postgres-operator/$(POSTGRES_OPERATOR_VERSION)/charts/postgres-operator/crds/postgresqls.yaml
 
