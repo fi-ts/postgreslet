@@ -834,6 +834,16 @@ func (p *Postgres) buildSidecars(c *corev1.ConfigMap) []zalando.Sidecar {
 		return nil
 	}
 
+	// Deal with dynamically assigned name
+	for i := range sidecars {
+		for j := range sidecars[i].Env {
+			if sidecars[i].Env[j].ValueFrom != nil && sidecars[i].Env[j].ValueFrom.SecretKeyRef != nil {
+				sidecars[i].Env[j].ValueFrom.SecretKeyRef.Name = "postgres." + p.ToPeripheralResourceName() + ".credentials"
+				break
+			}
+		}
+	}
+
 	return sidecars
 }
 
