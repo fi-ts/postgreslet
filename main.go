@@ -72,6 +72,7 @@ const (
 	enableRandomStorageEncrytionSecretFlg = "enable-random-storage-encryption-secret"
 	enableWalGEncryptionFlg               = "enable-walg-encryption"
 	enableForceSharedIPFlg                = "enable-force-shared-ip"
+	initjobCMNameFlg                      = "initjob-configmap-name"
 	enableBootstrapStandbyFromS3Flg       = "enable-bootsrtap-standby-from-s3"
 )
 
@@ -113,6 +114,7 @@ func main() {
 		etcdBackupSecretName    string
 		etcdPSPName             string
 		postgresletFullname     string
+		initjobCMName           string
 
 		enableLeaderElection               bool
 		enableCRDValidation                bool
@@ -262,6 +264,9 @@ func main() {
 	viper.SetDefault(enableForceSharedIPFlg, true) // TODO switch to false?
 	enableForceSharedIP = viper.GetBool(enableForceSharedIPFlg)
 
+	viper.SetDefault(initjobCMNameFlg, "postgreslet-postgres-initjob")
+	initjobCMName = viper.GetString(initjobCMNameFlg)
+
 	viper.SetDefault(enableBootstrapStandbyFromS3Flg, true)
 	enableBootstrapStandbyFromS3 = viper.GetBool(enableBootstrapStandbyFromS3Flg)
 
@@ -304,6 +309,7 @@ func main() {
 		postgresletFullnameFlg, postgresletFullname,
 		enableWalGEncryptionFlg, enableWalGEncryption,
 		enableForceSharedIPFlg, enableForceSharedIP,
+		initjobCMNameFlg, initjobCMName,
 		enableBootstrapStandbyFromS3Flg, enableBootstrapStandbyFromS3,
 	)
 
@@ -412,6 +418,8 @@ func main() {
 		EnableRandomStorageEncryptionSecret: enableRandomStorageEncrytionSecret,
 		EnableWalGEncryption:                enableWalGEncryption,
 		PostgresletFullname:                 postgresletFullname,
+		PostgresImage:                       postgresImage,
+		InitjobConfigMapName:                initjobCMName,
 		EnableBootstrapStandbyFromS3:        enableBootstrapStandbyFromS3,
 	}).SetupWithManager(ctrlPlaneClusterMgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Postgres")
