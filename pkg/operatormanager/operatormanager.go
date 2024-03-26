@@ -51,9 +51,6 @@ const (
 	SidecarsCMExporterQueriesKey string = "queries.yaml"
 
 	localSidecarsCMName = "postgres-sidecars-configmap"
-
-	PostresConfigSuperUsername        = "postgres"
-	PostgresConfigReplicationUsername = "standby"
 )
 
 // operatorPodMatchingLabels is for listing operator pods
@@ -426,8 +423,8 @@ func (m *OperatorManager) editConfigMap(cm *corev1.ConfigMap, namespace string, 
 	cm.Data["major_version_upgrade_mode"] = options.MajorVersionUpgradeMode
 
 	// we specifically refer to those two users in the cloud-api, so we hardcode them here as well to be on the safe side.
-	cm.Data["super_username"] = PostresConfigSuperUsername
-	cm.Data["replication_username"] = PostgresConfigReplicationUsername
+	cm.Data["super_username"] = pg.PostresConfigSuperUsername
+	cm.Data["replication_username"] = pg.PostgresConfigReplicationUsername
 
 	cm.Data["enable_pod_antiaffinity"] = strconv.FormatBool(options.PodAntiaffinity)
 }

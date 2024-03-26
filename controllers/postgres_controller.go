@@ -870,7 +870,7 @@ func (r *PostgresReconciler) ensureStandbySecrets(ctx context.Context, instance 
 	}
 
 	// Check if secrets exist local in SERVICE Cluster
-	localStandbySecretName := operatormanager.PostgresConfigReplicationUsername + "." + instance.ToPeripheralResourceName() + ".credentials"
+	localStandbySecretName := pg.PostgresConfigReplicationUsername + "." + instance.ToPeripheralResourceName() + ".credentials"
 	localSecretNamespace := instance.ToPeripheralResourceNamespace()
 	localStandbySecret := &corev1.Secret{}
 	r.Log.Info("checking for local standby secret", "namespace", localSecretNamespace, "name", localStandbySecretName)
@@ -908,7 +908,7 @@ func (r *PostgresReconciler) ensureCloneSecrets(ctx context.Context, instance *p
 	}
 
 	// Check if secrets exist local in SERVICE Cluster
-	localStandbySecretName := operatormanager.PostresConfigSuperUsername + "." + instance.ToPeripheralResourceName() + ".credentials"
+	localStandbySecretName := pg.PostresConfigSuperUsername + "." + instance.ToPeripheralResourceName() + ".credentials"
 	localSecretNamespace := instance.ToPeripheralResourceNamespace()
 	localStandbySecret := &corev1.Secret{}
 	r.Log.Info("checking for local postgres secret", "namespace", localSecretNamespace, "name", localStandbySecretName)
@@ -947,7 +947,7 @@ func (r *PostgresReconciler) copySecrets(ctx context.Context, sourceSecret types
 	// copy all but the standby secrets...
 	for username := range remoteSecret.Data {
 		// check if we skip the standby user (e.g. to prevent old standby intances from connecting once a clone took over its sources ip/port)
-		if ignoreStandbyUser && username == operatormanager.PostgresConfigReplicationUsername {
+		if ignoreStandbyUser && username == pg.PostgresConfigReplicationUsername {
 			continue
 		}
 
