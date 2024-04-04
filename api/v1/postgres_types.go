@@ -83,6 +83,7 @@ const (
 	defaultPostgresParamValueSSLCiphers             = "ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384"
 	defaultPostgresParamValueWalKeepSegements       = "64"
 	defaultPostgresParamValueWalKeepSize            = "1GB"
+	defaultPostgresParamValuePGStatStatementsMax    = "500"
 
 	// PostgresAutoAssignedIPNamePrefix a prefix to add to the generated random name
 	PostgresAutoAssignedIPNamePrefix = "pgaas-autoassign-"
@@ -902,6 +903,7 @@ func setDefaultPostgresParams(parameters map[string]string, version string) {
 		parameters["wal_keep_segments"] = defaultPostgresParamValueWalKeepSegements
 	}
 
+	parameters["pg_stat_statements.max"] = defaultPostgresParamValuePGStatStatementsMax
 }
 
 // setPostgresParams add the provided params to the parameter map (but ignore params that are blocked)
