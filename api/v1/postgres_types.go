@@ -83,6 +83,7 @@ const (
 	defaultPostgresParamValueSSLCiphers             = "ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384"
 	defaultPostgresParamValueWalKeepSegements       = "64"
 	defaultPostgresParamValueWalKeepSize            = "1GB"
+	defaultPostgresParamValuePGStatStatementsMax    = "500"
 
 	// PostgresAutoAssignedIPNamePrefix a prefix to add to the generated random name
 	PostgresAutoAssignedIPNamePrefix = "pgaas-autoassign-"
@@ -606,7 +607,7 @@ func (p *Postgres) ToPeripheralResourceLookupKey() types.NamespacedName {
 	}
 }
 
-func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *corev1.ConfigMap, sc string, pgParamBlockList map[string]bool, rbs *BackupConfig, srcDB *Postgres, patroniTTL, patroniLoopWait, patroniRetryTimeout uint32) (*unstructured.Unstructured, error) {
+func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *corev1.ConfigMap, sc string, pgParamBlockList map[string]bool, rbs *BackupConfig, srcDB *Postgres, patroniTTL, patroniLoopWait, patroniRetryTimeout uint32, dboIsSuperuser bool) (*unstructured.Unstructured, error) {
 	if z == nil {
 		z = &zalando.Postgresql{}
 	}
@@ -661,6 +662,9 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 	// Create database owner
 	z.Spec.Users = make(map[string]zalando.UserFlags)
 	z.Spec.Users[ownerName] = zalando.UserFlags{"createdb", "createrole"}
+	if dboIsSuperuser {
+		z.Spec.Users[ownerName] = zalando.UserFlags{"createdb", "createrole", "superuser"}
+	}
 	// Add auditor user
 	z.Spec.Users[PostgresConfigAuditorUsername] = zalando.UserFlags{"nologin"}
 	// Add monitoring user
@@ -886,7 +890,7 @@ func (p *Postgres) IsReplicationTarget() bool {
 // enableAuditLogs configures this postgres instances audit logging
 func enableAuditLogs(parameters map[string]string) {
 	// default values: bg_mon,pg_stat_statements,pgextwlist,pg_auth_mon,set_user,timescaledb,pg_cron,pg_stat_kcache
-	parameters["shared_preload_libraries"] = "bg_mon,pg_stat_statements,pgextwlist,pg_auth_mon,set_user,timescaledb,pg_cron,pg_stat_kcache,pgaudit"
+	parameters["shared_preload_libraries"] = "pg_stat_statements,pgextwlist,pg_auth_mon,set_user,timescaledb,pg_cron,pg_stat_kcache,pgaudit"
 	parameters["pgaudit.log_catalog"] = "off"
 	parameters["pgaudit.log"] = "ddl"
 	parameters["pgaudit.log_relation"] = "on"
@@ -919,6 +923,7 @@ func setDefaultPostgresParams(parameters map[string]string, version string) {
 		parameters["wal_keep_segments"] = defaultPostgresParamValueWalKeepSegements
 	}
 
+	parameters["pg_stat_statements.max"] = defaultPostgresParamValuePGStatStatementsMax
 }
 
 // setPostgresParams add the provided params to the parameter map (but ignore params that are blocked)

@@ -74,6 +74,7 @@ const (
 	enableForceSharedIPFlg                = "enable-force-shared-ip"
 	initDBJobCMNameFlg                    = "initdb-job-configmap-name"
 	enableBootstrapStandbyFromS3Flg       = "enable-bootsrtap-standby-from-s3"
+	enableSuperUserForDBOFlg              = "enable-superuser-for-dbo"
 )
 
 var (
@@ -128,6 +129,7 @@ func main() {
 		enableWalGEncryption               bool
 		enableForceSharedIP                bool
 		enableBootstrapStandbyFromS3       bool
+		enableSuperUserForDBO              bool
 
 		portRangeStart int
 		portRangeSize  int
@@ -270,6 +272,9 @@ func main() {
 	viper.SetDefault(enableBootstrapStandbyFromS3Flg, true)
 	enableBootstrapStandbyFromS3 = viper.GetBool(enableBootstrapStandbyFromS3Flg)
 
+	viper.SetDefault(enableSuperUserForDBOFlg, false)
+	enableSuperUserForDBO = viper.GetBool(enableSuperUserForDBOFlg)
+
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 
 	ctrl.Log.Info("flag",
@@ -311,6 +316,7 @@ func main() {
 		enableForceSharedIPFlg, enableForceSharedIP,
 		initDBJobCMNameFlg, initDBJobCMName,
 		enableBootstrapStandbyFromS3Flg, enableBootstrapStandbyFromS3,
+		enableSuperUserForDBOFlg, enableSuperUserForDBO,
 	)
 
 	svcClusterConf := ctrl.GetConfigOrDie()
@@ -421,6 +427,7 @@ func main() {
 		PostgresImage:                       postgresImage,
 		InitDBJobConfigMapName:              initDBJobCMName,
 		EnableBootstrapStandbyFromS3:        enableBootstrapStandbyFromS3,
+		EnableSuperUserForDBO:               enableSuperUserForDBO,
 	}).SetupWithManager(ctrlPlaneClusterMgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Postgres")
 		os.Exit(1)
