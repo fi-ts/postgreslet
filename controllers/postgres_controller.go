@@ -89,7 +89,7 @@ type PostgresReconciler struct {
 	EnableWalGEncryption                bool
 	PostgresletFullname                 string
 	PostgresImage                       string
-	InitjobConfigMapName                string
+	InitDBJobConfigMapName              string
 	EnableBootstrapStandbyFromS3        bool
 }
 
@@ -1588,7 +1588,7 @@ func (r *PostgresReconciler) ensureInitDBJob(ctx context.Context, instance *pg.P
 			// try to fetch the global initjjob configmap
 			cns := types.NamespacedName{
 				Namespace: r.PostgresletNamespace,
-				Name:      r.InitjobConfigMapName,
+				Name:      r.InitDBJobConfigMapName,
 			}
 			globalInitjobCM := &corev1.ConfigMap{}
 			if err := r.SvcClient.Get(ctx, cns, globalInitjobCM); err == nil {
