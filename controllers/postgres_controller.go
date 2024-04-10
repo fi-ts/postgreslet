@@ -22,6 +22,7 @@ import (
 
 	"github.com/go-logr/logr"
 	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/utils/pointer"
@@ -56,6 +57,8 @@ const (
 	storageEncryptionKeyFinalizerName              string = "postgres.database.fits.cloud/secret-finalizer"
 	walGEncryptionSecretNamePostfix                string = "-walg-encryption"
 	walGEncryptionSecretKeyName                    string = "key"
+	initDBName                                     string = "postgres-initdb"
+	initDBSQLDummy                                 string = `SELECT 'NOOP';`
 )
 
 // requeue defines in how many seconds a requeue should happen
@@ -85,6 +88,8 @@ type PostgresReconciler struct {
 	EnableRandomStorageEncryptionSecret bool
 	EnableWalGEncryption                bool
 	PostgresletFullname                 string
+	PostgresImage                       string
+	InitDBJobConfigMapName              string
 	EnableBootstrapStandbyFromS3        bool
 	EnableSuperUserForDBO               bool
 }
@@ -284,6 +289,11 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	if err := r.createOrUpdateZalandoPostgresql(ctx, instance, log, globalSidecarsCM, r.PatroniTTL, r.PatroniLoopWait, r.PatroniRetryTimeout); err != nil {
 		r.recorder.Eventf(instance, "Warning", "Error", "failed to create Zalando resource: %v", err)
 		return ctrl.Result{}, fmt.Errorf("failed to create or update zalando postgresql: %w", err)
+	}
+
+	if err := r.ensureInitDBJob(ctx, instance); err != nil {
+		r.recorder.Eventf(instance, "Warning", "Error", "failed to create initDB job resource: %v", err)
+		return ctrl.Result{}, fmt.Errorf("failed to create or update initdb job: %w", err)
 	}
 
 	if err := r.LBManager.ReconcileSvcLBs(ctx, instance); err != nil {
@@ -861,7 +871,7 @@ func (r *PostgresReconciler) ensureStandbySecrets(ctx context.Context, instance 
 	}
 
 	// Check if secrets exist local in SERVICE Cluster
-	localStandbySecretName := operatormanager.PostgresConfigReplicationUsername + "." + instance.ToPeripheralResourceName() + ".credentials"
+	localStandbySecretName := pg.PostgresConfigReplicationUsername + "." + instance.ToPeripheralResourceName() + ".credentials"
 	localSecretNamespace := instance.ToPeripheralResourceNamespace()
 	localStandbySecret := &corev1.Secret{}
 	r.Log.Info("checking for local standby secret", "namespace", localSecretNamespace, "name", localStandbySecretName)
@@ -899,7 +909,7 @@ func (r *PostgresReconciler) ensureCloneSecrets(ctx context.Context, instance *p
 	}
 
 	// Check if secrets exist local in SERVICE Cluster
-	localStandbySecretName := operatormanager.PostresConfigSuperUsername + "." + instance.ToPeripheralResourceName() + ".credentials"
+	localStandbySecretName := pg.PostresConfigSuperUsername + "." + instance.ToPeripheralResourceName() + ".credentials"
 	localSecretNamespace := instance.ToPeripheralResourceNamespace()
 	localStandbySecret := &corev1.Secret{}
 	r.Log.Info("checking for local postgres secret", "namespace", localSecretNamespace, "name", localStandbySecretName)
@@ -938,7 +948,7 @@ func (r *PostgresReconciler) copySecrets(ctx context.Context, sourceSecret types
 	// copy all but the standby secrets...
 	for username := range remoteSecret.Data {
 		// check if we skip the standby user (e.g. to prevent old standby intances from connecting once a clone took over its sources ip/port)
-		if ignoreStandbyUser && username == operatormanager.PostgresConfigReplicationUsername {
+		if ignoreStandbyUser && username == pg.PostgresConfigReplicationUsername {
 			continue
 		}
 
@@ -1555,4 +1565,131 @@ func removeElem(ss []string, s string) (out []string) {
 		out = append(out, elem)
 	}
 	return
+}
+
+func (r *PostgresReconciler) ensureInitDBJob(ctx context.Context, instance *pg.Postgres) error {
+	ns := types.NamespacedName{
+		Namespace: instance.ToPeripheralResourceNamespace(),
+		Name:      initDBName,
+	}
+	cm := &corev1.ConfigMap{}
+	if err := r.SvcClient.Get(ctx, ns, cm); err == nil {
+		// configmap already exists, nothing to do here
+		r.Log.Info("initdb ConfigMap already exists")
+		// return nil // TODO return or update?
+	} else {
+		cm.Name = ns.Name
+		cm.Namespace = ns.Namespace
+		cm.Data = map[string]string{}
+
+		// only execute SQL when encountering a **new** database, not for standbies or clones
+		if instance.Spec.PostgresConnection == nil && instance.Spec.PostgresRestore == nil {
+			// TODO fetch central init job and copy its contents
+
+			// try to fetch the global initjjob configmap
+			cns := types.NamespacedName{
+				Namespace: r.PostgresletNamespace,
+				Name:      r.InitDBJobConfigMapName,
+			}
+			globalInitjobCM := &corev1.ConfigMap{}
+			if err := r.SvcClient.Get(ctx, cns, globalInitjobCM); err == nil {
+				cm.Data = globalInitjobCM.Data
+			} else {
+				r.Log.Error(err, "global initdb ConfigMap could not be loaded, using dummy data")
+				// fall back to dummy data
+				cm.Data["initdb.sql"] = initDBSQLDummy
+			}
+
+		} else {
+			// use dummy job for standbies and clones
+			cm.Data["initdb.sql"] = initDBSQLDummy
+		}
+
+		if err := r.SvcClient.Create(ctx, cm); err != nil {
+			return fmt.Errorf("error while creating the new initdb ConfigMap: %w", err)
+		}
+
+		r.Log.Info("new initdb ConfigMap created")
+	}
+
+	j := &batchv1.Job{}
+
+	if err := r.SvcClient.Get(ctx, ns, j); err == nil {
+		// job already exists, nothing to do here
+		r.Log.Info("initdb Job already exists")
+		return nil // TODO return or update?
+	}
+
+	j.Name = ns.Name
+	j.Namespace = ns.Namespace
+
+	var backOffLimit int32 = 99
+	j.Spec = batchv1.JobSpec{
+		Template: corev1.PodTemplateSpec{
+			Spec: corev1.PodSpec{
+				Containers: []corev1.Container{
+					{
+						Name:    "psql",
+						Image:   r.PostgresImage,
+						Command: []string{"sh", "-c", "echo ${PGPASSWORD_SUPERUSER} | psql --host=${SCOPE} --port=5432 --username=${PGUSER_SUPERUSER} --file=/initdb.d/initdb.sql"},
+						Env: []corev1.EnvVar{
+							{
+								Name:  "PGUSER_SUPERUSER",
+								Value: "postgres",
+							},
+							{
+								Name: "PGPASSWORD_SUPERUSER",
+								ValueFrom: &corev1.EnvVarSource{
+									SecretKeyRef: &corev1.SecretKeySelector{
+										Key: "password",
+										LocalObjectReference: corev1.LocalObjectReference{
+											Name: "postgres." + instance.ToPeripheralResourceName() + ".credentials",
+										},
+									},
+								},
+							},
+							{
+								Name:  "SCOPE",
+								Value: instance.ToPeripheralResourceName(),
+							},
+						},
+						SecurityContext: &corev1.SecurityContext{
+							AllowPrivilegeEscalation: pointer.Bool(false),
+							Privileged:               pointer.Bool(false),
+							ReadOnlyRootFilesystem:   pointer.Bool(true),
+							RunAsUser:                pointer.Int64(101),
+							RunAsGroup:               pointer.Int64(101),
+						},
+						VolumeMounts: []corev1.VolumeMount{
+							{
+								Name:      initDBName + "-volume",
+								MountPath: "/initdb.d",
+							},
+						},
+					},
+				},
+				RestartPolicy: corev1.RestartPolicyNever,
+				Volumes: []corev1.Volume{
+					{
+						Name: initDBName + "-volume",
+						VolumeSource: corev1.VolumeSource{
+							ConfigMap: &corev1.ConfigMapVolumeSource{
+								LocalObjectReference: corev1.LocalObjectReference{
+									Name: initDBName,
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		BackoffLimit:            &backOffLimit,
+		TTLSecondsAfterFinished: pointer.Int32(180),
+	}
+
+	if err := r.SvcClient.Create(ctx, j); err != nil {
+		return fmt.Errorf("error while creating the new initdb Job: %w", err)
+	}
+
+	return nil
 }

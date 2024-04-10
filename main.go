@@ -72,6 +72,7 @@ const (
 	enableRandomStorageEncrytionSecretFlg = "enable-random-storage-encryption-secret"
 	enableWalGEncryptionFlg               = "enable-walg-encryption"
 	enableForceSharedIPFlg                = "enable-force-shared-ip"
+	initDBJobCMNameFlg                    = "initdb-job-configmap-name"
 	enableBootstrapStandbyFromS3Flg       = "enable-bootsrtap-standby-from-s3"
 	enableSuperUserForDBOFlg              = "enable-superuser-for-dbo"
 )
@@ -114,6 +115,7 @@ func main() {
 		etcdBackupSecretName    string
 		etcdPSPName             string
 		postgresletFullname     string
+		initDBJobCMName         string
 
 		enableLeaderElection               bool
 		enableCRDValidation                bool
@@ -264,6 +266,9 @@ func main() {
 	viper.SetDefault(enableForceSharedIPFlg, true) // TODO switch to false?
 	enableForceSharedIP = viper.GetBool(enableForceSharedIPFlg)
 
+	viper.SetDefault(initDBJobCMNameFlg, "postgreslet-postgres-initdbjob")
+	initDBJobCMName = viper.GetString(initDBJobCMNameFlg)
+
 	viper.SetDefault(enableBootstrapStandbyFromS3Flg, true)
 	enableBootstrapStandbyFromS3 = viper.GetBool(enableBootstrapStandbyFromS3Flg)
 
@@ -309,6 +314,7 @@ func main() {
 		postgresletFullnameFlg, postgresletFullname,
 		enableWalGEncryptionFlg, enableWalGEncryption,
 		enableForceSharedIPFlg, enableForceSharedIP,
+		initDBJobCMNameFlg, initDBJobCMName,
 		enableBootstrapStandbyFromS3Flg, enableBootstrapStandbyFromS3,
 		enableSuperUserForDBOFlg, enableSuperUserForDBO,
 	)
@@ -418,6 +424,8 @@ func main() {
 		EnableRandomStorageEncryptionSecret: enableRandomStorageEncrytionSecret,
 		EnableWalGEncryption:                enableWalGEncryption,
 		PostgresletFullname:                 postgresletFullname,
+		PostgresImage:                       postgresImage,
+		InitDBJobConfigMapName:              initDBJobCMName,
 		EnableBootstrapStandbyFromS3:        enableBootstrapStandbyFromS3,
 		EnableSuperUserForDBO:               enableSuperUserForDBO,
 	}).SetupWithManager(ctrlPlaneClusterMgr); err != nil {

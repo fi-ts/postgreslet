@@ -91,6 +91,11 @@ const (
 	PostgresAutoAssignedIPLabelKey = "postgres.database.fits.cloud/auto-assigned-ip"
 	// PostgresAutoAssignedIPLabel tag to identify ips auto-assigned for a postgres
 	PostgresAutoAssignedIPLabel = PostgresAutoAssignedIPLabelKey + "=true"
+
+	PostresConfigSuperUsername        = "postgres"
+	PostgresConfigReplicationUsername = "standby"
+	PostgresConfigAuditorUsername     = "auditor"
+	PostgresConfigMonitoringUsername  = "monitoring"
 )
 
 var (
@@ -661,7 +666,9 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 		z.Spec.Users[ownerName] = zalando.UserFlags{"createdb", "createrole", "superuser"}
 	}
 	// Add auditor user
-	z.Spec.Users["auditor"] = zalando.UserFlags{"nologin"}
+	z.Spec.Users[PostgresConfigAuditorUsername] = zalando.UserFlags{"nologin"}
+	// Add monitoring user
+	z.Spec.Users[PostgresConfigMonitoringUsername] = zalando.UserFlags{"login"}
 
 	// Create default database
 	z.Spec.Databases = make(map[string]string)
@@ -834,6 +841,16 @@ func (p *Postgres) buildSidecars(c *corev1.ConfigMap) []zalando.Sidecar {
 	sidecars := []zalando.Sidecar{}
 	if err := yaml.Unmarshal([]byte(c.Data["sidecars"]), &sidecars); err != nil {
 		return nil
+	}
+
+	// Deal with dynamically assigned name
+	for i := range sidecars {
+		for j := range sidecars[i].Env {
+			if sidecars[i].Env[j].ValueFrom != nil && sidecars[i].Env[j].ValueFrom.SecretKeyRef != nil {
+				sidecars[i].Env[j].ValueFrom.SecretKeyRef.Name = PostgresConfigMonitoringUsername + "." + p.ToPeripheralResourceName() + ".credentials"
+				break
+			}
+		}
 	}
 
 	return sidecars
