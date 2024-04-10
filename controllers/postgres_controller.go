@@ -1683,7 +1683,8 @@ func (r *PostgresReconciler) ensureInitDBJob(ctx context.Context, instance *pg.P
 				},
 			},
 		},
-		BackoffLimit: &backOffLimit,
+		BackoffLimit:            &backOffLimit,
+		TTLSecondsAfterFinished: pointer.Int32(180),
 	}
 
 	if err := r.SvcClient.Create(ctx, j); err != nil {
