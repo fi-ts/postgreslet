@@ -851,6 +851,11 @@ func (r *PostgresReconciler) ensurePostgresSecrets(ctx context.Context, instance
 		return err
 	}
 
+	// Making sure the secret for the monitoring user, which was added later on, is copied after the fact.
+	if err := r.ensureStandbyMonitoringSecrets(ctx, instance); err != nil {
+		return err
+	}
+
 	if err := r.ensureCloneSecrets(ctx, instance); err != nil {
 		return err
 	}
@@ -888,6 +893,44 @@ func (r *PostgresReconciler) ensureStandbySecrets(ctx context.Context, instance 
 	}
 
 	r.Log.Info("no local standby secret found, continuing to create one")
+
+	remoteSecretNamespacedName := types.NamespacedName{
+		Namespace: instance.ObjectMeta.Namespace,
+		Name:      instance.Spec.PostgresConnection.ConnectionSecretName,
+	}
+	return r.copySecrets(ctx, remoteSecretNamespacedName, instance, false)
+
+}
+
+func (r *PostgresReconciler) ensureStandbyMonitoringSecrets(ctx context.Context, instance *pg.Postgres) error {
+	if instance.IsReplicationPrimary() {
+		// nothing is configured, or we are the leader. nothing to do.
+		return nil
+	}
+
+	//  Check if instance.Spec.PostgresConnectionInfo.ConnectionSecretName is defined
+	if instance.Spec.PostgresConnection.ConnectionSecretName == "" {
+		return errors.New("connectionInfo.secretName not configured")
+	}
+
+	// Check if secrets exist local in SERVICE Cluster
+	localStandbySecretName := pg.PostgresConfigMonitoringUsername + "." + instance.ToPeripheralResourceName() + ".credentials"
+	localSecretNamespace := instance.ToPeripheralResourceNamespace()
+	localStandbySecret := &corev1.Secret{}
+	r.Log.Info("checking for local monitoring secret", "namespace", localSecretNamespace, "name", localStandbySecretName)
+	err := r.SvcClient.Get(ctx, types.NamespacedName{Namespace: localSecretNamespace, Name: localStandbySecretName}, localStandbySecret)
+
+	if err == nil {
+		r.Log.Info("local monitoring secret found, no action needed")
+		return nil
+	}
+
+	// we got an error other than not found, so we cannot continue!
+	if !apierrors.IsNotFound(err) {
+		return fmt.Errorf("error while fetching local monitoring secret from service cluster: %w", err)
+	}
+
+	r.Log.Info("no local monitoring secret found, continuing to create one")
 
 	remoteSecretNamespacedName := types.NamespacedName{
 		Namespace: instance.ObjectMeta.Namespace,
