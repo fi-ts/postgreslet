@@ -914,11 +914,11 @@ func (r *PostgresReconciler) ensureStandbyMonitoringSecrets(ctx context.Context,
 	}
 
 	// Check if secrets exist local in SERVICE Cluster
-	localStandbySecretName := pg.PostgresConfigMonitoringUsername + "." + instance.ToPeripheralResourceName() + ".credentials"
+	localMonitoringSecretName := pg.PostgresConfigMonitoringUsername + "." + instance.ToPeripheralResourceName() + ".credentials"
 	localSecretNamespace := instance.ToPeripheralResourceNamespace()
 	localStandbySecret := &corev1.Secret{}
-	r.Log.Info("checking for local monitoring secret", "namespace", localSecretNamespace, "name", localStandbySecretName)
-	err := r.SvcClient.Get(ctx, types.NamespacedName{Namespace: localSecretNamespace, Name: localStandbySecretName}, localStandbySecret)
+	r.Log.Info("checking for local monitoring secret", "namespace", localSecretNamespace, "name", localMonitoringSecretName)
+	err := r.SvcClient.Get(ctx, types.NamespacedName{Namespace: localSecretNamespace, Name: localMonitoringSecretName}, localStandbySecret)
 
 	if err == nil {
 		r.Log.Info("local monitoring secret found, no action needed")
