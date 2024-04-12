@@ -981,11 +981,10 @@ func (r *PostgresReconciler) copySecrets(ctx context.Context, sourceSecret types
 
 		if err := r.SvcClient.Create(ctx, postgresSecret); err != nil {
 			if apierrors.IsAlreadyExists(err) {
-				r.Log.Info("local postgres secret already exists", "name", currentSecretName)
+				r.Log.Info("local postgres secret already exists, skipping", "name", currentSecretName)
 				continue
-			} else {
-				return fmt.Errorf("error while creating local secrets in service cluster: %w", err)
 			}
+			return fmt.Errorf("error while creating local secrets in service cluster: %w", err)
 		}
 	}
 
