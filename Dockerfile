@@ -1,4 +1,4 @@
-ARG baseImage="golang:1.20"
+ARG baseImage="golang:1.22"
 # Build the manager binary
 FROM ${baseImage} as builder
 
@@ -18,7 +18,7 @@ RUN make
 
 # Start obj-cache
 # https://medium.com/windmill-engineering/tips-tricks-for-making-your-golang-container-builds-10x-faster-4cc618a43827
-FROM golang:1.20 as obj-cache
+FROM golang:1.22 as obj-cache
 COPY --from=builder /root/.cache /root/.cache
 
 # Use distroless as minimal base image to package the manager binary
