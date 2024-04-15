@@ -1671,6 +1671,10 @@ func (r *PostgresReconciler) ensureInitDBJob(ctx context.Context, instance *pg.P
 								"cpu":    resource.MustParse("500m"),
 								"memory": resource.MustParse("500M"),
 							},
+							Requests: corev1.ResourceList{
+								"cpu":    resource.MustParse("500m"),
+								"memory": resource.MustParse("500M"),
+							},
 						},
 					},
 				},
