@@ -1666,6 +1666,12 @@ func (r *PostgresReconciler) ensureInitDBJob(ctx context.Context, instance *pg.P
 								MountPath: "/initdb.d",
 							},
 						},
+						Resources: corev1.ResourceRequirements{
+							Limits: corev1.ResourceList{
+								"cpu":    resource.MustParse("500m"),
+								"memory": resource.MustParse("500M"),
+							},
+						},
 					},
 				},
 				RestartPolicy: corev1.RestartPolicyNever,
