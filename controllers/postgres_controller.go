@@ -1592,42 +1592,44 @@ func (r *PostgresReconciler) ensureInitDBJob(ctx context.Context, instance *pg.P
 	if err := r.SvcClient.Get(ctx, ns, cm); err == nil {
 		// configmap already exists, nothing to do here
 		r.Log.Info("initdb ConfigMap already exists")
-		// return nil // TODO return or update?
-	} else {
-		cm.Name = ns.Name
-		cm.Namespace = ns.Namespace
-		cm.Data = map[string]string{}
+		return nil // TODO return or update?
+	}
 
-		// only execute SQL when encountering a **new** database, not for standbies or clones
-		if instance.Spec.PostgresConnection == nil && instance.Spec.PostgresRestore == nil {
-			// TODO fetch central init job and copy its contents
+	// create initDB configmap
+	cm.Name = ns.Name
+	cm.Namespace = ns.Namespace
+	cm.Data = map[string]string{}
 
-			// try to fetch the global initjjob configmap
-			cns := types.NamespacedName{
-				Namespace: r.PostgresletNamespace,
-				Name:      r.InitDBJobConfigMapName,
-			}
-			globalInitjobCM := &corev1.ConfigMap{}
-			if err := r.SvcClient.Get(ctx, cns, globalInitjobCM); err == nil {
-				cm.Data = globalInitjobCM.Data
-			} else {
-				r.Log.Error(err, "global initdb ConfigMap could not be loaded, using dummy data")
-				// fall back to dummy data
-				cm.Data["initdb.sql"] = initDBSQLDummy
-			}
+	// only execute SQL when encountering a **new** database, not for standbies or clones
+	if instance.Spec.PostgresConnection == nil && instance.Spec.PostgresRestore == nil {
+		// TODO fetch central init job and copy its contents
 
+		// try to fetch the global initjjob configmap
+		cns := types.NamespacedName{
+			Namespace: r.PostgresletNamespace,
+			Name:      r.InitDBJobConfigMapName,
+		}
+		globalInitjobCM := &corev1.ConfigMap{}
+		if err := r.SvcClient.Get(ctx, cns, globalInitjobCM); err == nil {
+			cm.Data = globalInitjobCM.Data
 		} else {
-			// use dummy job for standbies and clones
+			r.Log.Error(err, "global initdb ConfigMap could not be loaded, using dummy data")
+			// fall back to dummy data
 			cm.Data["initdb.sql"] = initDBSQLDummy
 		}
 
-		if err := r.SvcClient.Create(ctx, cm); err != nil {
-			return fmt.Errorf("error while creating the new initdb ConfigMap: %w", err)
-		}
-
-		r.Log.Info("new initdb ConfigMap created")
+	} else {
+		// use dummy job for standbies and clones
+		cm.Data["initdb.sql"] = initDBSQLDummy
 	}
 
+	if err := r.SvcClient.Create(ctx, cm); err != nil {
+		return fmt.Errorf("error while creating the new initdb ConfigMap: %w", err)
+	}
+
+	r.Log.Info("new initdb ConfigMap created")
+
+	// create initDB job
 	j := &batchv1.Job{}
 
 	if err := r.SvcClient.Get(ctx, ns, j); err == nil {
