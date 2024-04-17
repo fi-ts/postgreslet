@@ -1601,7 +1601,7 @@ func (r *PostgresReconciler) ensureInitDBJob(ctx context.Context, instance *pg.P
 	cm.Data = map[string]string{}
 
 	// only execute SQL when encountering a **new** database, not for standbies or clones
-	if instance.Spec.PostgresConnection == nil && instance.Spec.PostgresRestore == nil {
+	if instance.IsReplicationPrimary() && instance.Spec.PostgresRestore == nil {
 		// try to fetch the global initjjob configmap
 		cns := types.NamespacedName{
 			Namespace: r.PostgresletNamespace,
@@ -1625,7 +1625,7 @@ func (r *PostgresReconciler) ensureInitDBJob(ctx context.Context, instance *pg.P
 	}
 	r.Log.Info("new initdb ConfigMap created")
 
-	if instance.Spec.PostgresConnection != nil || instance.Spec.PostgresRestore != nil {
+	if instance.IsReplicationTarget() || instance.Spec.PostgresRestore != nil {
 		r.Log.Info("initdb job not required")
 		return nil
 	}
