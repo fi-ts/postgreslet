@@ -1592,7 +1592,7 @@ func (r *PostgresReconciler) ensureInitDBJob(ctx context.Context, instance *pg.P
 	if err := r.SvcClient.Get(ctx, ns, cm); err == nil {
 		// configmap already exists, nothing to do here
 		r.Log.Info("initdb ConfigMap already exists")
-		return nil
+		return nil // TODO return or update?
 	}
 
 	// create initDB configmap
@@ -1600,10 +1600,10 @@ func (r *PostgresReconciler) ensureInitDBJob(ctx context.Context, instance *pg.P
 	cm.Namespace = ns.Namespace
 	cm.Data = map[string]string{}
 
-	var fullInitJobRequired bool = instance.Spec.PostgresConnection == nil && instance.Spec.PostgresRestore == nil
-
 	// only execute SQL when encountering a **new** database, not for standbies or clones
-	if fullInitJobRequired {
+	if instance.Spec.PostgresConnection == nil && instance.Spec.PostgresRestore == nil {
+		// TODO fetch central init job and copy its contents
+
 		// try to fetch the global initjjob configmap
 		cns := types.NamespacedName{
 			Namespace: r.PostgresletNamespace,
@@ -1628,11 +1628,6 @@ func (r *PostgresReconciler) ensureInitDBJob(ctx context.Context, instance *pg.P
 	}
 
 	r.Log.Info("new initdb ConfigMap created")
-
-	if !fullInitJobRequired {
-		r.Log.Info("initdb job not required")
-		return nil
-	}
 
 	// create initDB job
 	j := &batchv1.Job{}
