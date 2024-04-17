@@ -1592,7 +1592,7 @@ func (r *PostgresReconciler) ensureInitDBJob(ctx context.Context, instance *pg.P
 	if err := r.SvcClient.Get(ctx, ns, cm); err == nil {
 		// configmap already exists, nothing to do here
 		r.Log.Info("initdb ConfigMap already exists")
-		return nil // TODO return or update?
+		return nil
 	}
 
 	// create initDB configmap
@@ -1628,6 +1628,11 @@ func (r *PostgresReconciler) ensureInitDBJob(ctx context.Context, instance *pg.P
 	}
 
 	r.Log.Info("new initdb ConfigMap created")
+
+	if instance.Spec.PostgresConnection != nil || instance.Spec.PostgresRestore != nil {
+		r.Log.Info("initdb job not required")
+		return nil
+	}
 
 	// create initDB job
 	j := &batchv1.Job{}
