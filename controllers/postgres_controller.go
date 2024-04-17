@@ -1600,9 +1600,10 @@ func (r *PostgresReconciler) ensureInitDBJob(ctx context.Context, instance *pg.P
 	cm.Namespace = ns.Namespace
 	cm.Data = map[string]string{}
 
+	var fullInitJobRequired bool = instance.Spec.PostgresConnection == nil && instance.Spec.PostgresRestore == nil
+
 	// only execute SQL when encountering a **new** database, not for standbies or clones
-	if instance.Spec.PostgresConnection == nil && instance.Spec.PostgresRestore == nil {
-		// TODO fetch central init job and copy its contents
+	if fullInitJobRequired {
 		// try to fetch the global initjjob configmap
 		cns := types.NamespacedName{
 			Namespace: r.PostgresletNamespace,
@@ -1628,7 +1629,7 @@ func (r *PostgresReconciler) ensureInitDBJob(ctx context.Context, instance *pg.P
 
 	r.Log.Info("new initdb ConfigMap created")
 
-	if instance.Spec.PostgresConnection != nil || instance.Spec.PostgresRestore != nil {
+	if !fullInitJobRequired {
 		r.Log.Info("initdb job not required")
 		return nil
 	}
