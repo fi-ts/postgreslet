@@ -9,7 +9,7 @@ else
 GOBIN=$(shell go env GOBIN)
 endif
 
-# for version informations in the binary
+# for version information in the binary
 SHA := $(shell git rev-parse --short=8 HEAD)
 GITVERSION := $(shell git describe --long --all)
 BUILDDATE := $(shell date -Iseconds)
@@ -235,7 +235,7 @@ localkube-svc:
 	kubectl create ns postgreslet-system --dry-run=client --save-config -o yaml --kubeconfig ./kubeconfig-svc | kubectl apply --kubeconfig ./kubeconfig-svc -f -
 	make localkube-install-crd-cwnp
 	make localkube-install-crd-servicemonitor
-	make localkube-reinstall-postgreslet 
+	make localkube-reinstall-postgreslet
 
 localkube-teardown:
 	kind delete cluster --name ctrl
@@ -247,7 +247,7 @@ localkube-install-crd-servicemonitor:
 
 localkube-reinstall-postgreslet: localkube-load-image
 	# helm repo add metal-stack https://helm.metal-stack.io # stable repo
-	# helm upgrade --install postgreslet metal-stack/postgreslet --namespace postgreslet-system --values svc-cluster-values.yaml --set-file controlplaneKubeconfig=kubeconfig 
+	# helm upgrade --install postgreslet metal-stack/postgreslet --namespace postgreslet-system --values svc-cluster-values.yaml --set-file controlplaneKubeconfig=kubeconfig
 	helm repo add metal-stack-30 https://helm.metal-stack.io/pull_requests/custom-operator-image # PR repo
 	helm upgrade --install postgreslet metal-stack-30/postgreslet --namespace postgreslet-system --values svc-cluster-values.yaml --set-file controlplaneKubeconfig=kubeconfig-ctrl  --kubeconfig ./kubeconfig-svc
 
