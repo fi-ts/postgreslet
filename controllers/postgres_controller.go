@@ -870,7 +870,7 @@ func (r *PostgresReconciler) ensureStandbySecrets(ctx context.Context, instance 
 		return errors.New("connectionInfo.secretName not configured")
 	}
 
-	// Check if secrets exist local in SERVICE Cluster
+	// Check if secret for standby user exist local in SERVICE Cluster
 	localStandbySecretName := pg.PostgresConfigReplicationUsername + "." + instance.ToPeripheralResourceName() + ".credentials"
 	localSecretNamespace := instance.ToPeripheralResourceNamespace()
 	localStandbySecret := &corev1.Secret{}
@@ -878,16 +878,28 @@ func (r *PostgresReconciler) ensureStandbySecrets(ctx context.Context, instance 
 	err := r.SvcClient.Get(ctx, types.NamespacedName{Namespace: localSecretNamespace, Name: localStandbySecretName}, localStandbySecret)
 
 	if err == nil {
-		r.Log.Info("local standby secret found, no action needed")
+		r.Log.Info("local standby secret found, checking for monitoring secret next")
+	} else if !apierrors.IsNotFound(err) {
+		// we got an error other than not found, so we cannot continue!
+		return fmt.Errorf("error while fetching local standby secret from service cluster: %w", err)
+	}
+
+	// Check if secret for monitoring user exist local in SERVICE Cluster
+	localMonitoringSecretName := pg.PostgresConfigMonitoringUsername + "." + instance.ToPeripheralResourceName() + ".credentials"
+	localSecretNamespace = instance.ToPeripheralResourceNamespace()
+	localStandbySecret = &corev1.Secret{}
+	r.Log.Info("checking for local monitoring secret", "namespace", localSecretNamespace, "name", localMonitoringSecretName)
+	err = r.SvcClient.Get(ctx, types.NamespacedName{Namespace: localSecretNamespace, Name: localMonitoringSecretName}, localStandbySecret)
+
+	if err == nil {
+		r.Log.Info("local monitoring secret found, no action needed")
 		return nil
+	} else if !apierrors.IsNotFound(err) {
+		// we got an error other than not found, so we cannot continue!
+		return fmt.Errorf("error while fetching local monitoring secret from service cluster: %w", err)
 	}
 
-	// we got an error other than not found, so we cannot continue!
-	if !apierrors.IsNotFound(err) {
-		return fmt.Errorf("error while fetching local stadnby secret from service cluster: %w", err)
-	}
-
-	r.Log.Info("no local standby secret found, continuing to create one")
+	r.Log.Info("not all expected local secrets found, continuing to create them")
 
 	remoteSecretNamespacedName := types.NamespacedName{
 		Namespace: instance.ObjectMeta.Namespace,
@@ -968,6 +980,10 @@ func (r *PostgresReconciler) copySecrets(ctx context.Context, sourceSecret types
 		}
 
 		if err := r.SvcClient.Create(ctx, postgresSecret); err != nil {
+			if apierrors.IsAlreadyExists(err) {
+				r.Log.Info("local postgres secret already exists, skipping", "name", currentSecretName)
+				continue
+			}
 			return fmt.Errorf("error while creating local secrets in service cluster: %w", err)
 		}
 	}
@@ -1576,42 +1592,45 @@ func (r *PostgresReconciler) ensureInitDBJob(ctx context.Context, instance *pg.P
 	if err := r.SvcClient.Get(ctx, ns, cm); err == nil {
 		// configmap already exists, nothing to do here
 		r.Log.Info("initdb ConfigMap already exists")
-		// return nil // TODO return or update?
-	} else {
-		cm.Name = ns.Name
-		cm.Namespace = ns.Namespace
-		cm.Data = map[string]string{}
-
-		// only execute SQL when encountering a **new** database, not for standbies or clones
-		if instance.Spec.PostgresConnection == nil && instance.Spec.PostgresRestore == nil {
-			// TODO fetch central init job and copy its contents
-
-			// try to fetch the global initjjob configmap
-			cns := types.NamespacedName{
-				Namespace: r.PostgresletNamespace,
-				Name:      r.InitDBJobConfigMapName,
-			}
-			globalInitjobCM := &corev1.ConfigMap{}
-			if err := r.SvcClient.Get(ctx, cns, globalInitjobCM); err == nil {
-				cm.Data = globalInitjobCM.Data
-			} else {
-				r.Log.Error(err, "global initdb ConfigMap could not be loaded, using dummy data")
-				// fall back to dummy data
-				cm.Data["initdb.sql"] = initDBSQLDummy
-			}
-
-		} else {
-			// use dummy job for standbies and clones
-			cm.Data["initdb.sql"] = initDBSQLDummy
-		}
-
-		if err := r.SvcClient.Create(ctx, cm); err != nil {
-			return fmt.Errorf("error while creating the new initdb ConfigMap: %w", err)
-		}
-
-		r.Log.Info("new initdb ConfigMap created")
+		return nil
 	}
 
+	// create initDB configmap
+	cm.Name = ns.Name
+	cm.Namespace = ns.Namespace
+	cm.Data = map[string]string{}
+
+	// only execute SQL when encountering a **new** database, not for standbies or clones
+	if instance.IsReplicationPrimary() && instance.Spec.PostgresRestore == nil {
+		// try to fetch the global initjob configmap
+		cns := types.NamespacedName{
+			Namespace: r.PostgresletNamespace,
+			Name:      r.InitDBJobConfigMapName,
+		}
+		globalInitjobCM := &corev1.ConfigMap{}
+		if err := r.SvcClient.Get(ctx, cns, globalInitjobCM); err == nil {
+			cm.Data = globalInitjobCM.Data
+		} else {
+			r.Log.Error(err, "global initdb ConfigMap could not be loaded, using dummy data")
+			// fall back to dummy data
+			cm.Data["initdb.sql"] = initDBSQLDummy
+		}
+	} else {
+		// use dummy job for standbies and clones
+		cm.Data["initdb.sql"] = initDBSQLDummy
+	}
+
+	if err := r.SvcClient.Create(ctx, cm); err != nil {
+		return fmt.Errorf("error while creating the new initdb ConfigMap: %w", err)
+	}
+	r.Log.Info("new initdb ConfigMap created")
+
+	if instance.IsReplicationTarget() || instance.Spec.PostgresRestore != nil {
+		r.Log.Info("initdb job not required")
+		return nil
+	}
+
+	// create initDB job
 	j := &batchv1.Job{}
 
 	if err := r.SvcClient.Get(ctx, ns, j); err == nil {
@@ -1690,6 +1709,7 @@ func (r *PostgresReconciler) ensureInitDBJob(ctx context.Context, instance *pg.P
 	if err := r.SvcClient.Create(ctx, j); err != nil {
 		return fmt.Errorf("error while creating the new initdb Job: %w", err)
 	}
+	r.Log.Info("new initdb Job created")
 
 	return nil
 }
