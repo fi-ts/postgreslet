@@ -1602,8 +1602,6 @@ func (r *PostgresReconciler) ensureInitDBJob(ctx context.Context, instance *pg.P
 
 	// only execute SQL when encountering a **new** database, not for standbies or clones
 	if instance.Spec.PostgresConnection == nil && instance.Spec.PostgresRestore == nil {
-		// TODO fetch central init job and copy its contents
-
 		// try to fetch the global initjjob configmap
 		cns := types.NamespacedName{
 			Namespace: r.PostgresletNamespace,
@@ -1617,7 +1615,6 @@ func (r *PostgresReconciler) ensureInitDBJob(ctx context.Context, instance *pg.P
 			// fall back to dummy data
 			cm.Data["initdb.sql"] = initDBSQLDummy
 		}
-
 	} else {
 		// use dummy job for standbies and clones
 		cm.Data["initdb.sql"] = initDBSQLDummy
@@ -1626,7 +1623,6 @@ func (r *PostgresReconciler) ensureInitDBJob(ctx context.Context, instance *pg.P
 	if err := r.SvcClient.Create(ctx, cm); err != nil {
 		return fmt.Errorf("error while creating the new initdb ConfigMap: %w", err)
 	}
-
 	r.Log.Info("new initdb ConfigMap created")
 
 	if instance.Spec.PostgresConnection != nil || instance.Spec.PostgresRestore != nil {
@@ -1713,6 +1709,7 @@ func (r *PostgresReconciler) ensureInitDBJob(ctx context.Context, instance *pg.P
 	if err := r.SvcClient.Create(ctx, j); err != nil {
 		return fmt.Errorf("error while creating the new initdb Job: %w", err)
 	}
+	r.Log.Info("new initdb Job created")
 
 	return nil
 }
