@@ -881,7 +881,7 @@ func (r *PostgresReconciler) ensureStandbySecrets(ctx context.Context, instance 
 		r.Log.Info("local standby secret found, checking for monitoring secret next")
 	} else if !apierrors.IsNotFound(err) {
 		// we got an error other than not found, so we cannot continue!
-		return fmt.Errorf("error while fetching local stadnby secret from service cluster: %w", err)
+		return fmt.Errorf("error while fetching local standby secret from service cluster: %w", err)
 	}
 
 	// Check if secret for monitoring user exist local in SERVICE Cluster
@@ -899,7 +899,7 @@ func (r *PostgresReconciler) ensureStandbySecrets(ctx context.Context, instance 
 		return fmt.Errorf("error while fetching local monitoring secret from service cluster: %w", err)
 	}
 
-	r.Log.Info("not all expected local secret founds, continuing to create them")
+	r.Log.Info("not all expected local secrets found, continuing to create them")
 
 	remoteSecretNamespacedName := types.NamespacedName{
 		Namespace: instance.ObjectMeta.Namespace,
@@ -1602,7 +1602,7 @@ func (r *PostgresReconciler) ensureInitDBJob(ctx context.Context, instance *pg.P
 
 	// only execute SQL when encountering a **new** database, not for standbies or clones
 	if instance.IsReplicationPrimary() && instance.Spec.PostgresRestore == nil {
-		// try to fetch the global initjjob configmap
+		// try to fetch the global initjob configmap
 		cns := types.NamespacedName{
 			Namespace: r.PostgresletNamespace,
 			Name:      r.InitDBJobConfigMapName,
