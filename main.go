@@ -342,7 +342,7 @@ func main() {
 	ctrlPlaneClusterMgr, err := ctrl.NewManager(ctrlPlaneClusterConf, ctrl.Options{
 		Scheme: scheme,
 		Metrics: metricsserver.Options{
-			BindAddress: "metricsAddrCtrlMgr",
+			BindAddress: metricsAddrCtrlMgr,
 		},
 		LeaderElection:   enableLeaderElection,
 		LeaderElectionID: "4d69ceab.fits.cloud",
