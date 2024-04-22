@@ -143,6 +143,8 @@ func main() {
 		standbyClusterSourceRanges []string
 	)
 
+	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
+
 	// TODO enable Prefix and update helm chart
 	// viper.SetEnvPrefix(envPrefix)
 	viper.AutomaticEnv()
@@ -274,8 +276,6 @@ func main() {
 
 	viper.SetDefault(enableSuperUserForDBOFlg, false)
 	enableSuperUserForDBO = viper.GetBool(enableSuperUserForDBOFlg)
-
-	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 
 	ctrl.Log.Info("flag",
 		metricsAddrSvcMgrFlg, metricsAddrSvcMgr,
