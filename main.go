@@ -170,7 +170,7 @@ func main() {
 	if len(lbIP) > 0 {
 		// todo: Shift the logic to a dedicated pkg for args validation.
 		if ip := net.ParseIP(lbIP); ip == nil {
-			ctrl.Log.Error(nil, fmt.Sprintf("Cannot parse provided %s %q, exiting.", loadBalancerIPFlg, lbIP))
+			setupLog.Error(nil, fmt.Sprintf("Cannot parse provided %s %q, exiting.", loadBalancerIPFlg, lbIP))
 			os.Exit(1)
 		}
 	}
