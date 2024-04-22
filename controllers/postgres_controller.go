@@ -378,7 +378,7 @@ func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context
 		if err := r.SvcClient.Create(ctx, u); err != nil {
 			return fmt.Errorf("failed to create zalando postgresql: %w", err)
 		}
-		log.Info("zalando postgresql created", "zalando postgresql", u)
+		log.Info("zalando postgresql created", "postgresql", u)
 
 		return nil
 	}
@@ -393,7 +393,7 @@ func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context
 	if err := r.SvcClient.Patch(ctx, u, mergeFrom); err != nil {
 		return fmt.Errorf("failed to update zalando postgresql: %w", err)
 	}
-	log.Info("zalando postgresql updated", "zalando postgresql", u)
+	log.Info("zalando postgresql updated", "postgresql", u)
 
 	return nil
 }
