@@ -115,7 +115,7 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	}
 	log.Info("postgres fetched", "postgres", instance)
 
-	log = log.WithValues("ns", instance.ToPeripheralResourceNamespace(), "pgID", req.NamespacedName.Name)
+	log = log.WithValues("ns", instance.ToPeripheralResourceNamespace())
 
 	if !r.isManagedByUs(instance) {
 		log.Info("object should be managed by another postgreslet, ignored.")
