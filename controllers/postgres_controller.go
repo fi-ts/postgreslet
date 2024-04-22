@@ -100,7 +100,7 @@ type PostgresReconciler struct {
 // +kubebuilder:rbac:groups=acid.zalan.do,resources=postgresqls,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=acid.zalan.do,resources=postgresqls/status,verbs=get;list;watch
 func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	log := r.Log.WithValues("postgres", req.NamespacedName)
+	log := r.Log.WithValues("pgID", req.NamespacedName.Name)
 
 	log.Info("reconciling")
 	instance := &pg.Postgres{}
@@ -114,6 +114,8 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, err
 	}
 	log.Info("postgres fetched", "postgres", instance)
+
+	log = log.WithValues("ns", instance.ToPeripheralResourceNamespace())
 
 	if !r.isManagedByUs(instance) {
 		log.Info("object should be managed by another postgreslet, ignored.")

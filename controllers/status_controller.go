@@ -41,7 +41,7 @@ type StatusReconciler struct {
 // +kubebuilder:rbac:groups=acid.zalan.do,resources=postgresqls,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=acid.zalan.do,resources=postgresqls/status,verbs=get;update;patch
 func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	log := r.Log.WithValues("postgresql", req.NamespacedName)
+	log := r.Log.WithValues("ns", req.NamespacedName.Namespace)
 
 	log.Info("fetching postgresql")
 	instance := &zalando.Postgresql{}
@@ -69,6 +69,8 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	if err := r.CtrlClient.Get(ctx, ownerNs, owner); err != nil {
 		return ctrl.Result{}, fmt.Errorf("could not find the owner")
 	}
+
+	log = r.Log.WithValues("pgID", owner.Name)
 
 	log.Info("updating status")
 	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
