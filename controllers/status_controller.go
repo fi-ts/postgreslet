@@ -70,7 +70,7 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{}, fmt.Errorf("could not find the owner")
 	}
 
-	log = r.Log.WithValues("pgID", owner.Name)
+	log = log.WithValues("pgID", owner.Name)
 
 	log.Info("updating status")
 	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
