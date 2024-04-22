@@ -293,7 +293,7 @@ func (m *OperatorManager) createNewClientObject(ctx context.Context, obj client.
 		log.Info("handling ServiceAccount")
 		err = m.client.Get(ctx, key, &corev1.ServiceAccount{})
 	case *rbacv1.ClusterRole:
-		m.log.Info("handling ClusterRole")
+		log.Info("handling ClusterRole")
 		// Add our psp
 		pspPolicyRule := rbacv1.PolicyRule{
 			APIGroups:     []string{"extensions"},
@@ -547,7 +547,7 @@ func (m *OperatorManager) createOrUpdateSidecarsConfig(ctx context.Context, name
 	globalSidecarsCM := &corev1.ConfigMap{}
 	if err := m.client.Get(ctx, cns, globalSidecarsCM); err != nil {
 		// configmap with configuration does not exists, nothing we can do here...
-		m.log.Error(err, "could not fetch config for sidecars")
+		m.log.Error(err, "could not fetch global config for sidecars", "ns", namespace)
 		return err
 	}
 
