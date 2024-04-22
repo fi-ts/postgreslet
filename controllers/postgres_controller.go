@@ -322,6 +322,7 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return requeue, fmt.Errorf("unable to update patroni config: %w", err)
 	}
 
+	log.Info("postgres reconciled")
 	r.recorder.Event(instance, "Normal", "Reconciled", "postgres up to date")
 	return ctrl.Result{}, nil
 }
@@ -1491,7 +1492,7 @@ func (r *PostgresReconciler) ensureStorageEncryptionSecret(log logr.Logger, ctx 
 	n := storageEncryptionKeyName
 	ns := instance.ToPeripheralResourceNamespace()
 	s := &corev1.Secret{}
-	log.Info("checking for storage secret", "namespace", ns, "name", n)
+	log.Info("checking for storage secret", "name", n)
 	err := r.SvcClient.Get(ctx, types.NamespacedName{Namespace: ns, Name: n}, s)
 	if err == nil {
 		log.Info("storage secret found, no action needed")
