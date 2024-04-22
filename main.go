@@ -22,6 +22,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	databasev1 "github.com/fi-ts/postgreslet/api/v1"
 	"github.com/fi-ts/postgreslet/controllers"
@@ -321,11 +322,12 @@ func main() {
 
 	svcClusterConf := ctrl.GetConfigOrDie()
 	svcClusterMgr, err := ctrl.NewManager(svcClusterConf, ctrl.Options{
-		Scheme:             scheme,
-		MetricsBindAddress: metricsAddrSvcMgr,
-		Port:               9443,
-		LeaderElection:     enableLeaderElection,
-		LeaderElectionID:   "908dd13e.fits.cloud",
+		Scheme: scheme,
+		Metrics: metricsserver.Options{
+			BindAddress: metricsAddrSvcMgr,
+		},
+		LeaderElection:   enableLeaderElection,
+		LeaderElectionID: "908dd13e.fits.cloud",
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start service cluster manager")
@@ -338,11 +340,12 @@ func main() {
 		os.Exit(1)
 	}
 	ctrlPlaneClusterMgr, err := ctrl.NewManager(ctrlPlaneClusterConf, ctrl.Options{
-		Scheme:             scheme,
-		MetricsBindAddress: metricsAddrCtrlMgr,
-		Port:               9443,
-		LeaderElection:     enableLeaderElection,
-		LeaderElectionID:   "4d69ceab.fits.cloud",
+		Scheme: scheme,
+		Metrics: metricsserver.Options{
+			BindAddress: metricsAddrSvcMgr,
+		},
+		LeaderElection:   enableLeaderElection,
+		LeaderElectionID: "4d69ceab.fits.cloud",
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start control plane cluster manager")
