@@ -59,6 +59,7 @@ const (
 	walGEncryptionSecretKeyName                    string = "key"
 	initDBName                                     string = "postgres-initdb"
 	initDBSQLDummy                                 string = `SELECT 'NOOP';`
+	debugLogLevel                                  int    = 1
 )
 
 // requeue defines in how many seconds a requeue should happen
@@ -102,7 +103,6 @@ type PostgresReconciler struct {
 func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := r.Log.WithValues("pgID", req.NamespacedName.Name)
 
-	log.Info("reconciling")
 	instance := &pg.Postgres{}
 	if err := r.CtrlClient.Get(ctx, req.NamespacedName, instance); err != nil {
 		if apierrors.IsNotFound(err) {
@@ -114,14 +114,16 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		r.recorder.Eventf(instance, "Warning", "Error", "failed to get resource: %v", err)
 		return ctrl.Result{}, err
 	}
-	log.Info("postgres fetched", "postgres", instance)
+	log.V(debugLogLevel).Info("postgres fetched", "postgres", instance)
 
 	log = log.WithValues("ns", instance.ToPeripheralResourceNamespace())
 
 	if !r.isManagedByUs(instance) {
-		log.Info("object should be managed by another postgreslet, ignored.")
+		log.V(debugLogLevel).Info("object should be managed by another postgreslet, ignored.")
 		return ctrl.Result{}, nil
 	}
+
+	log.Info("reconciling")
 
 	// Delete
 	if instance.IsBeingDeleted() {
@@ -139,7 +141,7 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 			r.recorder.Event(instance, "Warning", "Error", "failed to delete ClusterwideNetworkPolicy")
 			return ctrl.Result{}, err
 		}
-		log.Info("corresponding CRD ClusterwideNetworkPolicy deleted")
+		log.V(debugLogLevel).Info("corresponding CRD ClusterwideNetworkPolicy deleted")
 
 		if err := r.LBManager.DeleteSharedSvcLB(ctx, instance); err != nil {
 			r.recorder.Eventf(instance, "Warning", "Error", "failed to delete Service with shared ip: %v", err)
@@ -150,7 +152,7 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 			r.recorder.Eventf(instance, "Warning", "Error", "failed to delete Service with dedicated ip: %v", err)
 			return ctrl.Result{}, err
 		}
-		log.Info("corresponding Service(s) of type LoadBalancer deleted")
+		log.V(debugLogLevel).Info("corresponding Service(s) of type LoadBalancer deleted")
 
 		// delete the postgres-exporter service
 		if err := r.deleteExporterSidecarService(log, ctx, namespace); client.IgnoreNotFound(err) != nil {
@@ -161,19 +163,18 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 			r.recorder.Eventf(instance, "Warning", "Error", "failed to delete Zalando resource: %v", err)
 			return ctrl.Result{}, err
 		}
-		log.Info("owned zalando postgresql deleted")
+		log.V(debugLogLevel).Info("owned zalando postgresql deleted")
 
 		if err := r.deleteNetPol(ctx, instance); err != nil {
 			log.Error(err, "failed to delete NetworkPolicy")
 		} else {
-			log.Info("corresponding NetworkPolicy deleted")
+			log.V(debugLogLevel).Info("corresponding NetworkPolicy deleted")
 		}
 
 		if err := r.removeStorageEncryptionSecretFinalizer(log, ctx, instance); err != nil {
 			log.Error(err, "error while remnoving finalizer from storage encryption secret")
 		} else {
-
-			log.Info("finalizer from storage encryption secret removed")
+			log.V(debugLogLevel).Info("finalizer from storage encryption secret removed")
 		}
 
 		deletable, err := r.OperatorManager.IsOperatorDeletable(ctx, namespace)
@@ -190,19 +191,19 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 			r.recorder.Eventf(instance, "Warning", "Error", "failed to uninstall operator: %v", err)
 			return ctrl.Result{}, fmt.Errorf("error while uninstalling operator: %w", err)
 		}
-		log.Info("corresponding operator deleted")
+		log.V(debugLogLevel).Info("corresponding operator deleted")
 
 		if err := r.deleteUserPasswordsSecret(ctx, instance); err != nil {
 			return ctrl.Result{}, err
 		}
-		log.Info("corresponding passwords secret deleted")
+		log.V(debugLogLevel).Info("corresponding passwords secret deleted")
 
 		instance.RemoveFinalizer(pg.PostgresFinalizerName)
 		if err := r.CtrlClient.Update(ctx, instance); err != nil {
 			r.recorder.Eventf(instance, "Warning", "Self-Reconcilation", "failed to remove finalizer: %v", err)
 			return ctrl.Result{}, fmt.Errorf("failed to update finalizers: %w", err)
 		}
-		log.Info("finalizers removed")
+		log.V(debugLogLevel).Info("finalizers removed")
 		log.Info("postgres deletion reconciled")
 		return ctrl.Result{}, nil
 	}
@@ -214,7 +215,7 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 			r.recorder.Eventf(instance, "Warning", "Self-Reconcilation", "failed to add finalizer: %v", err)
 			return ctrl.Result{}, fmt.Errorf("error while adding finalizer: %w", err)
 		}
-		log.Info("finalizer added")
+		log.V(debugLogLevel).Info("finalizer added")
 	}
 
 	// Check if zalando dependencies are installed. If not, install them.
@@ -308,7 +309,7 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	port := instance.Status.Socket.Port
 	if port == 0 {
 		r.recorder.Event(instance, "Warning", "Self-Reconcilation", "socket port not ready")
-		log.Info("socket port not ready")
+		log.Info("socket port not ready, requeueing")
 		return requeue, nil
 	}
 
@@ -352,7 +353,7 @@ func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context
 		if err := r.CtrlClient.Get(ctx, srcNs, src); err != nil {
 			r.recorder.Eventf(instance, "Warning", "Error", "failed to get source postgres for restore: %v", err)
 		} else {
-			log.Info("source for restore fetched", "postgres", instance)
+			log.V(debugLogLevel).Info("source for restore fetched", "postgres", instance)
 
 			bc, err := r.getBackupConfig(ctx, instance.Namespace, src.Spec.BackupSecretRef)
 			if err != nil {
@@ -395,7 +396,7 @@ func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context
 	if err := r.SvcClient.Patch(ctx, u, mergeFrom); err != nil {
 		return fmt.Errorf("failed to update zalando postgresql: %w", err)
 	}
-	log.Info("zalando postgresql updated", "postgresql", u)
+	log.V(debugLogLevel).Info("zalando postgresql updated", "postgresql", u)
 
 	return nil
 }
@@ -733,7 +734,7 @@ func (r *PostgresReconciler) createOrUpdateIngressCWNP(log logr.Logger, ctx cont
 	}); err != nil {
 		return fmt.Errorf("unable to deploy CRD ClusterwideNetworkPolicy: %w", err)
 	}
-	log.Info("clusterwidenetworkpolicy created or updated")
+	log.V(debugLogLevel).Info("clusterwidenetworkpolicy created or updated")
 
 	if in.Spec.PostgresConnection == nil {
 		// abort if there are no connected postgres instances
@@ -792,14 +793,14 @@ func (r *PostgresReconciler) deleteCWNP(log logr.Logger, ctx context.Context, in
 	stdbyIngresPolicy.Namespace = firewall.ClusterwideNetworkPolicyNamespace
 	stdbyIngresPolicy.Name = in.ToStandbyClusterIngresCWNPName()
 	if err := r.SvcClient.Delete(ctx, stdbyIngresPolicy); err != nil {
-		log.Info("could not delete standby cluster ingress policy")
+		log.V(debugLogLevel).Info("could not delete standby cluster ingress policy")
 	}
 
 	stdbyEgresPolicy := &firewall.ClusterwideNetworkPolicy{}
 	stdbyEgresPolicy.Namespace = firewall.ClusterwideNetworkPolicyNamespace
 	stdbyEgresPolicy.Name = in.ToStandbyClusterEgresCWNPName()
 	if err := r.SvcClient.Delete(ctx, stdbyEgresPolicy); err != nil {
-		log.Info("could not delete standby cluster egress policy")
+		log.V(debugLogLevel).Info("could not delete standby cluster egress policy")
 	}
 
 	policy := &firewall.ClusterwideNetworkPolicy{}
@@ -875,11 +876,11 @@ func (r *PostgresReconciler) ensureStandbySecrets(log logr.Logger, ctx context.C
 	localStandbySecretName := pg.PostgresConfigReplicationUsername + "." + instance.ToPeripheralResourceName() + ".credentials"
 	localSecretNamespace := instance.ToPeripheralResourceNamespace()
 	localStandbySecret := &corev1.Secret{}
-	log.Info("checking for local standby secret", "namespace", localSecretNamespace, "name", localStandbySecretName)
+	log.V(debugLogLevel).Info("checking for local standby secret", "name", localStandbySecretName)
 	err := r.SvcClient.Get(ctx, types.NamespacedName{Namespace: localSecretNamespace, Name: localStandbySecretName}, localStandbySecret)
 
 	if err == nil {
-		log.Info("local standby secret found, checking for monitoring secret next")
+		log.V(debugLogLevel).Info("local standby secret found, checking for monitoring secret next")
 	} else if !apierrors.IsNotFound(err) {
 		// we got an error other than not found, so we cannot continue!
 		return fmt.Errorf("error while fetching local standby secret from service cluster: %w", err)
@@ -889,11 +890,11 @@ func (r *PostgresReconciler) ensureStandbySecrets(log logr.Logger, ctx context.C
 	localMonitoringSecretName := pg.PostgresConfigMonitoringUsername + "." + instance.ToPeripheralResourceName() + ".credentials"
 	localSecretNamespace = instance.ToPeripheralResourceNamespace()
 	localStandbySecret = &corev1.Secret{}
-	log.Info("checking for local monitoring secret", "namespace", localSecretNamespace, "name", localMonitoringSecretName)
+	log.V(debugLogLevel).Info("checking for local monitoring secret", "name", localMonitoringSecretName)
 	err = r.SvcClient.Get(ctx, types.NamespacedName{Namespace: localSecretNamespace, Name: localMonitoringSecretName}, localStandbySecret)
 
 	if err == nil {
-		log.Info("local monitoring secret found, no action needed")
+		log.V(debugLogLevel).Info("local monitoring secret found, no action needed")
 		return nil
 	} else if !apierrors.IsNotFound(err) {
 		// we got an error other than not found, so we cannot continue!
@@ -925,11 +926,11 @@ func (r *PostgresReconciler) ensureCloneSecrets(log logr.Logger, ctx context.Con
 	localStandbySecretName := pg.PostresConfigSuperUsername + "." + instance.ToPeripheralResourceName() + ".credentials"
 	localSecretNamespace := instance.ToPeripheralResourceNamespace()
 	localStandbySecret := &corev1.Secret{}
-	log.Info("checking for local postgres secret", "namespace", localSecretNamespace, "name", localStandbySecretName)
+	log.V(debugLogLevel).Info("checking for local postgres secret", "name", localStandbySecretName)
 	err := r.SvcClient.Get(ctx, types.NamespacedName{Namespace: localSecretNamespace, Name: localStandbySecretName}, localStandbySecret)
 
 	if err == nil {
-		log.Info("local postgres secret found, no action needed")
+		log.V(debugLogLevel).Info("local postgres secret found, no action needed")
 		return nil
 	}
 
@@ -952,7 +953,7 @@ func (r *PostgresReconciler) ensureCloneSecrets(log logr.Logger, ctx context.Con
 func (r *PostgresReconciler) copySecrets(log logr.Logger, ctx context.Context, sourceSecret types.NamespacedName, targetInstance *pg.Postgres, ignoreStandbyUser bool) error {
 	// Check if secrets exist in remote CONTROL Cluster
 	remoteSecret := &corev1.Secret{}
-	log.Info("fetching remote postgres secret", "namespace", sourceSecret.Namespace, "name", sourceSecret.Name)
+	log.V(debugLogLevel).Info("fetching remote postgres secret", "src ns", sourceSecret.Namespace, "src name", sourceSecret.Name)
 	if err := r.CtrlClient.Get(ctx, sourceSecret, remoteSecret); err != nil {
 		// we cannot read the secret given in the configuration, so we cannot continue!
 		return fmt.Errorf("error while fetching remote postgres secret from control plane: %w", err)
@@ -998,7 +999,7 @@ func (r *PostgresReconciler) updatePatroniConfig(log logr.Logger, ctx context.Co
 		return nil
 	}
 
-	log.Info("Sending REST call to Patroni API")
+	log.V(debugLogLevel).Info("Sending REST call to Patroni API")
 	pods := &corev1.PodList{}
 
 	roleReq, err := labels.NewRequirement(pg.SpiloRoleLabelName, selection.In, []string{pg.SpiloRoleLabelValueMaster, pg.SpiloRoleLabelValueStandbyLeader})
@@ -1062,7 +1063,7 @@ func (r *PostgresReconciler) updatePatroniConfigOnAllPods(log logr.Logger, ctx c
 		log.Info("updating patroni config failed, got one or more errors")
 		return lastErr
 	}
-	log.Info("updating patroni config succeeded")
+	log.V(debugLogLevel).Info("updating patroni config succeeded")
 	return nil
 }
 
@@ -1110,7 +1111,7 @@ func (r *PostgresReconciler) httpPatchPatroni(log logr.Logger, ctx context.Conte
 			SynchronousNodesAdditional: nil,
 		}
 	}
-	log.Info("Prepared request", "request", request)
+	log.V(debugLogLevel).Info("Prepared request", "request", request)
 	jsonReq, err := json.Marshal(request)
 	if err != nil {
 		log.Info("could not create config")
@@ -1356,7 +1357,7 @@ func (r *PostgresReconciler) createOrUpdateExporterSidecarServices(log logr.Logg
 		if err := r.SvcClient.Update(ctx, pes); err != nil {
 			return fmt.Errorf("error while updating the postgres-exporter service: %w", err)
 		}
-		log.Info("postgres-exporter service updated")
+		log.V(debugLogLevel).Info("postgres-exporter service updated")
 		return nil
 	}
 	// todo: handle errors other than `NotFound`
@@ -1435,7 +1436,7 @@ func (r *PostgresReconciler) createOrUpdateExporterSidecarServiceMonitor(log log
 		if err := r.SvcClient.Update(ctx, pesm); err != nil {
 			return fmt.Errorf("error while updating the postgres-exporter servicemonitor: %w", err)
 		}
-		log.Info("postgres-exporter servicemonitor updated")
+		log.V(debugLogLevel).Info("postgres-exporter servicemonitor updated")
 		return nil
 	}
 	// todo: handle errors other than `NotFound`
@@ -1485,7 +1486,7 @@ func (r *PostgresReconciler) getWalGEncryptionSecret(ctx context.Context) (*core
 func (r *PostgresReconciler) ensureStorageEncryptionSecret(log logr.Logger, ctx context.Context, instance *pg.Postgres) error {
 
 	if !r.EnableRandomStorageEncryptionSecret {
-		log.Info("storage secret disabled, no action needed")
+		log.V(debugLogLevel).Info("storage secret disabled, no action needed")
 		return nil
 	}
 
@@ -1496,7 +1497,7 @@ func (r *PostgresReconciler) ensureStorageEncryptionSecret(log logr.Logger, ctx 
 	log.Info("checking for storage secret", "name", n)
 	err := r.SvcClient.Get(ctx, types.NamespacedName{Namespace: ns, Name: n}, s)
 	if err == nil {
-		log.Info("storage secret found, no action needed")
+		log.V(debugLogLevel).Info("storage secret found, no action needed")
 		return nil
 	}
 
@@ -1505,7 +1506,7 @@ func (r *PostgresReconciler) ensureStorageEncryptionSecret(log logr.Logger, ctx 
 		return fmt.Errorf("error while fetching storage secret from service cluster: %w", err)
 	}
 
-	log.Info("creating storage secret")
+	log.V(debugLogLevel).Info("creating storage secret")
 
 	k, err := r.generateRandomString()
 	if err != nil {
@@ -1552,7 +1553,7 @@ func (r *PostgresReconciler) removeStorageEncryptionSecretFinalizer(log logr.Log
 	n := storageEncryptionKeyName
 	ns := instance.ToPeripheralResourceNamespace()
 	s := &corev1.Secret{}
-	log.Info("Fetching storage secret", "namespace", ns, "name", n)
+	log.V(debugLogLevel).Info("Fetching storage secret", "name", n)
 	err := r.SvcClient.Get(ctx, types.NamespacedName{Namespace: ns, Name: n}, s)
 	if err != nil {
 		// TODO this would be blocking if we couldn't remove the finalizer!
@@ -1565,6 +1566,7 @@ func (r *PostgresReconciler) removeStorageEncryptionSecretFinalizer(log logr.Log
 		return fmt.Errorf("error while removing finalizer from storage secret in service cluster: %w", err)
 	}
 
+	log.Info("Finalizer removed from storage secret", "name", n)
 	return nil
 }
 
@@ -1586,7 +1588,7 @@ func (r *PostgresReconciler) ensureInitDBJob(log logr.Logger, ctx context.Contex
 	cm := &corev1.ConfigMap{}
 	if err := r.SvcClient.Get(ctx, ns, cm); err == nil {
 		// configmap already exists, nothing to do here
-		log.Info("initdb ConfigMap already exists")
+		log.V(debugLogLevel).Info("initdb ConfigMap already exists")
 		return nil
 	}
 
@@ -1621,7 +1623,7 @@ func (r *PostgresReconciler) ensureInitDBJob(log logr.Logger, ctx context.Contex
 	log.Info("new initdb ConfigMap created")
 
 	if instance.IsReplicationTarget() || instance.Spec.PostgresRestore != nil {
-		log.Info("initdb job not required")
+		log.V(debugLogLevel).Info("initdb job not required")
 		return nil
 	}
 
@@ -1630,7 +1632,7 @@ func (r *PostgresReconciler) ensureInitDBJob(log logr.Logger, ctx context.Contex
 
 	if err := r.SvcClient.Get(ctx, ns, j); err == nil {
 		// job already exists, nothing to do here
-		log.Info("initdb Job already exists")
+		log.V(debugLogLevel).Info("initdb Job already exists")
 		return nil // TODO return or update?
 	}
 
