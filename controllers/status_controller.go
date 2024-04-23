@@ -8,6 +8,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
@@ -182,7 +183,7 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	if len(secrets.Items) == 0 {
 		log.Info("no local secrets found yet, requeuing", "status", owner.Status)
-		return ctrl.Result{Requeue: true}, nil
+		return ctrl.Result{Requeue: true, RequeueAfter: 2 * time.Second}, nil
 	}
 
 	// TODO: #176 delete the secrets in the end as well
