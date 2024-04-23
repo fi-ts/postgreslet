@@ -433,6 +433,10 @@ func (m *OperatorManager) editConfigMap(cm *corev1.ConfigMap, namespace string, 
 	cm.Data["replication_username"] = pg.PostgresConfigReplicationUsername
 
 	cm.Data["enable_pod_antiaffinity"] = strconv.FormatBool(options.PodAntiaffinity)
+
+	cm.Data["secret_name_template"] = "{username}.{cluster}.credentials"
+	cm.Data["master_dns_name_format"] = "{cluster}.{team}.{hostedzone}"
+	cm.Data["replica_dns_name_format"] = "{cluster}-repl.{team}.{hostedzone}"
 }
 
 // ensureCleanMetadata ensures obj has clean metadata
