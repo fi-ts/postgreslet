@@ -1567,7 +1567,7 @@ func (r *PostgresReconciler) removeStorageEncryptionSecretFinalizer(log logr.Log
 		return fmt.Errorf("error while removing finalizer from storage secret in service cluster: %w", err)
 	}
 
-	log.Info("Finalizer removed from storage secret", "name", n)
+	log.V(debugLogLevel).Info("finalizer removed from storage secret", "name", n)
 	return nil
 }
 
