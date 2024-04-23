@@ -107,6 +107,7 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	if err := r.CtrlClient.Get(ctx, req.NamespacedName, instance); err != nil {
 		if apierrors.IsNotFound(err) {
 			// the instance was updated, but does not exist anymore -> do nothing, it was probably deleted
+			log.Info("postgres already deleted")
 			return ctrl.Result{}, nil
 		}
 
@@ -202,7 +203,7 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 			return ctrl.Result{}, fmt.Errorf("failed to update finalizers: %w", err)
 		}
 		log.Info("finalizers removed")
-
+		log.Info("postgres deletion reconciled")
 		return ctrl.Result{}, nil
 	}
 
