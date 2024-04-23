@@ -19,6 +19,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-logr/logr"
 	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
@@ -185,7 +186,7 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		if !deletable {
 			r.recorder.Event(instance, "Warning", "Self-Reconcilation", "operator not yet deletable, requeueing")
 			log.Info("operator not yet deletable, requeueing")
-			return ctrl.Result{Requeue: true}, nil
+			return ctrl.Result{Requeue: true, RequeueAfter: 15 * time.Second}, nil
 		}
 		if err := r.OperatorManager.UninstallOperator(ctx, namespace); err != nil {
 			r.recorder.Eventf(instance, "Warning", "Error", "failed to uninstall operator: %v", err)
