@@ -43,7 +43,7 @@ type StatusReconciler struct {
 func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := r.Log.WithValues("ns", req.NamespacedName.Namespace)
 
-	log.Info("fetching postgresql")
+	log.V(debugLogLevel).Info("fetching postgresql")
 	instance := &zalando.Postgresql{}
 	if err := r.SvcClient.Get(ctx, req.NamespacedName, instance); err != nil {
 		if !errors.IsNotFound(err) {
@@ -60,7 +60,7 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{}, err
 	}
 
-	log.Info("fetching owner")
+	log.V(debugLogLevel).Info("fetching owner")
 	ownerNs := types.NamespacedName{
 		Namespace: r.ControlPlaneNamespace,
 		Name:      derivedOwnerName,
@@ -72,7 +72,7 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	log = log.WithValues("pgID", owner.Name)
 
-	log.Info("updating status")
+	log.V(debugLogLevel).Info("updating status")
 	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		// get a fresh copy of the owner object
 		if err := r.CtrlClient.Get(ctx, types.NamespacedName{Name: owner.Name, Namespace: owner.Namespace}, owner); err != nil {
@@ -83,7 +83,7 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		// update the reference to the zalando instance in the remote object
 		owner.Status.ChildName = instance.ObjectMeta.Name
 
-		log.Info("Updating owner", "owner", owner.UID)
+		log.V(debugLogLevel).Info("Updating owner", "owner", owner.UID)
 		if err := r.CtrlClient.Status().Update(ctx, owner); err != nil {
 			log.Error(err, "failed to update owner object")
 			return err
@@ -95,7 +95,7 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{}, retryErr
 	}
 
-	log.Info("updating socket")
+	log.V(debugLogLevel).Info("updating socket")
 	if owner.Spec.DedicatedLoadBalancerIP == nil {
 		// no dedicated load balancer configured, use the shared one
 		shared := &corev1.Service{}
@@ -129,7 +129,7 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 				// the shared load balancer is usable, use it for status
 				owner.Status.Socket.IP = shared.Spec.LoadBalancerIP
 				owner.Status.Socket.Port = shared.Spec.Ports[0].Port
-				log.Info("using shared loadbalancer as primary status socket")
+				log.V(debugLogLevel).Info("using shared loadbalancer as primary status socket")
 			} else {
 				// we couldn't use the shared load balancer, use empty socket instead
 				log.Info("failed to use shared loadbalancer as primary status socket")
@@ -144,7 +144,7 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 					Port: dedicated.Spec.Ports[0].Port,
 				}
 				owner.Status.AdditionalSockets = []pg.Socket{additionalSocket}
-				log.Info("using dedicated loadbalancer as additional status socket")
+				log.V(debugLogLevel).Info("using dedicated loadbalancer as additional status socket")
 			} else {
 				log.Info("failed to use dedicated loadbalancer as additional status socket")
 			}
@@ -156,7 +156,7 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 				// the dedicated load balancer is usable, use it for status
 				owner.Status.Socket.IP = dedicated.Spec.LoadBalancerIP
 				owner.Status.Socket.Port = dedicated.Spec.Ports[0].Port
-				log.Info("using dedicated loadbalancer as primary status socket")
+				log.V(debugLogLevel).Info("using dedicated loadbalancer as primary status socket")
 			} else {
 				// we couldn't use the dedicated load balancer, use empty socket instead
 				log.Info("failed to use dedicated loadbalancer as primary status socket")
@@ -233,7 +233,7 @@ func (r *StatusReconciler) createOrUpdateSecret(ctx context.Context, in *pg.Post
 		return fmt.Errorf("failed to create or update the secret containing user password pairs: %w", err)
 	}
 	// todo: better the log
-	log.Info("secret created or updated", "operation result", result)
+	log.V(debugLogLevel).Info("secret created or updated", "operation result", result)
 
 	return nil
 }
