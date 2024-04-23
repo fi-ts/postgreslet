@@ -382,7 +382,7 @@ func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context
 		if err := r.SvcClient.Create(ctx, u); err != nil {
 			return fmt.Errorf("failed to create zalando postgresql: %w", err)
 		}
-		log.Info("zalando postgresql created", "postgresql", u)
+		log.V(debugLogLevel).Info("zalando postgresql created", "postgresql", u)
 
 		return nil
 	}
@@ -1367,7 +1367,7 @@ func (r *PostgresReconciler) createOrUpdateExporterSidecarServices(log logr.Logg
 	if err := r.SvcClient.Create(ctx, pes); err != nil {
 		return fmt.Errorf("error while creating the postgres-exporter service: %w", err)
 	}
-	log.Info("postgres-exporter service created")
+	log.V(debugLogLevel).Info("postgres-exporter service created")
 
 	return nil
 }
@@ -1446,7 +1446,7 @@ func (r *PostgresReconciler) createOrUpdateExporterSidecarServiceMonitor(log log
 	if err := r.SvcClient.Create(ctx, pesm); err != nil {
 		return fmt.Errorf("error while creating the postgres-exporter servicemonitor: %w", err)
 	}
-	log.Info("postgres-exporter servicemonitor created")
+	log.V(debugLogLevel).Info("postgres-exporter servicemonitor created")
 
 	return nil
 }
@@ -1528,7 +1528,7 @@ func (r *PostgresReconciler) ensureStorageEncryptionSecret(log logr.Logger, ctx 
 	if err := r.SvcClient.Create(ctx, postgresSecret); err != nil {
 		return fmt.Errorf("error while creating storage secret in service cluster: %w", err)
 	}
-	log.Info("created storage secret", "secret", postgresSecret)
+	log.V(debugLogLevel).Info("created storage secret", "secret", postgresSecret)
 
 	return nil
 
@@ -1621,7 +1621,7 @@ func (r *PostgresReconciler) ensureInitDBJob(log logr.Logger, ctx context.Contex
 	if err := r.SvcClient.Create(ctx, cm); err != nil {
 		return fmt.Errorf("error while creating the new initdb ConfigMap: %w", err)
 	}
-	log.Info("new initdb ConfigMap created")
+	log.V(debugLogLevel).Info("new initdb ConfigMap created")
 
 	if instance.IsReplicationTarget() || instance.Spec.PostgresRestore != nil {
 		log.V(debugLogLevel).Info("initdb job not required")
@@ -1707,7 +1707,7 @@ func (r *PostgresReconciler) ensureInitDBJob(log logr.Logger, ctx context.Contex
 	if err := r.SvcClient.Create(ctx, j); err != nil {
 		return fmt.Errorf("error while creating the new initdb Job: %w", err)
 	}
-	log.Info("new initdb Job created")
+	log.V(debugLogLevel).Info("new initdb Job created")
 
 	return nil
 }
