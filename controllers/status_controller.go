@@ -113,7 +113,7 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		if err := r.CtrlClient.Status().Update(ctx, owner); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to update simple postgres status socket: %w", err)
 		}
-		log.Info("simple postgres status socket updated", "socket", owner.Status.Socket, "additionalsockets", owner.Status.AdditionalSockets)
+		log.V(debugLogLevel).Info("simple postgres status socket updated", "socket", owner.Status.Socket, "additionalsockets", owner.Status.AdditionalSockets)
 
 	} else {
 		// dedicated load balancer configured, so we fetch it
@@ -168,7 +168,7 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		if err := r.CtrlClient.Status().Update(ctx, owner); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to update advanced postgres status socket: %w", err)
 		}
-		log.Info("advanced postgres status socket updated", "socket", owner.Status.Socket, "additionalsockets", owner.Status.AdditionalSockets)
+		log.V(debugLogLevel).Info("advanced postgres status socket updated", "socket", owner.Status.Socket, "additionalsockets", owner.Status.AdditionalSockets)
 
 	}
 
