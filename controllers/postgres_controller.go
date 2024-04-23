@@ -712,7 +712,7 @@ func (r *PostgresReconciler) deleteZPostgresqlByLabels(log logr.Logger, ctx cont
 		if err := r.SvcClient.Delete(ctx, &items[i]); err != nil {
 			return fmt.Errorf("error while deleting zalando postgresql: %w", err)
 		}
-		log.Info("zalando postgresql deleted", "postgresql", rawZ)
+		log.V(debugLogLevel).Info("zalando postgresql deleted", "postgresql", rawZ)
 	}
 
 	return nil
@@ -1461,7 +1461,7 @@ func (r *PostgresReconciler) deleteExporterSidecarService(log logr.Logger, ctx c
 	if err := r.SvcClient.Delete(ctx, s); err != nil {
 		return fmt.Errorf("error while deleting the postgres-exporter service: %w", err)
 	}
-	log.Info("postgres-exporter service deleted")
+	log.V(debugLogLevel).Info("postgres-exporter service deleted")
 
 	return nil
 }
