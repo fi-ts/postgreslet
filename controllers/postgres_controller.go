@@ -1674,8 +1674,15 @@ func (r *PostgresReconciler) ensureInitDBJob(log logr.Logger, ctx context.Contex
 							AllowPrivilegeEscalation: pointer.Bool(false),
 							Privileged:               pointer.Bool(false),
 							ReadOnlyRootFilesystem:   pointer.Bool(true),
+							RunAsNonRoot:             pointer.Bool(true),
 							RunAsUser:                pointer.Int64(101),
 							RunAsGroup:               pointer.Int64(101),
+							Capabilities: &corev1.Capabilities{
+								Drop: []corev1.Capability{"ALL"},
+							},
+							SeccompProfile: &corev1.SeccompProfile{
+								Type: corev1.SeccompProfileTypeRuntimeDefault,
+							},
 						},
 						VolumeMounts: []corev1.VolumeMount{
 							{
