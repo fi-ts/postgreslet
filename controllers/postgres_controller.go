@@ -1494,7 +1494,7 @@ func (r *PostgresReconciler) ensureStorageEncryptionSecret(log logr.Logger, ctx 
 	n := storageEncryptionKeyName
 	ns := instance.ToPeripheralResourceNamespace()
 	s := &corev1.Secret{}
-	log.Info("checking for storage secret", "name", n)
+	log.V(debugLogLevel).Info("checking for storage secret", "name", n)
 	err := r.SvcClient.Get(ctx, types.NamespacedName{Namespace: ns, Name: n}, s)
 	if err == nil {
 		log.V(debugLogLevel).Info("storage secret found, no action needed")
