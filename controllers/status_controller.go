@@ -181,6 +181,7 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	}
 
 	if len(secrets.Items) == 0 {
+		log.Info("no local secrets found yet, requeuing", "status", owner.Status)
 		return ctrl.Result{Requeue: true}, nil
 	}
 
