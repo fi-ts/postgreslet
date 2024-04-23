@@ -51,6 +51,8 @@ const (
 	SidecarsCMExporterQueriesKey string = "queries.yaml"
 
 	localSidecarsCMName = "postgres-sidecars-configmap"
+
+	debugLogLevel int = 1
 )
 
 // operatorPodMatchingLabels is for listing operator pods
@@ -110,7 +112,7 @@ func New(confRest *rest.Config, fileName string, scheme *runtime.Scheme, log log
 		decoder:          deserializer,
 		list:             list,
 		scheme:           scheme,
-		log:              log,
+		log:              log.V(debugLogLevel),
 		options:          opt,
 	}, nil
 }
