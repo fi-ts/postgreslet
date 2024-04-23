@@ -278,14 +278,6 @@ items:
     - podsecuritypolicies
     verbs:
     - use
-  - apiGroups:
-    - extensions
-    resourceNames:
-    - postgreslet
-    resources:
-    - podsecuritypolicies
-    verbs:
-    - use
 - apiVersion: rbac.authorization.k8s.io/v1
   kind: ClusterRoleBinding
   metadata:
@@ -300,43 +292,7 @@ items:
   subjects:
   - kind: ServiceAccount
     name: postgres-operator
-    namespace: b621eb9948884911-7b0cbaf391824b4882e3
-  - kind: ServiceAccount
-    name: postgres-operator
-    namespace: b621eb9948884911-a7b889385dbb4222b5e2
-  - kind: ServiceAccount
-    name: postgres-operator
-    namespace: b621eb9948884911-2607e9a3f75e4ef4bbca
-  - kind: ServiceAccount
-    name: postgres-operator
-    namespace: b621eb9948884911-dcc65c8dd9274a8eac17
-  - kind: ServiceAccount
-    name: postgres-operator
-    namespace: fca160cadee74137-0ec69984d3f34136a065
-  - kind: ServiceAccount
-    name: postgres-operator
-    namespace: b621eb9948884911-e0be2bf9f6834f1fb4e2
-  - kind: ServiceAccount
-    name: postgres-operator
-    namespace: b621eb9948884911-cefe5ebb427542dda362
-  - kind: ServiceAccount
-    name: postgres-operator
-    namespace: fca160cadee74137-87804903d9ce4abd8c7b
-  - kind: ServiceAccount
-    name: postgres-operator
-    namespace: b621eb9948884911-a7b9e1839ae1466689a1
-  - kind: ServiceAccount
-    name: postgres-operator
-    namespace: b621eb9948884911-927b39322ce54041b6d9
-  - kind: ServiceAccount
-    name: postgres-operator
-    namespace: b621eb9948884911-5577b9b7335045588dc3
-  - kind: ServiceAccount
-    name: postgres-operator
-    namespace: b621eb9948884911-d86cd6957c1c425db311
-  - kind: ServiceAccount
-    name: postgres-operator
-    namespace: b621eb9948884911-3180bd2d947b40968cd7
+    namespace: default
 - apiVersion: rbac.authorization.k8s.io/v1
   kind: ClusterRole
   metadata:
