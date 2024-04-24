@@ -155,6 +155,15 @@ items:
             requests:
               cpu: 300m
               memory: 1G
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+            capabilities:
+              drop:
+              - ALL
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
           volumeMounts:
@@ -203,6 +212,15 @@ items:
           - sh
           - -c
           - mkdir -p /data/etcd && backup-restore-sidecar start --log-level debug
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+            capabilities:
+              drop:
+              - ALL
           volumeMounts:
           - name: etcd
             mountPath: /data
@@ -228,6 +246,15 @@ items:
           - /backup-restore-sidecar
           - /ubuntu/tini
           - /bin-provision
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+            capabilities:
+              drop:
+              - ALL
           ports:
           - containerPort: 2112
           volumeMounts:
