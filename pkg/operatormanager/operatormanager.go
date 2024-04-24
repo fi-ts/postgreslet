@@ -472,7 +472,7 @@ func (m *OperatorManager) createNamespace(ctx context.Context, namespace string)
 		nsObj.Name = namespace
 		nsObj.ObjectMeta.Labels = map[string]string{
 			pg.ManagedByLabelName: pg.ManagedByLabelValue,
-			// TODO const and make configurable
+			// TODO const and make configurable AND UPDATE EXISTING NAMESPACES!!!
 			"pod-security.kubernetes.io/enforce": "privileged",
 		}
 		if err := m.client.Create(ctx, nsObj); err != nil {
