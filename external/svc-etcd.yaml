@@ -159,6 +159,7 @@ items:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
             runAsNonRoot: true
+            runAsUser: 1000
             seccompProfile:
               type: RuntimeDefault
             capabilities:
@@ -216,6 +217,7 @@ items:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
             runAsNonRoot: true
+            runAsUser: 1000
             seccompProfile:
               type: RuntimeDefault
             capabilities:
@@ -250,6 +252,7 @@ items:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
             runAsNonRoot: true
+            runAsUser: 1000
             seccompProfile:
               type: RuntimeDefault
             capabilities:
