@@ -215,7 +215,7 @@ items:
           - mkdir -p /data/etcd && backup-restore-sidecar start --log-level debug
           securityContext:
             allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: true
+            readOnlyRootFilesystem: false
             runAsNonRoot: true
             runAsUser: 1000
             seccompProfile:
