@@ -32,9 +32,7 @@ import (
 
 const (
 	// The serviceAccount name to use for the database pods.
-	// TODO: create new account per namespace
-	// TODO: use different account for operator and database
-	serviceAccountName string = "postgres-operator"
+	serviceAccountName string = "postgres-pod"
 
 	// PodEnvCMName Name of the pod environment configmap to create and use
 	PodEnvCMName string = "postgres-pod-config"
