@@ -81,7 +81,7 @@ const (
 	defaultPostgresParamValueSSLMinProtocolVersion  = "TLSv1.2"
 	defaultPostgresParamValueSSLPreferServerCiphers = "on"
 	defaultPostgresParamValueSSLCiphers             = "ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384"
-	defaultPostgresParamValueWalKeepSegements       = "64"
+	defaultPostgresParamValueWalKeepSegments        = "64"
 	defaultPostgresParamValueWalKeepSize            = "1GB"
 	defaultPostgresParamValuePGStatStatementsMax    = "500"
 
@@ -193,7 +193,7 @@ type PostgresSpec struct {
 	// PostgresRestore
 	PostgresRestore *PostgresRestore `json:"restore,omitempty"`
 
-	// PostgresConnection Connection info of a streaming host, independant of the current role (leader or standby)
+	// PostgresConnection Connection info of a streaming host, independent of the current role (leader or standby)
 	PostgresConnection *PostgresConnection `json:"connection,omitempty"`
 
 	// AuditLogs enable or disable default audit logs
@@ -615,7 +615,7 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 	z.Namespace = p.ToPeripheralResourceNamespace()
 	z.Name = p.ToPeripheralResourceName()
 	z.Labels = p.ToZalandoPostgresqlMatchingLabels()
-	// Add the newly introduced label only here, not in  p.ToZalandoPostgresqlMatchingLabels() (so that the selectors using  p.ToZalandoPostgresqlMatchingLabels() will still work untill all postgres resources have that new label)
+	// Add the newly introduced label only here, not in  p.ToZalandoPostgresqlMatchingLabels() (so that the selectors using  p.ToZalandoPostgresqlMatchingLabels() will still work until all postgres resources have that new label)
 	// TODO once all the custom resources have that new label, move this part to p.ToZalandoPostgresqlMatchingLabels()
 	z.Labels[PartitionIDLabelName] = p.Spec.PartitionID
 
@@ -920,7 +920,7 @@ func setDefaultPostgresParams(parameters map[string]string, version string) {
 	if v >= 13 {
 		parameters["wal_keep_size"] = defaultPostgresParamValueWalKeepSize
 	} else {
-		parameters["wal_keep_segments"] = defaultPostgresParamValueWalKeepSegements
+		parameters["wal_keep_segments"] = defaultPostgresParamValueWalKeepSegments
 	}
 
 	parameters["pg_stat_statements.max"] = defaultPostgresParamValuePGStatStatementsMax

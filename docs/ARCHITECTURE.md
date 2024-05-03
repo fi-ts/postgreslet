@@ -152,7 +152,7 @@ monitoring:
 
 #### TODO
 
-* requested by Uli: tupel of ip/port and federation url for his metrics
+* requested by Uli: tuple of ip/port and federation url for his metrics
 
 ### update database
 
