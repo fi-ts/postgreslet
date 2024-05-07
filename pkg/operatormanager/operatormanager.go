@@ -459,7 +459,13 @@ func (m *OperatorManager) ensureCleanMetadata(obj runtime.Object) error {
 
 // createNamespace ensures namespace exists
 func (m *OperatorManager) createNamespace(ctx context.Context, namespace string) error {
-	if err := m.client.Get(ctx, client.ObjectKey{Name: namespace}, &corev1.Namespace{}); err != nil {
+	labels := map[string]string{
+		pg.ManagedByLabelName: pg.ManagedByLabelValue,
+		// TODO const and make configurable
+		"pod-security.kubernetes.io/enforce": "privileged",
+	}
+	ns := corev1.Namespace{}
+	if err := m.client.Get(ctx, client.ObjectKey{Name: namespace}, &ns); err != nil {
 		// errors other than `not found`
 		if !errors.IsNotFound(err) {
 			return fmt.Errorf("error while fetching namespace %v: %w", namespace, err)
@@ -468,16 +474,19 @@ func (m *OperatorManager) createNamespace(ctx context.Context, namespace string)
 		// Create the namespace.
 		nsObj := &corev1.Namespace{}
 		nsObj.Name = namespace
-		nsObj.ObjectMeta.Labels = map[string]string{
-			pg.ManagedByLabelName: pg.ManagedByLabelValue,
-			// TODO const and make configurable AND UPDATE EXISTING NAMESPACES!!!
-			"pod-security.kubernetes.io/enforce": "privileged",
-		}
+		nsObj.ObjectMeta.Labels = labels
 		if err := m.client.Create(ctx, nsObj); err != nil {
 			return fmt.Errorf("error while creating namespace %v: %w", namespace, err)
 		}
 		m.log.Info("namespace created", "ns", namespace)
 	}
+
+	// update namespace
+	ns.ObjectMeta.Labels = labels
+	if err := m.client.Update(ctx, &ns); err != nil {
+		return fmt.Errorf("error while updating namespace: %w", err)
+	}
+	m.log.Info("namespace updated")
 
 	return nil
 }
