@@ -119,7 +119,7 @@ func New(confRest *rest.Config, fileName string, scheme *runtime.Scheme, log log
 func (m *OperatorManager) InstallOrUpdateOperator(ctx context.Context, namespace string) error {
 
 	// Make sure the namespace exists.
-	if err := m.createNamespace(ctx, namespace); err != nil {
+	if err := m.createOrUpdateNamespace(ctx, namespace); err != nil {
 		return fmt.Errorf("error while ensuring the existence of namespace %v: %w", namespace, err)
 	}
 
@@ -457,8 +457,9 @@ func (m *OperatorManager) ensureCleanMetadata(obj runtime.Object) error {
 	return nil
 }
 
-// createNamespace ensures namespace exists
-func (m *OperatorManager) createNamespace(ctx context.Context, namespace string) error {
+// createOrUpdateNamespace ensures namespace exists
+func (m *OperatorManager) createOrUpdateNamespace(ctx context.Context, namespace string) error {
+	log := m.log.WithValues("ns", namespace)
 	labels := map[string]string{
 		pg.ManagedByLabelName: pg.ManagedByLabelValue,
 		// TODO const and make configurable
@@ -478,15 +479,15 @@ func (m *OperatorManager) createNamespace(ctx context.Context, namespace string)
 		if err := m.client.Create(ctx, nsObj); err != nil {
 			return fmt.Errorf("error while creating namespace %v: %w", namespace, err)
 		}
-		m.log.Info("namespace created", "ns", namespace)
+		log.Info("namespace created")
+	} else {
+		// update namespace
+		ns.ObjectMeta.Labels = labels
+		if err := m.client.Update(ctx, &ns); err != nil {
+			return fmt.Errorf("error while updating namespace: %w", err)
+		}
+		log.Info("namespace updated")
 	}
-
-	// update namespace
-	ns.ObjectMeta.Labels = labels
-	if err := m.client.Update(ctx, &ns); err != nil {
-		return fmt.Errorf("error while updating namespace: %w", err)
-	}
-	m.log.Info("namespace updated")
 
 	return nil
 }
