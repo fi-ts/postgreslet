@@ -51,6 +51,8 @@ const (
 	SidecarsCMExporterQueriesKey string = "queries.yaml"
 
 	localSidecarsCMName = "postgres-sidecars-configmap"
+
+	spilo_fsgroup = "103"
 )
 
 // operatorPodMatchingLabels is for listing operator pods
@@ -427,6 +429,9 @@ func (m *OperatorManager) editConfigMap(cm *corev1.ConfigMap, namespace string, 
 	cm.Data["replication_username"] = pg.PostgresConfigReplicationUsername
 
 	cm.Data["enable_pod_antiaffinity"] = strconv.FormatBool(options.PodAntiaffinity)
+
+	// set the spilo_fsgroup for correct tls cert permissions
+	cm.Data["spilo_fsgroup"] = spilo_fsgroup
 }
 
 // ensureCleanMetadata ensures obj has clean metadata
