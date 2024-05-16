@@ -355,11 +355,11 @@ func (p *Postgres) ToSharedSvcLB(lbIP string, lbPort int32, enableStandbyLeaderS
 
 	if tlsSubDomain != "" {
 		// lb.Annotations["cert.gardener.cloud/purpose"] = "managed"
-		lb.Annotations["cert.gardener.cloud/secretname"] = p.generateDatabaseName()
-		lb.Annotations["dns.gardener.cloud/dnsnames"] = p.Name + "." + tlsSubDomain
+		lb.Annotations["cert.gardener.cloud/secretname"] = p.ToTLSSecretName()
+		lb.Annotations["dns.gardener.cloud/dnsnames"] = p.ToDNSName(tlsSubDomain)
 		lb.Annotations["dns.gardener.cloud/class"] = "garden"
 		// lb.Annotations["dns.gardener.cloud/ttl"] = "180"
-		lb.Annotations["cert.gardener.cloud/commonname"] = p.Name + "." + tlsSubDomain
+		lb.Annotations["cert.gardener.cloud/commonname"] = p.ToDNSName(tlsSubDomain)
 		lb.Annotations["cert.gardener.cloud/dnsnames"] = ""
 	}
 
@@ -443,11 +443,11 @@ func (p *Postgres) ToDedicatedSvcLB(lbIP string, lbPort int32, standbyClustersSo
 	if tlsSubDomain != "" {
 		lb.Annotations = map[string]string{
 			// "cert.gardener.cloud/purpose":    "managed",
-			"cert.gardener.cloud/secretname": p.generateDatabaseName(),
-			"dns.gardener.cloud/dnsnames":    p.Name + "." + tlsSubDomain,
+			"cert.gardener.cloud/secretname": p.ToTLSSecretName(),
+			"dns.gardener.cloud/dnsnames":    p.ToDNSName(tlsSubDomain),
 			"dns.gardener.cloud/class":       "garden",
 			// "dns.gardener.cloud/ttl":         "180",
-			"cert.gardener.cloud/commonname": p.Name + "." + tlsSubDomain,
+			"cert.gardener.cloud/commonname": p.ToDNSName(tlsSubDomain),
 			"cert.gardener.cloud/dnsnames":   "",
 		}
 	}
@@ -622,6 +622,21 @@ func (p *Postgres) ToPeripheralResourceNamespace() string {
 	return projectID + "-" + name
 }
 
+func (p *Postgres) ToDNSName(tlsSubDomain string) string {
+	// We only want letters and numbers
+	name := alphaNumericRegExp.ReplaceAllString(string(p.Name), "")
+	// Limit size
+	maxLen := 12
+	if len(name) > maxLen {
+		name = name[:maxLen]
+	}
+	return name + "." + tlsSubDomain
+}
+
+func (p *Postgres) ToTLSSecretName() string {
+	return p.generateDatabaseName() + "-cert"
+}
+
 func (p *Postgres) ToPeripheralResourceLookupKey() types.NamespacedName {
 	return types.NamespacedName{
 		Namespace: p.ToPeripheralResourceNamespace(),
@@ -758,7 +773,7 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 
 	if enableTlsCert {
 		z.Spec.TLS = &zalando.TLSDescription{
-			SecretName: p.generateDatabaseName(),
+			SecretName: p.ToTLSSecretName(),
 		}
 	}
 
