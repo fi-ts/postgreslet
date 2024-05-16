@@ -356,9 +356,8 @@ func (p *Postgres) ToSharedSvcLB(lbIP string, lbPort int32, enableStandbyLeaderS
 	if tlsSubDomain != "" {
 		lb.Annotations["cert.gardener.cloud/purpose"] = "managed"
 		lb.Annotations["cert.gardener.cloud/secretname"] = p.generateDatabaseName()
-		lb.Annotations["cert.gardener.cloud/commonName"] = p.generateDatabaseName()
 		lb.Annotations["dns.gardener.cloud/class"] = "garden"
-		lb.Annotations["dns.gardener.cloud/dnsnames"] = p.ToSharedSvcLBName() + "." + tlsSubDomain
+		lb.Annotations["dns.gardener.cloud/dnsnames"] = p.Name + "." + tlsSubDomain
 		lb.Annotations["dns.gardener.cloud/ttl"] = "180"
 	}
 
@@ -443,9 +442,8 @@ func (p *Postgres) ToDedicatedSvcLB(lbIP string, lbPort int32, standbyClustersSo
 		lb.Annotations = map[string]string{
 			"cert.gardener.cloud/purpose":    "managed",
 			"cert.gardener.cloud/secretname": p.generateDatabaseName(),
-			"cert.gardener.cloud/commonName": p.generateDatabaseName(),
 			"dns.gardener.cloud/class":       "garden",
-			"dns.gardener.cloud/dnsnames":    p.ToDedicatedSvcLBName() + "." + tlsSubDomain,
+			"dns.gardener.cloud/dnsnames":    p.Name + "." + tlsSubDomain,
 			"dns.gardener.cloud/ttl":         "180",
 		}
 	}
