@@ -176,6 +176,9 @@ func (m *LBManager) CreateOrUpdateDedicatedSvcLB(ctx context.Context, in *api.Po
 	// replace the whole spec
 	existing.Spec = new.Spec
 
+	// also update the annotations for our custom tls certs
+	existing.ObjectMeta.Annotations = new.ObjectMeta.Annotations
+
 	if err := m.client.Update(ctx, existing); err != nil {
 		return fmt.Errorf("failed to update Service of type LoadBalancer (dedicated): %w", err)
 	}
