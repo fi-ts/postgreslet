@@ -67,7 +67,7 @@ func (m *LBManager) CreateOrUpdateSharedSvcLB(ctx context.Context, in *api.Postg
 	}
 
 	tlsSubDomain := m.options.TLSSubDomain
-	if in.Spec.DedicatedLoadBalancerIP != nil && *in.Spec.DedicatedLoadBalancerIP != "" {
+	if in.Spec.DedicatedLoadBalancerIP != nil && *in.Spec.DedicatedLoadBalancerIP != "" && !m.options.EnableForceSharedIP {
 		// The annotation for the certificate will be handled by the DedicatedSvcLB and not by this SharedSvcLB.
 		tlsSubDomain = ""
 	}
@@ -146,7 +146,13 @@ func (m *LBManager) CreateOrUpdateDedicatedSvcLB(ctx context.Context, in *api.Po
 	}
 	var lbIPToUse string = *in.Spec.DedicatedLoadBalancerIP
 
-	new := in.ToDedicatedSvcLB(lbIPToUse, nextFreePort, m.options.StandbyClustersSourceRanges, m.options.TLSSubDomain)
+	tlsSubDomain := m.options.TLSSubDomain
+	if m.options.EnableForceSharedIP {
+		// The annotation for the certificate will be handled by the SharedSvcLB and not by this DedicatedSvcLB.
+		tlsSubDomain = ""
+	}
+
+	new := in.ToDedicatedSvcLB(lbIPToUse, nextFreePort, m.options.StandbyClustersSourceRanges, tlsSubDomain)
 	if !m.options.EnableLBSourceRanges {
 		// leave empty / disable source ranges
 		new.Spec.LoadBalancerSourceRanges = []string{}
