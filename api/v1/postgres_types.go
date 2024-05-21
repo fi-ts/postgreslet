@@ -439,15 +439,14 @@ func (p *Postgres) ToDedicatedSvcLB(lbIP string, lbPort int32, standbyClustersSo
 	lb.Name = p.ToDedicatedSvcLBName()
 	lb.SetLabels(SvcLoadBalancerLabel)
 
+	lb.Annotations = map[string]string{}
 	if tlsSubDomain != "" {
-		lb.Annotations = map[string]string{
-			"cert.gardener.cloud/purpose":    "managed",
-			"cert.gardener.cloud/secretname": p.ToTLSSecretName(),
-			"dns.gardener.cloud/dnsnames":    p.ToDNSName(tlsSubDomain),
-			"dns.gardener.cloud/class":       "garden",
-			"cert.gardener.cloud/commonname": p.ToDNSName(tlsSubDomain),
-			"cert.gardener.cloud/dnsnames":   "",
-		}
+		lb.Annotations["cert.gardener.cloud/purpose"] = "managed"
+		lb.Annotations["cert.gardener.cloud/secretname"] = p.ToTLSSecretName()
+		lb.Annotations["dns.gardener.cloud/dnsnames"] = p.ToDNSName(tlsSubDomain)
+		lb.Annotations["dns.gardener.cloud/class"] = "garden"
+		lb.Annotations["cert.gardener.cloud/commonname"] = p.ToDNSName(tlsSubDomain)
+		lb.Annotations["cert.gardener.cloud/dnsnames"] = ""
 	}
 
 	lbsr := []string{}
