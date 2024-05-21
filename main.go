@@ -75,6 +75,7 @@ const (
 	initDBJobCMNameFlg                    = "initdb-job-configmap-name"
 	enableBootstrapStandbyFromS3Flg       = "enable-bootsrtap-standby-from-s3"
 	enableSuperUserForDBOFlg              = "enable-superuser-for-dbo"
+	tlsSubDomainFlg                       = "tls-sub-domain"
 )
 
 var (
@@ -116,6 +117,7 @@ func main() {
 		etcdPSPName             string
 		postgresletFullname     string
 		initDBJobCMName         string
+		tlsSubDomain            string
 
 		enableLeaderElection               bool
 		enableCRDValidation                bool
@@ -277,6 +279,12 @@ func main() {
 	viper.SetDefault(enableSuperUserForDBOFlg, false)
 	enableSuperUserForDBO = viper.GetBool(enableSuperUserForDBOFlg)
 
+	tlsSubDomain = viper.GetString(tlsSubDomainFlg)
+	enableCustomTLSCert := false
+	if tlsSubDomain != "" {
+		enableCustomTLSCert = true
+	}
+
 	ctrl.Log.Info("flag",
 		metricsAddrSvcMgrFlg, metricsAddrSvcMgr,
 		metricsAddrCtrlMgrFlg, metricsAddrCtrlMgr,
@@ -317,6 +325,7 @@ func main() {
 		initDBJobCMNameFlg, initDBJobCMName,
 		enableBootstrapStandbyFromS3Flg, enableBootstrapStandbyFromS3,
 		enableSuperUserForDBOFlg, enableSuperUserForDBO,
+		tlsSubDomainFlg, tlsSubDomain,
 	)
 
 	svcClusterConf := ctrl.GetConfigOrDie()
@@ -401,6 +410,7 @@ func main() {
 		StandbyClustersSourceRanges: standbyClusterSourceRanges,
 		EnableLBSourceRanges:        enableLBSourceRanges,
 		EnableForceSharedIP:         enableForceSharedIP,
+		TLSSubDomain:                tlsSubDomain,
 	}
 	if err = (&controllers.PostgresReconciler{
 		CtrlClient:                          ctrlPlaneClusterMgr.GetClient(),
@@ -428,6 +438,7 @@ func main() {
 		InitDBJobConfigMapName:              initDBJobCMName,
 		EnableBootstrapStandbyFromS3:        enableBootstrapStandbyFromS3,
 		EnableSuperUserForDBO:               enableSuperUserForDBO,
+		EnableCustomTLSCert:                 enableCustomTLSCert,
 	}).SetupWithManager(ctrlPlaneClusterMgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Postgres")
 		os.Exit(1)

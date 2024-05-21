@@ -21,6 +21,7 @@ type Options struct {
 	StandbyClustersSourceRanges []string
 	EnableLBSourceRanges        bool
 	EnableForceSharedIP         bool
+	TLSSubDomain                string
 }
 
 // LBManager Responsible for the creation and deletion of externally accessible Services to access the Postgresql clusters managed by the Postgreslet.
@@ -59,10 +60,16 @@ func (m *LBManager) ReconcileSvcLBs(ctx context.Context, in *api.Postgres) error
 
 // CreateOrUpdateSharedSvcLB Creates or updates a Service of type LoadBalancer with a shared ip for the given Postgres resource if neccessary
 func (m *LBManager) CreateOrUpdateSharedSvcLB(ctx context.Context, in *api.Postgres) error {
-	if m.options.EnableForceSharedIP != true && in.Spec.DedicatedLoadBalancerIP != nil && *in.Spec.DedicatedLoadBalancerIP != "" {
+	if !m.options.EnableForceSharedIP && in.Spec.DedicatedLoadBalancerIP != nil && *in.Spec.DedicatedLoadBalancerIP != "" {
 		// TODO logging?
 		// TODO delete shared LB if neccessary (cleanup after possible config change)?
 		return nil
+	}
+
+	tlsSubDomain := m.options.TLSSubDomain
+	if in.Spec.DedicatedLoadBalancerIP != nil && *in.Spec.DedicatedLoadBalancerIP != "" {
+		// The annotation for the certificate will be handled by the DedicatedSvcLB and not by this SharedSvcLB.
+		tlsSubDomain = ""
 	}
 
 	svc := &corev1.Service{}
@@ -90,7 +97,7 @@ func (m *LBManager) CreateOrUpdateSharedSvcLB(ctx context.Context, in *api.Postg
 			lbIPToUse = ""
 		}
 
-		svc := in.ToSharedSvcLB(lbIPToUse, nextFreePort, m.options.EnableStandbyLeaderSelector, m.options.EnableLegacyStandbySelector, m.options.StandbyClustersSourceRanges)
+		svc := in.ToSharedSvcLB(lbIPToUse, nextFreePort, m.options.EnableStandbyLeaderSelector, m.options.EnableLegacyStandbySelector, m.options.StandbyClustersSourceRanges, tlsSubDomain)
 		if !m.options.EnableLBSourceRanges {
 			// leave empty / disable source ranges
 			svc.Spec.LoadBalancerSourceRanges = []string{}
@@ -101,7 +108,7 @@ func (m *LBManager) CreateOrUpdateSharedSvcLB(ctx context.Context, in *api.Postg
 		return nil
 	}
 
-	updated := in.ToSharedSvcLB("", 0, m.options.EnableStandbyLeaderSelector, m.options.EnableLegacyStandbySelector, m.options.StandbyClustersSourceRanges)
+	updated := in.ToSharedSvcLB("", 0, m.options.EnableStandbyLeaderSelector, m.options.EnableLegacyStandbySelector, m.options.StandbyClustersSourceRanges, tlsSubDomain)
 	// update the selector, and only the selector (we do NOT want the change the ip or port here!!!)
 	svc.Spec.Selector = updated.Spec.Selector
 	// also update the source ranges
@@ -112,6 +119,8 @@ func (m *LBManager) CreateOrUpdateSharedSvcLB(ctx context.Context, in *api.Postg
 		// leave empty / disable source ranges
 		svc.Spec.LoadBalancerSourceRanges = []string{}
 	}
+	// also update the annotations for our custom tls certs
+	svc.ObjectMeta.Annotations = updated.ObjectMeta.Annotations
 
 	if err := m.client.Update(ctx, svc); err != nil {
 		return fmt.Errorf("failed to update Service of type LoadBalancer (shared): %w", err)
@@ -137,7 +146,7 @@ func (m *LBManager) CreateOrUpdateDedicatedSvcLB(ctx context.Context, in *api.Po
 	}
 	var lbIPToUse string = *in.Spec.DedicatedLoadBalancerIP
 
-	new := in.ToDedicatedSvcLB(lbIPToUse, nextFreePort, m.options.StandbyClustersSourceRanges)
+	new := in.ToDedicatedSvcLB(lbIPToUse, nextFreePort, m.options.StandbyClustersSourceRanges, m.options.TLSSubDomain)
 	if !m.options.EnableLBSourceRanges {
 		// leave empty / disable source ranges
 		new.Spec.LoadBalancerSourceRanges = []string{}

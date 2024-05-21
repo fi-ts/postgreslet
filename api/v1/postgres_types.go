@@ -345,12 +345,21 @@ func (p *Postgres) ToKey() *types.NamespacedName {
 	}
 }
 
-func (p *Postgres) ToSharedSvcLB(lbIP string, lbPort int32, enableStandbyLeaderSelector bool, enableLegacyStandbySelector bool, standbyClustersSourceRanges []string) *corev1.Service {
+func (p *Postgres) ToSharedSvcLB(lbIP string, lbPort int32, enableStandbyLeaderSelector bool, enableLegacyStandbySelector bool, standbyClustersSourceRanges []string, tlsSubDomain string) *corev1.Service {
 	lb := &corev1.Service{}
 	lb.Spec.Type = "LoadBalancer"
 
 	lb.Annotations = map[string]string{
 		"metallb.universe.tf/allow-shared-ip": "spilo",
+	}
+
+	if tlsSubDomain != "" {
+		lb.Annotations["cert.gardener.cloud/purpose"] = "managed"
+		lb.Annotations["cert.gardener.cloud/secretname"] = p.ToTLSSecretName()
+		lb.Annotations["dns.gardener.cloud/dnsnames"] = p.ToDNSName(tlsSubDomain)
+		lb.Annotations["dns.gardener.cloud/class"] = "garden"
+		lb.Annotations["cert.gardener.cloud/commonname"] = p.ToDNSName(tlsSubDomain)
+		lb.Annotations["cert.gardener.cloud/dnsnames"] = ""
 	}
 
 	lb.Namespace = p.ToPeripheralResourceNamespace()
@@ -420,7 +429,7 @@ func (p *Postgres) ToSharedSvcLBNamespacedName() *types.NamespacedName {
 	}
 }
 
-func (p *Postgres) ToDedicatedSvcLB(lbIP string, lbPort int32, standbyClustersSourceRanges []string) *corev1.Service {
+func (p *Postgres) ToDedicatedSvcLB(lbIP string, lbPort int32, standbyClustersSourceRanges []string, tlsSubDomain string) *corev1.Service {
 	lb := &corev1.Service{}
 	lb.Spec.Type = "LoadBalancer"
 
@@ -429,6 +438,17 @@ func (p *Postgres) ToDedicatedSvcLB(lbIP string, lbPort int32, standbyClustersSo
 	lb.Namespace = p.ToPeripheralResourceNamespace()
 	lb.Name = p.ToDedicatedSvcLBName()
 	lb.SetLabels(SvcLoadBalancerLabel)
+
+	if tlsSubDomain != "" {
+		lb.Annotations = map[string]string{
+			"cert.gardener.cloud/purpose":    "managed",
+			"cert.gardener.cloud/secretname": p.ToTLSSecretName(),
+			"dns.gardener.cloud/dnsnames":    p.ToDNSName(tlsSubDomain),
+			"dns.gardener.cloud/class":       "garden",
+			"cert.gardener.cloud/commonname": p.ToDNSName(tlsSubDomain),
+			"cert.gardener.cloud/dnsnames":   "",
+		}
+	}
 
 	lbsr := []string{}
 	if p.HasSourceRanges() {
@@ -600,6 +620,21 @@ func (p *Postgres) ToPeripheralResourceNamespace() string {
 	return projectID + "-" + name
 }
 
+func (p *Postgres) ToDNSName(tlsSubDomain string) string {
+	// We only want letters and numbers
+	name := alphaNumericRegExp.ReplaceAllString(string(p.Name), "")
+	// Limit size
+	maxLen := 12
+	if len(name) > maxLen {
+		name = name[:maxLen]
+	}
+	return name + "." + tlsSubDomain
+}
+
+func (p *Postgres) ToTLSSecretName() string {
+	return p.generateDatabaseName() + "-cert"
+}
+
 func (p *Postgres) ToPeripheralResourceLookupKey() types.NamespacedName {
 	return types.NamespacedName{
 		Namespace: p.ToPeripheralResourceNamespace(),
@@ -607,7 +642,7 @@ func (p *Postgres) ToPeripheralResourceLookupKey() types.NamespacedName {
 	}
 }
 
-func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *corev1.ConfigMap, sc string, pgParamBlockList map[string]bool, rbs *BackupConfig, srcDB *Postgres, patroniTTL, patroniLoopWait, patroniRetryTimeout uint32, dboIsSuperuser bool) (*unstructured.Unstructured, error) {
+func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *corev1.ConfigMap, sc string, pgParamBlockList map[string]bool, rbs *BackupConfig, srcDB *Postgres, patroniTTL, patroniLoopWait, patroniRetryTimeout uint32, dboIsSuperuser bool, enableTlsCert bool) (*unstructured.Unstructured, error) {
 	if z == nil {
 		z = &zalando.Postgresql{}
 	}
@@ -731,6 +766,12 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 			StandbySecretName:      "standby." + p.ToPeripheralResourceName() + ".credentials",
 			S3WalPath:              "",
 			StandbyApplicationName: p.ObjectMeta.Name,
+		}
+	}
+
+	if enableTlsCert {
+		z.Spec.TLS = &zalando.TLSDescription{
+			SecretName: p.ToTLSSecretName(),
 		}
 	}
 
