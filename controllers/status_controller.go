@@ -101,7 +101,7 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 			// update IP and port
 			owner.Status.Socket.IP = shared.Spec.LoadBalancerIP
 			owner.Status.Socket.Port = shared.Spec.Ports[0].Port
-			owner.Status.AdditionalSockets = []pg.Socket{} // reset addidtional sockets
+			owner.Status.AdditionalSockets = []pg.Socket{} // reset additional sockets
 
 		} else {
 			// Todo: Handle errors other than `NotFound`
