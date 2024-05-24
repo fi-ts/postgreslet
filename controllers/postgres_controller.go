@@ -7,7 +7,6 @@
 package controllers
 
 import (
-	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/json"
@@ -15,7 +14,6 @@ import (
 	"fmt"
 	"math/big"
 	"net"
-	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
@@ -1068,73 +1066,7 @@ func (r *PostgresReconciler) updatePatroniConfigOnAllPods(log logr.Logger, ctx c
 }
 
 func (r *PostgresReconciler) httpPatchPatroni(log logr.Logger, ctx context.Context, instance *pg.Postgres, podIP string) error {
-	if podIP == "" {
-		return errors.New("podIP must not be empty")
-	}
-
-	podPort := "8008"
-	path := "config"
-
-	type PatroniStandbyCluster struct {
-		CreateReplicaMethods []string `json:"create_replica_methods"`
-		Host                 string   `json:"host"`
-		Port                 int      `json:"port"`
-		ApplicationName      string   `json:"application_name"`
-	}
-	type PatroniConfigRequest struct {
-		StandbyCluster             *PatroniStandbyCluster `json:"standby_cluster"`
-		SynchronousNodesAdditional *string                `json:"synchronous_nodes_additional"`
-	}
-
-	log.Info("Preparing request")
-	var request PatroniConfigRequest
-	if instance.IsReplicationPrimary() {
-		request = PatroniConfigRequest{
-			StandbyCluster: nil,
-		}
-		if instance.Spec.PostgresConnection.SynchronousReplication {
-			// enable sync replication
-			request.SynchronousNodesAdditional = pointer.String(instance.Spec.PostgresConnection.ConnectedPostgresID)
-		} else {
-			// disable sync replication
-			request.SynchronousNodesAdditional = nil
-		}
-	} else {
-		// TODO check values first
-		request = PatroniConfigRequest{
-			StandbyCluster: &PatroniStandbyCluster{
-				CreateReplicaMethods: []string{"basebackup_fast_xlog"},
-				Host:                 instance.Spec.PostgresConnection.ConnectionIP,
-				Port:                 int(instance.Spec.PostgresConnection.ConnectionPort),
-				ApplicationName:      instance.ObjectMeta.Name,
-			},
-			SynchronousNodesAdditional: nil,
-		}
-	}
-	log.V(debugLogLevel).Info("Prepared request", "request", request)
-	jsonReq, err := json.Marshal(request)
-	if err != nil {
-		log.Info("could not create config")
-		return err
-	}
-
-	httpClient := &http.Client{}
-	url := "http://" + podIP + ":" + podPort + "/" + path
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPatch, url, bytes.NewBuffer(jsonReq))
-	if err != nil {
-		log.Error(err, "could not create request")
-		return err
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		log.Error(err, "could not perform request")
-		return err
-	}
-	defer resp.Body.Close()
-
+	log.Info("Skipping call to patroni")
 	return nil
 }
 
