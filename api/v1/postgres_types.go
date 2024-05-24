@@ -429,7 +429,26 @@ func (p *Postgres) ToSharedSvcLBNamespacedName() *types.NamespacedName {
 	}
 }
 
-func (p *Postgres) ToDedicatedSvcLB(lbIP string, lbPort int32, standbyClustersSourceRanges []string, tlsSubDomain string) *corev1.Service {
+func (p *Postgres) EnableSharedSVCLB(enableForceSharedIP bool) bool {
+	if enableForceSharedIP {
+		// shared IP is forced, so force it. No more questions asked.
+		return true
+	}
+
+	if p.Spec.DedicatedLoadBalancerIP == nil {
+		// No dedicated ip set at all, enabled shared lb
+		return true
+	}
+
+	if *p.Spec.DedicatedLoadBalancerIP == "" {
+		// Empty IP set, enable shared lb
+		return true
+	}
+
+	return false
+}
+
+func (p *Postgres) ToDedicatedSvcLB(lbIP string, lbPort int32, standbyClustersSourceRanges []string, sharedSvcLbAlsoEnabled bool, tlsSubDomain string) *corev1.Service {
 	lb := &corev1.Service{}
 	lb.Spec.Type = "LoadBalancer"
 
@@ -440,7 +459,7 @@ func (p *Postgres) ToDedicatedSvcLB(lbIP string, lbPort int32, standbyClustersSo
 	lb.SetLabels(SvcLoadBalancerLabel)
 
 	lb.Annotations = map[string]string{}
-	if tlsSubDomain != "" {
+	if !sharedSvcLbAlsoEnabled && tlsSubDomain != "" {
 		lb.Annotations["cert.gardener.cloud/purpose"] = "managed"
 		lb.Annotations["cert.gardener.cloud/secretname"] = p.ToTLSSecretName()
 		lb.Annotations["dns.gardener.cloud/dnsnames"] = p.ToDNSName(tlsSubDomain)
@@ -502,6 +521,20 @@ func (p *Postgres) ToDedicatedSvcLBNamespacedName() *types.NamespacedName {
 		Namespace: p.ToPeripheralResourceNamespace(),
 		Name:      p.ToDedicatedSvcLBName(),
 	}
+}
+
+func (p *Postgres) EnableDedicatedSVCLB() bool {
+	if p.Spec.DedicatedLoadBalancerIP == nil {
+		// No dedicated ip set at all, disable dedicated lb
+		return false
+	}
+
+	if *p.Spec.DedicatedLoadBalancerIP == "" {
+		// Empty IP set, disable dedicated lb
+		return false
+	}
+
+	return true
 }
 
 func (p *Postgres) ToPeripheralResourceName() string {
