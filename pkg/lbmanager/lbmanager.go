@@ -61,7 +61,10 @@ func (m *LBManager) ReconcileSvcLBs(ctx context.Context, in *api.Postgres) error
 func (m *LBManager) CreateOrUpdateSharedSvcLB(ctx context.Context, in *api.Postgres) error {
 	if m.options.EnableForceSharedIP != true && in.Spec.DedicatedLoadBalancerIP != nil && *in.Spec.DedicatedLoadBalancerIP != "" {
 		// TODO logging?
-		// TODO delete shared LB if neccessary (cleanup after possible config change)?
+		err := m.DeleteSharedSvcLB(ctx, in)
+		if err != nil {
+			m.log.Info("could not delete dedicated loadbalancer", "ns", in.Namespace, "pgID", in.Name)
+		}
 		return nil
 	}
 
@@ -173,7 +176,7 @@ func (m *LBManager) DeleteSharedSvcLB(ctx context.Context, in *api.Postgres) err
 	lb := &corev1.Service{}
 	lb.Namespace = in.ToPeripheralResourceNamespace()
 	lb.Name = in.ToSharedSvcLBName()
-	if err := m.client.Delete(ctx, lb); client.IgnoreNotFound(err) != nil { // todo: remove ignorenotfound
+	if err := m.client.Delete(ctx, lb); client.IgnoreNotFound(err) != nil {
 		return err
 	}
 	return nil
@@ -184,7 +187,7 @@ func (m *LBManager) DeleteDedicatedSvcLB(ctx context.Context, in *api.Postgres) 
 	lb := &corev1.Service{}
 	lb.Namespace = in.ToPeripheralResourceNamespace()
 	lb.Name = in.ToDedicatedSvcLBName()
-	if err := m.client.Delete(ctx, lb); client.IgnoreNotFound(err) != nil { // todo: remove ignorenotfound
+	if err := m.client.Delete(ctx, lb); client.IgnoreNotFound(err) != nil {
 		return err
 	}
 	return nil
