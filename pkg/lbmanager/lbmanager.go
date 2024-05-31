@@ -57,7 +57,7 @@ func (m *LBManager) ReconcileSvcLBs(ctx context.Context, in *api.Postgres) error
 	return nil
 }
 
-// CreateOrUpdateSharedSvcLB Creates or updates a Service of type LoadBalancer with a shared ip for the given Postgres resource if neccessary
+// CreateOrUpdateSharedSvcLB Creates or updates a Service of type LoadBalancer with a shared ip for the given Postgres resource if necessary
 func (m *LBManager) CreateOrUpdateSharedSvcLB(ctx context.Context, in *api.Postgres) error {
 	if m.options.EnableForceSharedIP != true && in.Spec.DedicatedLoadBalancerIP != nil && *in.Spec.DedicatedLoadBalancerIP != "" {
 		// TODO logging?
@@ -123,7 +123,7 @@ func (m *LBManager) CreateOrUpdateSharedSvcLB(ctx context.Context, in *api.Postg
 	return nil
 }
 
-// CreateOrUpdateDedicatedSvcLB Creates or updates a Service of type LoadBalancer with a dedicated ip for the given Postgres resource if neccessary
+// CreateOrUpdateDedicatedSvcLB Creates or updates a Service of type LoadBalancer with a dedicated ip for the given Postgres resource if necessary
 func (m *LBManager) CreateOrUpdateDedicatedSvcLB(ctx context.Context, in *api.Postgres) error {
 	if in.Spec.DedicatedLoadBalancerIP == nil || *in.Spec.DedicatedLoadBalancerIP == "" {
 		// TODO logging?
