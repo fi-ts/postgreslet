@@ -4,7 +4,7 @@ go 1.22
 
 require (
 	github.com/go-logr/logr v1.2.4
-	github.com/google/uuid v1.3.0
+	github.com/google/uuid v1.5.0
 	github.com/metal-stack/firewall-controller v1.3.0
 	github.com/metal-stack/v v1.0.3
 	github.com/onsi/ginkgo v1.16.5
