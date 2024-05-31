@@ -335,4 +335,3 @@ fits    cd4eac58-46a5-4a31-b59f-2ec207baa817    fra-equ01       pg   my-db   124
   * database-api
   * postgreslet
   * postgres-operator
-
