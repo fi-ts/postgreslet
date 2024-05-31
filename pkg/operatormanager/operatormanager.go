@@ -166,7 +166,7 @@ func (m *OperatorManager) IsOperatorDeletable(ctx context.Context, namespace str
 	if err := m.client.List(ctx, setList, client.InNamespace(namespace), m.toInstanceMatchingLabels()); client.IgnoreNotFound(err) != nil {
 		return false, fmt.Errorf("error while fetching the list of statefulsets operated by the operator: %w", err)
 	}
-	if setList != nil && len(setList.Items) != 0 {
+	if len(setList.Items) != 0 {
 		log.Info("statefulset still running")
 		return false, nil
 	}
@@ -175,7 +175,7 @@ func (m *OperatorManager) IsOperatorDeletable(ctx context.Context, namespace str
 	if err := m.client.List(ctx, services, client.InNamespace(namespace), m.toInstanceMatchingLabels()); client.IgnoreNotFound(err) != nil {
 		return false, fmt.Errorf("error while fetching the list of services operated by the operator: %w", err)
 	}
-	if services != nil && len(services.Items) != 0 {
+	if len(services.Items) != 0 {
 		log.Info("services still running")
 		return false, nil
 	}
@@ -235,7 +235,7 @@ func (m *OperatorManager) UninstallOperator(ctx context.Context, namespace strin
 			}
 		default:
 			if err := m.metadataAccessor.SetNamespace(obj, namespace); err != nil {
-				return fmt.Errorf("error while setting the namesapce: %w", err)
+				return fmt.Errorf("error while setting the namespace: %w", err)
 			}
 
 			cltObject, ok := v.(client.Object)
@@ -608,7 +608,7 @@ func (m *OperatorManager) createOrUpdateSidecarsConfigMap(ctx context.Context, n
 		Name:      localSidecarsCMName,
 	}
 	if err := m.client.Get(ctx, ns, &corev1.ConfigMap{}); err == nil {
-		// local configmap aleady exists, updating it
+		// local configmap already exists, updating it
 		if err := m.client.Update(ctx, sccm); err != nil {
 			return fmt.Errorf("error while updating the new Sidecars ConfigMap: %w", err)
 		}
@@ -660,8 +660,8 @@ func (m *OperatorManager) toObjectKey(obj runtime.Object, namespace string) (cli
 
 // UpdateAllManagedOperators Updates the manifests of all postgres operators managed by this postgreslet
 func (m *OperatorManager) UpdateAllManagedOperators(ctx context.Context) error {
-	// fetch postgresql custom ressource (running or otherwise)
-	m.log.Info("Fetching all zalando custom ressources managed by this postgreslet")
+	// fetch postgresql custom resource (running or otherwise)
+	m.log.Info("Fetching all zalando custom resources managed by this postgreslet")
 	matchingLabels := client.MatchingLabels{
 		pg.PartitionIDLabelName: m.options.PartitionID,
 	}

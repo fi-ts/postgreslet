@@ -181,7 +181,7 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 			return ctrl.Result{}, fmt.Errorf("error while checking if the operator is idle: %w", err)
 		}
 		if !deletable {
-			r.recorder.Event(instance, "Warning", "Self-Reconcilation", "operator not yet deletable, requeueing")
+			r.recorder.Event(instance, "Warning", "Self-Reconciliation", "operator not yet deletable, requeueing")
 			log.Info("operator not yet deletable, requeueing")
 			return ctrl.Result{Requeue: true}, nil
 		}
@@ -198,7 +198,7 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 
 		instance.RemoveFinalizer(pg.PostgresFinalizerName)
 		if err := r.CtrlClient.Update(ctx, instance); err != nil {
-			r.recorder.Eventf(instance, "Warning", "Self-Reconcilation", "failed to remove finalizer: %v", err)
+			r.recorder.Eventf(instance, "Warning", "Self-Reconciliation", "failed to remove finalizer: %v", err)
 			return ctrl.Result{}, fmt.Errorf("failed to update finalizers: %w", err)
 		}
 		log.V(debugLogLevel).Info("finalizers removed")
@@ -210,7 +210,7 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	if !instance.HasFinalizer(pg.PostgresFinalizerName) {
 		instance.AddFinalizer(pg.PostgresFinalizerName)
 		if err := r.CtrlClient.Update(ctx, instance); err != nil {
-			r.recorder.Eventf(instance, "Warning", "Self-Reconcilation", "failed to add finalizer: %v", err)
+			r.recorder.Eventf(instance, "Warning", "Self-Reconciliation", "failed to add finalizer: %v", err)
 			return ctrl.Result{}, fmt.Errorf("error while adding finalizer: %w", err)
 		}
 		log.V(debugLogLevel).Info("finalizer added")
@@ -235,7 +235,7 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		}
 	}
 
-	// Make sure the postgres secrets exist, if neccessary
+	// Make sure the postgres secrets exist, if necessary
 	if err := r.ensurePostgresSecrets(log, ctx, instance); err != nil {
 		r.recorder.Eventf(instance, "Warning", "Error", "failed to create postgres secrets: %v", err)
 		return ctrl.Result{}, fmt.Errorf("error while creating postgres secrets: %w", err)
@@ -246,7 +246,7 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		//  (meaning we are already running) or we are a standby which was promoted to leader (also meaning we are
 		// already running)
 		// That means we should be able to call the patroni api already. this is required, as updating the custom
-		// ressource of a standby db seems to fail (maybe because of the users/databases?)...
+		// resource of a standby db seems to fail (maybe because of the users/databases?)...
 		// anyway, let's get on with it
 		if err := r.updatePatroniConfig(log, ctx, instance); err != nil {
 			// TODO what to do here? reschedule or ignore?
@@ -282,7 +282,7 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, fmt.Errorf("error while creating sidecars servicemonitor %v: %w", namespace, err)
 	}
 
-	// Make sure the storage secret exist, if neccessary
+	// Make sure the storage secret exist, if necessary
 	if err := r.ensureStorageEncryptionSecret(log, ctx, instance); err != nil {
 		r.recorder.Eventf(instance, "Warning", "Error", "failed to create storage secret: %v", err)
 		return ctrl.Result{}, fmt.Errorf("error while creating storage secret: %w", err)
@@ -336,9 +336,9 @@ func (r *PostgresReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context, instance *pg.Postgres, log logr.Logger, sidecarsCM *corev1.ConfigMap, patroniTTL, patroniLoopWait, patroniRetryTimout uint32) error {
+func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context, instance *pg.Postgres, log logr.Logger, sidecarsCM *corev1.ConfigMap, patroniTTL, patroniLoopWait, patroniRetryTimeout uint32) error {
 	var restoreBackupConfig *pg.BackupConfig
-	var restoreSouceInstance *pg.Postgres
+	var restoreSourceInstance *pg.Postgres
 	if instance.Spec.PostgresRestore != nil {
 		if instance.Spec.PostgresRestore.SourcePostgresID == "" {
 			return fmt.Errorf("restore requested, but no source configured")
@@ -359,7 +359,7 @@ func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context
 			}
 
 			restoreBackupConfig = bc
-			restoreSouceInstance = src
+			restoreSourceInstance = src
 		}
 	}
 
@@ -371,7 +371,7 @@ func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context
 			return fmt.Errorf("failed to fetch zalando postgresql: %w", err)
 		}
 
-		u, err := instance.ToUnstructuredZalandoPostgresql(nil, sidecarsCM, r.StorageClass, r.PgParamBlockList, restoreBackupConfig, restoreSouceInstance, patroniTTL, patroniLoopWait, patroniRetryTimout, r.EnableSuperUserForDBO)
+		u, err := instance.ToUnstructuredZalandoPostgresql(nil, sidecarsCM, r.StorageClass, r.PgParamBlockList, restoreBackupConfig, restoreSourceInstance, patroniTTL, patroniLoopWait, patroniRetryTimeout, r.EnableSuperUserForDBO)
 		if err != nil {
 			return fmt.Errorf("failed to convert to unstructured zalando postgresql: %w", err)
 		}
@@ -387,7 +387,7 @@ func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context
 	// Update zalando postgresql
 	mergeFrom := client.MergeFrom(rawZ.DeepCopy())
 
-	u, err := instance.ToUnstructuredZalandoPostgresql(rawZ, sidecarsCM, r.StorageClass, r.PgParamBlockList, restoreBackupConfig, restoreSouceInstance, patroniTTL, patroniLoopWait, patroniRetryTimout, r.EnableSuperUserForDBO)
+	u, err := instance.ToUnstructuredZalandoPostgresql(rawZ, sidecarsCM, r.StorageClass, r.PgParamBlockList, restoreBackupConfig, restoreSourceInstance, patroniTTL, patroniLoopWait, patroniRetryTimeout, r.EnableSuperUserForDBO)
 	if err != nil {
 		return fmt.Errorf("failed to convert to unstructured zalando postgresql: %w", err)
 	}
@@ -527,7 +527,7 @@ func (r *PostgresReconciler) updatePodEnvironmentConfigMap(log logr.Logger, ctx 
 		if cm, err = r.OperatorManager.CreatePodEnvironmentConfigMap(ctx, ns.Namespace); err != nil {
 			return fmt.Errorf("error while creating the missing Pod Environment ConfigMap %v: %w", ns.Namespace, err)
 		}
-		log.Info("mising Pod Environment ConfigMap created!")
+		log.Info("missing Pod Environment ConfigMap created!")
 	}
 	cm.Data = data
 	if err := r.SvcClient.Update(ctx, cm); err != nil {
@@ -739,7 +739,7 @@ func (r *PostgresReconciler) createOrUpdateIngressCWNP(log logr.Logger, ctx cont
 		return nil
 	}
 
-	// Create CWNP if standby is configured (independant of the current role)
+	// Create CWNP if standby is configured (independent of the current role)
 
 	standbyIngressCWNP, err := in.ToStandbyClusterIngressCWNP(r.StandbyClustersSourceRanges)
 	if err != nil {
@@ -959,7 +959,7 @@ func (r *PostgresReconciler) copySecrets(log logr.Logger, ctx context.Context, s
 
 	// copy all but the standby secrets...
 	for username := range remoteSecret.Data {
-		// check if we skip the standby user (e.g. to prevent old standby intances from connecting once a clone took over its sources ip/port)
+		// check if we skip the standby user (e.g. to prevent old standby instances from connecting once a clone took over its sources ip/port)
 		if ignoreStandbyUser && username == pg.PostgresConfigReplicationUsername {
 			continue
 		}
@@ -1230,7 +1230,7 @@ func (r *PostgresReconciler) createOrUpdateNetPol(ctx context.Context, instance 
 	return nil
 }
 
-// createOrUpdateExporterSidecarServices ensures the neccessary services to acces the sidecars exist
+// createOrUpdateExporterSidecarServices ensures the necessary services to access the sidecars exist
 func (r *PostgresReconciler) createOrUpdateExporterSidecarServices(log logr.Logger, ctx context.Context, namespace string, c *corev1.ConfigMap, in *pg.Postgres) error {
 	exporterServicePort, error := strconv.ParseInt(c.Data["postgres-exporter-service-port"], 10, 32)
 	if error != nil {
@@ -1303,7 +1303,7 @@ func (r *PostgresReconciler) createOrUpdateExporterSidecarServices(log logr.Logg
 	return nil
 }
 
-// deleteNetPol Deletes our NetworkPolicy, if it exists. This is probably only neccessary if ENABLE_NETPOL is flipped at runtime, as the the NetworkPolicy is created in the databases namespace, which will be completely removed when the database is deleted.
+// deleteNetPol Deletes our NetworkPolicy, if it exists. This is probably only necessary if ENABLE_NETPOL is flipped at runtime, as the the NetworkPolicy is created in the databases namespace, which will be completely removed when the database is deleted.
 func (r *PostgresReconciler) deleteNetPol(ctx context.Context, instance *pg.Postgres) error {
 	netpol := &networkingv1.NetworkPolicy{}
 	netpol.Namespace = instance.ToPeripheralResourceNamespace()
@@ -1349,7 +1349,7 @@ func (r *PostgresReconciler) createOrUpdateExporterSidecarServiceMonitor(log log
 		MatchNames: []string{namespace},
 	}
 	matchLabels := map[string]string{
-		// TODO use extraced string
+		// TODO use extracted string
 		"app": "postgres-exporter",
 	}
 	pesm.Spec.Selector = metav1.LabelSelector{

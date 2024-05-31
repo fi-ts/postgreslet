@@ -77,7 +77,7 @@ spec:
                 type: string
               connection:
                 description: PostgresConnection Connection info of a streaming host,
-                  independant of the current role (leader or standby)
+                  independent of the current role (leader or standby)
                 properties:
                   ip:
                     description: ConnectionIP IP of the remote postgres
