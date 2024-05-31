@@ -143,6 +143,8 @@ func main() {
 		standbyClusterSourceRanges []string
 	)
 
+	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
+
 	// TODO enable Prefix and update helm chart
 	// viper.SetEnvPrefix(envPrefix)
 	viper.AutomaticEnv()
@@ -170,7 +172,7 @@ func main() {
 	if len(lbIP) > 0 {
 		// todo: Shift the logic to a dedicated pkg for args validation.
 		if ip := net.ParseIP(lbIP); ip == nil {
-			ctrl.Log.Error(nil, fmt.Sprintf("Cannot parse provided %s %q, exiting.", loadBalancerIPFlg, lbIP))
+			setupLog.Error(nil, fmt.Sprintf("Cannot parse provided %s %q, exiting.", loadBalancerIPFlg, lbIP))
 			os.Exit(1)
 		}
 	}
@@ -274,8 +276,6 @@ func main() {
 
 	viper.SetDefault(enableSuperUserForDBOFlg, false)
 	enableSuperUserForDBO = viper.GetBool(enableSuperUserForDBOFlg)
-
-	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 
 	ctrl.Log.Info("flag",
 		metricsAddrSvcMgrFlg, metricsAddrSvcMgr,
