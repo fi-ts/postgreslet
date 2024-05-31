@@ -51,6 +51,8 @@ const (
 	SidecarsCMExporterQueriesKey string = "queries.yaml"
 
 	localSidecarsCMName = "postgres-sidecars-configmap"
+
+	debugLogLevel int = 1
 )
 
 // operatorPodMatchingLabels is for listing operator pods
@@ -110,13 +112,14 @@ func New(confRest *rest.Config, fileName string, scheme *runtime.Scheme, log log
 		decoder:          deserializer,
 		list:             list,
 		scheme:           scheme,
-		log:              log,
+		log:              log.V(debugLogLevel),
 		options:          opt,
 	}, nil
 }
 
 // InstallOrUpdateOperator installs or updates the operator Stored in `OperatorManager`
 func (m *OperatorManager) InstallOrUpdateOperator(ctx context.Context, namespace string) error {
+
 	// Make sure the namespace exists.
 	if err := m.createNamespace(ctx, namespace); err != nil {
 		return fmt.Errorf("error while ensuring the existence of namespace %v: %w", namespace, err)
@@ -153,18 +156,20 @@ func (m *OperatorManager) InstallOrUpdateOperator(ctx context.Context, namespace
 		}
 	}
 
-	m.log.Info("operator installed")
+	m.log.Info("operator installed", "ns", namespace)
 	return nil
 }
 
 // IsOperatorDeletable returns true when there's no running instance operated by the operator
 func (m *OperatorManager) IsOperatorDeletable(ctx context.Context, namespace string) (bool, error) {
+	log := m.log.WithValues("ns", namespace)
+
 	setList := &appsv1.StatefulSetList{}
 	if err := m.client.List(ctx, setList, client.InNamespace(namespace), m.toInstanceMatchingLabels()); client.IgnoreNotFound(err) != nil {
 		return false, fmt.Errorf("error while fetching the list of statefulsets operated by the operator: %w", err)
 	}
 	if setList != nil && len(setList.Items) != 0 {
-		m.log.Info("statefulset still running")
+		log.Info("statefulset still running")
 		return false, nil
 	}
 
@@ -173,11 +178,11 @@ func (m *OperatorManager) IsOperatorDeletable(ctx context.Context, namespace str
 		return false, fmt.Errorf("error while fetching the list of services operated by the operator: %w", err)
 	}
 	if services != nil && len(services.Items) != 0 {
-		m.log.Info("services still running")
+		log.Info("services still running")
 		return false, nil
 	}
 
-	m.log.Info("operator deletable")
+	log.Info("operator deletable")
 	return true, nil
 }
 
@@ -194,7 +199,7 @@ func (m *OperatorManager) IsOperatorInstalled(ctx context.Context, namespace str
 	if len(pods.Items) == 0 {
 		return false, nil
 	}
-	m.log.Info("operator is installed")
+	m.log.Info("operator is installed", "ns", namespace)
 	return true, nil
 }
 
@@ -259,14 +264,15 @@ func (m *OperatorManager) UninstallOperator(ctx context.Context, namespace strin
 	if err := m.client.Delete(ctx, nsObj); err != nil {
 		return fmt.Errorf("error while deleting namespace %v: %w", namespace, err)
 	}
-	m.log.Info("namespace deleted")
+	m.log.Info("namespace deleted", "ns", namespace)
 
-	m.log.Info("operator and related ressources deleted")
 	return nil
 }
 
 // createNewClientObject adds namespace to obj and creates or patches it
 func (m *OperatorManager) createNewClientObject(ctx context.Context, obj client.Object, namespace string) error {
+	log := m.log.WithValues("ns", namespace)
+
 	// remove any unwanted annotations, uids etc. Remember, these objects come straight from the YAML.
 	if err := m.ensureCleanMetadata(obj); err != nil {
 		return fmt.Errorf("error while ensuring the metadata of the `client.Object` is clean: %w", err)
@@ -286,10 +292,10 @@ func (m *OperatorManager) createNewClientObject(ctx context.Context, obj client.
 	// perform different modifications on the parsed objects based on their kind
 	switch v := obj.(type) {
 	case *corev1.ServiceAccount:
-		m.log.Info("handling ServiceAccount")
+		log.Info("handling ServiceAccount")
 		err = m.client.Get(ctx, key, &corev1.ServiceAccount{})
 	case *rbacv1.ClusterRole:
-		m.log.Info("handling ClusterRole")
+		log.Info("handling ClusterRole")
 		// Add our psp
 		pspPolicyRule := rbacv1.PolicyRule{
 			APIGroups:     []string{"extensions"},
@@ -303,7 +309,7 @@ func (m *OperatorManager) createNewClientObject(ctx context.Context, obj client.
 		key.Namespace = ""
 		err = m.client.Get(ctx, key, &rbacv1.ClusterRole{})
 	case *rbacv1.ClusterRoleBinding:
-		m.log.Info("handling ClusterRoleBinding")
+		log.Info("handling ClusterRoleBinding")
 
 		// Set the namespace of the ServiceAccount in the ClusterRoleBinding.
 		for i, s := range v.Subjects {
@@ -326,7 +332,7 @@ func (m *OperatorManager) createNewClientObject(ctx context.Context, obj client.
 			if err := m.client.Create(ctx, v); err != nil {
 				return fmt.Errorf("error while creating %v: %w", v, err)
 			}
-			m.log.Info("ClusterRoleBinding created")
+			log.Info("ClusterRoleBinding created")
 
 			return nil
 		}
@@ -344,16 +350,16 @@ func (m *OperatorManager) createNewClientObject(ctx context.Context, obj client.
 		if err := m.client.Patch(ctx, got, mergeFrom); err != nil {
 			return fmt.Errorf("error while patching the `ClusterRoleBinding`: %w", err)
 		}
-		m.log.Info("ClusterRoleBinding patched")
+		log.Info("ClusterRoleBinding patched")
 
 		// we already patched the object, no need to go through the update path at the bottom of this function
 		return nil
 	case *corev1.ConfigMap:
-		m.log.Info("handling ConfigMap")
+		log.Info("handling ConfigMap")
 		m.editConfigMap(v, namespace, m.options)
 		err = m.client.Get(ctx, key, &corev1.ConfigMap{})
 	case *corev1.Service:
-		m.log.Info("handling Service")
+		log.Info("handling Service")
 		got := corev1.Service{}
 		err = m.client.Get(ctx, key, &got)
 		if err == nil {
@@ -363,11 +369,11 @@ func (m *OperatorManager) createNewClientObject(ctx context.Context, obj client.
 			v.Spec.ClusterIP = got.Spec.ClusterIP
 		}
 	case *appsv1.Deployment:
-		m.log.Info("handling Deployment")
+		log.Info("handling Deployment")
 		if len(v.Spec.Template.Spec.Containers) != 1 {
-			m.log.Info("Unexpected number of containers in deployment, ignoring.")
+			log.Info("Unexpected number of containers in deployment, ignoring.")
 		} else if m.options.OperatorImage != "" {
-			m.log.Info("Patching operator image", "image", m.options.OperatorImage)
+			log.Info("Patching operator image", "image", m.options.OperatorImage)
 			v.Spec.Template.Spec.Containers[0].Image = m.options.OperatorImage
 		}
 		err = m.client.Get(ctx, key, &appsv1.Deployment{})
@@ -381,7 +387,7 @@ func (m *OperatorManager) createNewClientObject(ctx context.Context, obj client.
 			if err := m.client.Create(ctx, obj); err != nil {
 				return fmt.Errorf("error while creating the `client.Object`: %w", err)
 			}
-			m.log.Info("new `client.Object` created")
+			log.Info("new `client.Object` created")
 
 			return nil
 		}
@@ -466,7 +472,7 @@ func (m *OperatorManager) createNamespace(ctx context.Context, namespace string)
 		if err := m.client.Create(ctx, nsObj); err != nil {
 			return fmt.Errorf("error while creating namespace %v: %w", namespace, err)
 		}
-		m.log.Info("namespace created", "name", namespace)
+		m.log.Info("namespace created", "ns", namespace)
 	}
 
 	return nil
@@ -474,6 +480,8 @@ func (m *OperatorManager) createNamespace(ctx context.Context, namespace string)
 
 // CreatePodEnvironmentConfigMap creates a new ConfigMap with additional environment variables for the pods
 func (m *OperatorManager) CreatePodEnvironmentConfigMap(ctx context.Context, namespace string) (*corev1.ConfigMap, error) {
+	log := m.log.WithValues("ns", namespace)
+
 	ns := types.NamespacedName{
 		Namespace: namespace,
 		Name:      PodEnvCMName,
@@ -482,7 +490,7 @@ func (m *OperatorManager) CreatePodEnvironmentConfigMap(ctx context.Context, nam
 	if err := m.client.Get(ctx, ns, cm); err == nil {
 		// configmap already exists, nothing to do here
 		// we will update the configmap with the correct S3 config in the postgres controller
-		m.log.Info("Pod Environment ConfigMap already exists")
+		log.Info("Pod Environment ConfigMap already exists")
 		return cm, nil
 	}
 
@@ -496,13 +504,15 @@ func (m *OperatorManager) CreatePodEnvironmentConfigMap(ctx context.Context, nam
 	if err := m.client.Create(ctx, cm); err != nil {
 		return nil, fmt.Errorf("error while creating the new Pod Environment ConfigMap: %w", err)
 	}
-	m.log.Info("new Pod Environment ConfigMap created")
+	log.Info("new Pod Environment ConfigMap created")
 
 	return cm, nil
 }
 
 // CreateOrGetPodEnvironmentSecret creates a new Secret with additional environment variables for the pods or simply returns it if it already exists
 func (m *OperatorManager) CreateOrGetPodEnvironmentSecret(ctx context.Context, namespace string) (*corev1.Secret, error) {
+	log := m.log.WithValues("ns", namespace)
+
 	ns := types.NamespacedName{
 		Namespace: namespace,
 		Name:      PodEnvSecretName,
@@ -511,7 +521,7 @@ func (m *OperatorManager) CreateOrGetPodEnvironmentSecret(ctx context.Context, n
 	if err := m.client.Get(ctx, ns, s); err == nil {
 		// secret already exists, nothing to do here
 		// we will update the secret with the correct S3 config in the postgres controller
-		m.log.Info("Pod Environment Secret already exists")
+		log.Info("Pod Environment Secret already exists")
 		return s, nil
 	}
 
@@ -525,7 +535,7 @@ func (m *OperatorManager) CreateOrGetPodEnvironmentSecret(ctx context.Context, n
 	if err := m.client.Create(ctx, s); err != nil {
 		return nil, fmt.Errorf("error while creating the new Pod Environment Secret: %w", err)
 	}
-	m.log.Info("new Pod Environment Secret created")
+	log.Info("new Pod Environment Secret created")
 
 	return s, nil
 }
@@ -539,7 +549,7 @@ func (m *OperatorManager) createOrUpdateSidecarsConfig(ctx context.Context, name
 	globalSidecarsCM := &corev1.ConfigMap{}
 	if err := m.client.Get(ctx, cns, globalSidecarsCM); err != nil {
 		// configmap with configuration does not exists, nothing we can do here...
-		m.log.Error(err, "could not fetch config for sidecars")
+		m.log.Error(err, "could not fetch global config for sidecars", "ns", namespace)
 		return err
 	}
 
@@ -553,6 +563,7 @@ func (m *OperatorManager) createOrUpdateSidecarsConfig(ctx context.Context, name
 
 // createOrUpdateSidecarsConfigMap Creates/updates a local ConfigMap for the sidecars, which e.g. contains the config files to mount in the sidecars
 func (m *OperatorManager) createOrUpdateSidecarsConfigMap(ctx context.Context, namespace string, globalSidecarsCM *corev1.ConfigMap) error {
+	log := m.log.WithValues("ns", namespace)
 	sccm := &corev1.ConfigMap{}
 	if err := m.metadataAccessor.SetName(sccm, localSidecarsCMName); err != nil {
 		return fmt.Errorf("error while setting the name of the new Sidecars ConfigMap to %v: %w", namespace, err)
@@ -587,7 +598,7 @@ func (m *OperatorManager) createOrUpdateSidecarsConfigMap(ctx context.Context, n
 		if err := m.client.Update(ctx, sccm); err != nil {
 			return fmt.Errorf("error while updating the new Sidecars ConfigMap: %w", err)
 		}
-		m.log.Info("Sidecars ConfigMap updated")
+		log.Info("Sidecars ConfigMap updated")
 		return nil
 	}
 	// todo: handle errors other than `NotFound`
@@ -596,7 +607,7 @@ func (m *OperatorManager) createOrUpdateSidecarsConfigMap(ctx context.Context, n
 	if err := m.client.Create(ctx, sccm); err != nil {
 		return fmt.Errorf("error while creating the new Sidecars ConfigMap: %w", err)
 	}
-	m.log.Info("new Sidecars ConfigMap created")
+	log.Info("new Sidecars ConfigMap created")
 
 	return nil
 }
@@ -612,8 +623,7 @@ func (m *OperatorManager) deletePodEnvironmentConfigMap(ctx context.Context, nam
 	if err := m.client.Delete(ctx, cm); err != nil {
 		return fmt.Errorf("error while deleting the Pod Environment ConfigMap: %w", err)
 	}
-	m.log.Info("Pod Environment ConfigMap deleted")
-
+	m.log.Info("Pod Environment ConfigMap deleted", "ns", namespace)
 	return nil
 }
 
@@ -650,7 +660,7 @@ func (m *OperatorManager) UpdateAllManagedOperators(ctx context.Context) error {
 	}
 	// update each namespace
 	for _, z := range zList.Items {
-		m.log.Info("Updating postgres operator installation", "namespace", z.Namespace)
+		m.log.Info("Updating postgres operator installation", "ns", z.Namespace)
 		if err := m.InstallOrUpdateOperator(ctx, z.Namespace); err != nil {
 			return err
 		}

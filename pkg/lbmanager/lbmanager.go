@@ -129,7 +129,7 @@ func (m *LBManager) CreateOrUpdateDedicatedSvcLB(ctx context.Context, in *api.Po
 		// TODO logging?
 		err := m.DeleteDedicatedSvcLB(ctx, in)
 		if err != nil {
-			m.log.Info("could not delete dedicated loadbalancer")
+			m.log.Info("could not delete dedicated loadbalancer", "ns", in.Namespace, "pgID", in.Name)
 		}
 		return nil
 	}
