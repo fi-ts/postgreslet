@@ -36,46 +36,46 @@ import (
 
 const (
 	// envPrefix               = "pg"
-	metricsAddrSvcMgrFlg                  = "metrics-addr-svc-mgr"
-	metricsAddrCtrlMgrFlg                 = "metrics-addr-ctrl-mgr"
-	enableLeaderElectionFlg               = "enable-leader-election"
-	partitionIDFlg                        = "partition-id"
-	tenantFlg                             = "tenant"
-	ctrlPlaneKubeConfifgFlg               = "controlplane-kubeconfig"
-	loadBalancerIPFlg                     = "load-balancer-ip"
-	portRangeStartFlg                     = "port-range-start"
-	portRangeSizeFlg                      = "port-range-size"
-	customPSPNameFlg                      = "custom-psp-name"
-	storageClassFlg                       = "storage-class"
-	postgresImageFlg                      = "postgres-image"
-	etcdHostFlg                           = "etcd-host"
-	crdValidationFlg                      = "enable-crd-validation"
-	operatorImageFlg                      = "operator-image"
-	pgParamBlockListFlg                   = "postgres-param-blocklist" // nolint
-	majorVersionUpgradeModeFlg            = "major-version-upgrade-mode"
-	standbyClustersSourceRangesFlg        = "standby-clusters-source-ranges"
-	postgresletNamespaceFlg               = "postgreslet-namespace"
-	sidecarsCMNameFlg                     = "sidecars-configmap-name"
-	enableNetPolFlg                       = "enable-netpol"
-	enablePodAntiaffinityFlg              = "enable-pod-antiaffinity"
-	patroniRetryTimeoutFlg                = "patroni-retry-timeout"
-	enableStandbyLeaderSelectorFlg        = "enable-standby-leader-selector"
-	ControlPlaneNamespaceFlg              = "control-plane-namespace"
-	enableLegacyStandbySelectorFlg        = "enable-legacy-standby-selector"
-	deployEtcdFlg                         = "deploy-etcd"
-	etcdImageFlg                          = "etcd-image"
-	etcdBackupSidecarImageFlg             = "etcd-backup-sidecar-image"
-	etcdBackupSecretNameFlg               = "etcd-backup-secret-name" // nolint
-	etcdPSPNameFlg                        = "etcd-psp-name"
-	postgresletFullnameFlg                = "postgreslet-fullname"
-	enableLBSourceRangesFlg               = "enable-lb-source-ranges"
-	enableRandomStorageEncrytionSecretFlg = "enable-random-storage-encryption-secret"
-	enableWalGEncryptionFlg               = "enable-walg-encryption"
-	enableForceSharedIPFlg                = "enable-force-shared-ip"
-	initDBJobCMNameFlg                    = "initdb-job-configmap-name"
-	enableBootstrapStandbyFromS3Flg       = "enable-bootsrtap-standby-from-s3"
-	enableSuperUserForDBOFlg              = "enable-superuser-for-dbo"
-	tlsSubDomainFlg                       = "tls-sub-domain"
+	metricsAddrSvcMgrFlg                   = "metrics-addr-svc-mgr"
+	metricsAddrCtrlMgrFlg                  = "metrics-addr-ctrl-mgr"
+	enableLeaderElectionFlg                = "enable-leader-election"
+	partitionIDFlg                         = "partition-id"
+	tenantFlg                              = "tenant"
+	ctrlPlaneKubeConfifgFlg                = "controlplane-kubeconfig"
+	loadBalancerIPFlg                      = "load-balancer-ip"
+	portRangeStartFlg                      = "port-range-start"
+	portRangeSizeFlg                       = "port-range-size"
+	customPSPNameFlg                       = "custom-psp-name"
+	storageClassFlg                        = "storage-class"
+	postgresImageFlg                       = "postgres-image"
+	etcdHostFlg                            = "etcd-host"
+	crdValidationFlg                       = "enable-crd-validation"
+	operatorImageFlg                       = "operator-image"
+	pgParamBlockListFlg                    = "postgres-param-blocklist" // nolint
+	majorVersionUpgradeModeFlg             = "major-version-upgrade-mode"
+	standbyClustersSourceRangesFlg         = "standby-clusters-source-ranges"
+	postgresletNamespaceFlg                = "postgreslet-namespace"
+	sidecarsCMNameFlg                      = "sidecars-configmap-name"
+	enableNetPolFlg                        = "enable-netpol"
+	enablePodAntiaffinityFlg               = "enable-pod-antiaffinity"
+	patroniRetryTimeoutFlg                 = "patroni-retry-timeout"
+	enableStandbyLeaderSelectorFlg         = "enable-standby-leader-selector"
+	ControlPlaneNamespaceFlg               = "control-plane-namespace"
+	enableLegacyStandbySelectorFlg         = "enable-legacy-standby-selector"
+	deployEtcdFlg                          = "deploy-etcd"
+	etcdImageFlg                           = "etcd-image"
+	etcdBackupSidecarImageFlg              = "etcd-backup-sidecar-image"
+	etcdBackupSecretNameFlg                = "etcd-backup-secret-name" // nolint
+	etcdPSPNameFlg                         = "etcd-psp-name"
+	postgresletFullnameFlg                 = "postgreslet-fullname"
+	enableLBSourceRangesFlg                = "enable-lb-source-ranges"
+	enableRandomStorageEncryptionSecretFlg = "enable-random-storage-encryption-secret"
+	enableWalGEncryptionFlg                = "enable-walg-encryption"
+	enableForceSharedIPFlg                 = "enable-force-shared-ip"
+	initDBJobCMNameFlg                     = "initdb-job-configmap-name"
+	enableBootstrapStandbyFromS3Flg        = "enable-bootsrtap-standby-from-s3"
+	enableSuperUserForDBOFlg               = "enable-superuser-for-dbo"
+	tlsSubDomainFlg                        = "tls-sub-domain"
 )
 
 var (
@@ -119,19 +119,19 @@ func main() {
 		initDBJobCMName         string
 		tlsSubDomain            string
 
-		enableLeaderElection               bool
-		enableCRDValidation                bool
-		enableNetPol                       bool
-		enablePodAntiaffinity              bool
-		enableStandbyLeaderSelector        bool
-		enableLegacyStandbySelector        bool
-		deployEtcd                         bool
-		enableLBSourceRanges               bool
-		enableRandomStorageEncrytionSecret bool
-		enableWalGEncryption               bool
-		enableForceSharedIP                bool
-		enableBootstrapStandbyFromS3       bool
-		enableSuperUserForDBO              bool
+		enableLeaderElection                bool
+		enableCRDValidation                 bool
+		enableNetPol                        bool
+		enablePodAntiaffinity               bool
+		enableStandbyLeaderSelector         bool
+		enableLegacyStandbySelector         bool
+		deployEtcd                          bool
+		enableLBSourceRanges                bool
+		enableRandomStorageEncryptionSecret bool
+		enableWalGEncryption                bool
+		enableForceSharedIP                 bool
+		enableBootstrapStandbyFromS3        bool
+		enableSuperUserForDBO               bool
 
 		portRangeStart int
 		portRangeSize  int
@@ -261,8 +261,8 @@ func main() {
 	viper.SetDefault(enableLBSourceRangesFlg, true)
 	enableLBSourceRanges = viper.GetBool(enableLBSourceRangesFlg)
 
-	viper.SetDefault(enableRandomStorageEncrytionSecretFlg, false)
-	enableRandomStorageEncrytionSecret = viper.GetBool(enableRandomStorageEncrytionSecretFlg)
+	viper.SetDefault(enableRandomStorageEncryptionSecretFlg, false)
+	enableRandomStorageEncryptionSecret = viper.GetBool(enableRandomStorageEncryptionSecretFlg)
 
 	viper.SetDefault(enableWalGEncryptionFlg, false)
 	enableWalGEncryption = viper.GetBool(enableWalGEncryptionFlg)
@@ -318,7 +318,7 @@ func main() {
 		etcdBackupSecretNameFlg, etcdBackupSecretName,
 		etcdPSPNameFlg, etcdPSPName,
 		enableLBSourceRangesFlg, enableLBSourceRanges,
-		enableRandomStorageEncrytionSecretFlg, enableRandomStorageEncrytionSecret,
+		enableRandomStorageEncryptionSecretFlg, enableRandomStorageEncryptionSecret,
 		postgresletFullnameFlg, postgresletFullname,
 		enableWalGEncryptionFlg, enableWalGEncryption,
 		enableForceSharedIPFlg, enableForceSharedIP,
@@ -431,7 +431,7 @@ func main() {
 		PatroniTTL:                          patroniTTL,
 		PatroniLoopWait:                     patroniLoopWait,
 		PatroniRetryTimeout:                 patroniRetryTimeout,
-		EnableRandomStorageEncryptionSecret: enableRandomStorageEncrytionSecret,
+		EnableRandomStorageEncryptionSecret: enableRandomStorageEncryptionSecret,
 		EnableWalGEncryption:                enableWalGEncryption,
 		PostgresletFullname:                 postgresletFullname,
 		PostgresImage:                       postgresImage,

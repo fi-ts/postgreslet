@@ -8,6 +8,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
@@ -41,9 +42,9 @@ type StatusReconciler struct {
 // +kubebuilder:rbac:groups=acid.zalan.do,resources=postgresqls,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=acid.zalan.do,resources=postgresqls/status,verbs=get;update;patch
 func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	log := r.Log.WithValues("postgresql", req.NamespacedName)
+	log := r.Log.WithValues("ns", req.NamespacedName.Namespace)
 
-	log.Info("fetching postgresql")
+	log.V(debugLogLevel).Info("fetching postgresql")
 	instance := &zalando.Postgresql{}
 	if err := r.SvcClient.Get(ctx, req.NamespacedName, instance); err != nil {
 		if !errors.IsNotFound(err) {
@@ -60,7 +61,7 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{}, err
 	}
 
-	log.Info("fetching owner")
+	log.V(debugLogLevel).Info("fetching owner")
 	ownerNs := types.NamespacedName{
 		Namespace: r.ControlPlaneNamespace,
 		Name:      derivedOwnerName,
@@ -70,7 +71,9 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{}, fmt.Errorf("could not find the owner")
 	}
 
-	log.Info("updating status")
+	log = log.WithValues("pgID", owner.Name)
+
+	log.V(debugLogLevel).Info("updating status")
 	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		// get a fresh copy of the owner object
 		if err := r.CtrlClient.Get(ctx, types.NamespacedName{Name: owner.Name, Namespace: owner.Namespace}, owner); err != nil {
@@ -81,7 +84,7 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		// update the reference to the zalando instance in the remote object
 		owner.Status.ChildName = instance.ObjectMeta.Name
 
-		log.Info("Updating owner", "owner", owner.UID)
+		log.V(debugLogLevel).Info("Updating owner", "owner", owner.UID)
 		if err := r.CtrlClient.Status().Update(ctx, owner); err != nil {
 			log.Error(err, "failed to update owner object")
 			return err
@@ -93,7 +96,7 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{}, retryErr
 	}
 
-	log.Info("updating socket")
+	log.V(debugLogLevel).Info("updating socket")
 	if !owner.EnableDedicatedSVCLB() {
 		// no dedicated load balancer configured, use the shared one
 		shared := &corev1.Service{}
@@ -112,7 +115,7 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		if err := r.CtrlClient.Status().Update(ctx, owner); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to update simple postgres status socket: %w", err)
 		}
-		log.Info("simple postgres status socket updated")
+		log.V(debugLogLevel).Info("simple postgres status socket updated", "socket", owner.Status.Socket, "additionalsockets", owner.Status.AdditionalSockets)
 
 	} else {
 		// dedicated load balancer configured, so we fetch it
@@ -128,7 +131,7 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 				// the shared load balancer is usable, use it for status
 				owner.Status.Socket.IP = shared.Spec.LoadBalancerIP
 				owner.Status.Socket.Port = shared.Spec.Ports[0].Port
-				log.Info("using shared loadbalancer as primary status socket")
+				log.V(debugLogLevel).Info("using shared loadbalancer as primary status socket")
 			} else {
 				// we couldn't use the shared load balancer, use empty socket instead
 				log.Info("failed to use shared loadbalancer as primary status socket")
@@ -143,7 +146,7 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 					Port: dedicated.Spec.Ports[0].Port,
 				}
 				owner.Status.AdditionalSockets = []pg.Socket{additionalSocket}
-				log.Info("using dedicated loadbalancer as additional status socket")
+				log.V(debugLogLevel).Info("using dedicated loadbalancer as additional status socket")
 			} else {
 				log.Info("failed to use dedicated loadbalancer as additional status socket")
 			}
@@ -155,7 +158,7 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 				// the dedicated load balancer is usable, use it for status
 				owner.Status.Socket.IP = dedicated.Spec.LoadBalancerIP
 				owner.Status.Socket.Port = dedicated.Spec.Ports[0].Port
-				log.Info("using dedicated loadbalancer as primary status socket")
+				log.V(debugLogLevel).Info("using dedicated loadbalancer as primary status socket")
 			} else {
 				// we couldn't use the dedicated load balancer, use empty socket instead
 				log.Info("failed to use dedicated loadbalancer as primary status socket")
@@ -167,7 +170,7 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		if err := r.CtrlClient.Status().Update(ctx, owner); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to update advanced postgres status socket: %w", err)
 		}
-		log.Info("advanced postgres status socket updated")
+		log.V(debugLogLevel).Info("advanced postgres status socket updated", "socket", owner.Status.Socket, "additionalsockets", owner.Status.AdditionalSockets)
 
 	}
 
@@ -180,7 +183,8 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	}
 
 	if len(secrets.Items) == 0 {
-		return ctrl.Result{Requeue: true}, nil
+		log.Info("no local secrets found yet, requeuing", "status", owner.Status)
+		return ctrl.Result{Requeue: true, RequeueAfter: 2 * time.Second}, nil
 	}
 
 	// TODO: #176 delete the secrets in the end as well
@@ -189,7 +193,7 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{}, err
 	}
 
-	log.Info("status reconciled")
+	log.Info("status reconciled", "status", owner.Status)
 
 	return ctrl.Result{}, nil
 }
@@ -232,7 +236,7 @@ func (r *StatusReconciler) createOrUpdateSecret(ctx context.Context, in *pg.Post
 		return fmt.Errorf("failed to create or update the secret containing user password pairs: %w", err)
 	}
 	// todo: better the log
-	log.Info("secret created or updated", "operation result", result)
+	log.V(debugLogLevel).Info("secret created or updated", "operation result", result)
 
 	return nil
 }
