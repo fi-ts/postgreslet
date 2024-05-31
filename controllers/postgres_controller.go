@@ -237,7 +237,7 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		}
 	}
 
-	// Make sure the postgres secrets exist, if neccessary
+	// Make sure the postgres secrets exist, if necessary
 	if err := r.ensurePostgresSecrets(log, ctx, instance); err != nil {
 		r.recorder.Eventf(instance, "Warning", "Error", "failed to create postgres secrets: %v", err)
 		return ctrl.Result{}, fmt.Errorf("error while creating postgres secrets: %w", err)
@@ -284,7 +284,7 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, fmt.Errorf("error while creating sidecars servicemonitor %v: %w", namespace, err)
 	}
 
-	// Make sure the storage secret exist, if neccessary
+	// Make sure the storage secret exist, if necessary
 	if err := r.ensureStorageEncryptionSecret(log, ctx, instance); err != nil {
 		r.recorder.Eventf(instance, "Warning", "Error", "failed to create storage secret: %v", err)
 		return ctrl.Result{}, fmt.Errorf("error while creating storage secret: %w", err)
@@ -308,7 +308,7 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	// Check if socket port is ready
 	port := instance.Status.Socket.Port
 	if port == 0 {
-		r.recorder.Event(instance, "Warning", "Self-Reconcilation", "socket port not ready")
+		r.recorder.Event(instance, "Warning", "Self-Reconciliation", "socket port not ready")
 		log.Info("socket port not ready, requeueing")
 		return requeue, nil
 	}
