@@ -279,6 +279,7 @@ func main() {
 	viper.SetDefault(enableSuperUserForDBOFlg, false)
 	enableSuperUserForDBO = viper.GetBool(enableSuperUserForDBOFlg)
 
+	viper.SetDefault(tlsClusterIssuerFlg, "pgaas-ca-issuer") // TODO remove, just for testing
 	tlsClusterIssuer = viper.GetString(tlsClusterIssuerFlg)
 	enableCustomTLSCert := false
 	if tlsClusterIssuer != "" {
