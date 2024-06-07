@@ -31,7 +31,9 @@ import (
 	firewall "github.com/metal-stack/firewall-controller/api/v1"
 	"github.com/spf13/viper"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+
 	// +kubebuilder:scaffold:imports
+	cmapi "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 )
 
 const (
@@ -91,6 +93,7 @@ func init() {
 	_ = zalando.AddToScheme(scheme)
 	_ = coreosv1.AddToScheme(scheme)
 	// +kubebuilder:scaffold:scheme
+	_ = cmapi.AddToScheme(scheme)
 }
 
 func main() {
