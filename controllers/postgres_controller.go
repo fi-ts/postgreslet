@@ -1740,5 +1740,6 @@ func (r *PostgresReconciler) createOrUpdateCertificate(log logr.Logger, ctx cont
 		return fmt.Errorf("unable to create or update certificate: %w", err)
 	}
 
+	log.V(debugLogLevel).Info("certificate created or updated")
 	return nil
 }
