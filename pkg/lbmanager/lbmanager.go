@@ -21,7 +21,6 @@ type Options struct {
 	StandbyClustersSourceRanges []string
 	EnableLBSourceRanges        bool
 	EnableForceSharedIP         bool
-	TLSSubDomain                string
 }
 
 // LBManager Responsible for the creation and deletion of externally accessible Services to access the Postgresql clusters managed by the Postgreslet.
@@ -94,7 +93,7 @@ func (m *LBManager) CreateOrUpdateSharedSvcLB(ctx context.Context, in *api.Postg
 			lbIPToUse = ""
 		}
 
-		svc := in.ToSharedSvcLB(lbIPToUse, nextFreePort, m.options.EnableStandbyLeaderSelector, m.options.EnableLegacyStandbySelector, m.options.StandbyClustersSourceRanges, m.options.TLSSubDomain)
+		svc := in.ToSharedSvcLB(lbIPToUse, nextFreePort, m.options.EnableStandbyLeaderSelector, m.options.EnableLegacyStandbySelector, m.options.StandbyClustersSourceRanges)
 		if !m.options.EnableLBSourceRanges {
 			// leave empty / disable source ranges
 			svc.Spec.LoadBalancerSourceRanges = []string{}
@@ -105,7 +104,7 @@ func (m *LBManager) CreateOrUpdateSharedSvcLB(ctx context.Context, in *api.Postg
 		return nil
 	}
 
-	updated := in.ToSharedSvcLB("", 0, m.options.EnableStandbyLeaderSelector, m.options.EnableLegacyStandbySelector, m.options.StandbyClustersSourceRanges, m.options.TLSSubDomain)
+	updated := in.ToSharedSvcLB("", 0, m.options.EnableStandbyLeaderSelector, m.options.EnableLegacyStandbySelector, m.options.StandbyClustersSourceRanges)
 	// update the selector, and only the selector (we do NOT want the change the ip or port here!!!)
 	svc.Spec.Selector = updated.Spec.Selector
 	// also update the source ranges
@@ -145,7 +144,7 @@ func (m *LBManager) CreateOrUpdateDedicatedSvcLB(ctx context.Context, in *api.Po
 
 	sharedSvcLbAlsoEnabled := in.EnableSharedSVCLB(m.options.EnableForceSharedIP)
 
-	new := in.ToDedicatedSvcLB(lbIPToUse, nextFreePort, m.options.StandbyClustersSourceRanges, sharedSvcLbAlsoEnabled, m.options.TLSSubDomain)
+	new := in.ToDedicatedSvcLB(lbIPToUse, nextFreePort, m.options.StandbyClustersSourceRanges, sharedSvcLbAlsoEnabled)
 	if !m.options.EnableLBSourceRanges {
 		// leave empty / disable source ranges
 		new.Spec.LoadBalancerSourceRanges = []string{}

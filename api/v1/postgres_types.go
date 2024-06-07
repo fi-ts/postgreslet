@@ -345,21 +345,12 @@ func (p *Postgres) ToKey() *types.NamespacedName {
 	}
 }
 
-func (p *Postgres) ToSharedSvcLB(lbIP string, lbPort int32, enableStandbyLeaderSelector bool, enableLegacyStandbySelector bool, standbyClustersSourceRanges []string, tlsSubDomain string) *corev1.Service {
+func (p *Postgres) ToSharedSvcLB(lbIP string, lbPort int32, enableStandbyLeaderSelector bool, enableLegacyStandbySelector bool, standbyClustersSourceRanges []string) *corev1.Service {
 	lb := &corev1.Service{}
 	lb.Spec.Type = "LoadBalancer"
 
 	lb.Annotations = map[string]string{
 		"metallb.universe.tf/allow-shared-ip": "spilo",
-	}
-
-	if tlsSubDomain != "" {
-		lb.Annotations["cert.gardener.cloud/purpose"] = "managed"
-		lb.Annotations["cert.gardener.cloud/secretname"] = p.ToTLSSecretName()
-		lb.Annotations["dns.gardener.cloud/dnsnames"] = p.ToDNSName(tlsSubDomain)
-		lb.Annotations["dns.gardener.cloud/class"] = "garden"
-		lb.Annotations["cert.gardener.cloud/commonname"] = p.ToDNSName(tlsSubDomain)
-		lb.Annotations["cert.gardener.cloud/dnsnames"] = ""
 	}
 
 	lb.Namespace = p.ToPeripheralResourceNamespace()
@@ -448,7 +439,7 @@ func (p *Postgres) EnableSharedSVCLB(enableForceSharedIP bool) bool {
 	return false
 }
 
-func (p *Postgres) ToDedicatedSvcLB(lbIP string, lbPort int32, standbyClustersSourceRanges []string, sharedSvcLbAlsoEnabled bool, tlsSubDomain string) *corev1.Service {
+func (p *Postgres) ToDedicatedSvcLB(lbIP string, lbPort int32, standbyClustersSourceRanges []string, sharedSvcLbAlsoEnabled bool) *corev1.Service {
 	lb := &corev1.Service{}
 	lb.Spec.Type = "LoadBalancer"
 
@@ -459,14 +450,6 @@ func (p *Postgres) ToDedicatedSvcLB(lbIP string, lbPort int32, standbyClustersSo
 	lb.SetLabels(SvcLoadBalancerLabel)
 
 	lb.Annotations = map[string]string{}
-	if !sharedSvcLbAlsoEnabled && tlsSubDomain != "" {
-		lb.Annotations["cert.gardener.cloud/purpose"] = "managed"
-		lb.Annotations["cert.gardener.cloud/secretname"] = p.ToTLSSecretName()
-		lb.Annotations["dns.gardener.cloud/dnsnames"] = p.ToDNSName(tlsSubDomain)
-		lb.Annotations["dns.gardener.cloud/class"] = "garden"
-		lb.Annotations["cert.gardener.cloud/commonname"] = p.ToDNSName(tlsSubDomain)
-		lb.Annotations["cert.gardener.cloud/dnsnames"] = ""
-	}
 
 	lbsr := []string{}
 	if p.HasSourceRanges() {

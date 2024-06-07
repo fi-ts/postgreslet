@@ -46,6 +46,9 @@ import (
 	pg "github.com/fi-ts/postgreslet/api/v1"
 	"github.com/fi-ts/postgreslet/pkg/lbmanager"
 	"github.com/fi-ts/postgreslet/pkg/operatormanager"
+
+	cmapi "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
+	cmmeta "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
 )
 
 const (
@@ -94,6 +97,7 @@ type PostgresReconciler struct {
 	EnableBootstrapStandbyFromS3        bool
 	EnableSuperUserForDBO               bool
 	EnableCustomTLSCert                 bool
+	TLSClusterIssuer                    string
 }
 
 // Reconcile is the entry point for postgres reconciliation.
@@ -236,6 +240,12 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 			r.recorder.Eventf(instance, "Warning", "Error", "failed to delete netpol: %v", err)
 			return ctrl.Result{}, fmt.Errorf("error while deleting netpol: %w", err)
 		}
+	}
+
+	// Request certificate, if neccessary
+	if err := r.createOrUpdateCertificate(log, ctx, instance); err != nil {
+		r.recorder.Eventf(instance, "Warning", "Error", "failed to create certificate request: %v", err)
+		return ctrl.Result{}, fmt.Errorf("error while creating certificate request: %w", err)
 	}
 
 	// Make sure the postgres secrets exist, if necessary
@@ -1708,6 +1718,27 @@ func (r *PostgresReconciler) ensureInitDBJob(log logr.Logger, ctx context.Contex
 		return fmt.Errorf("error while creating the new initdb Job: %w", err)
 	}
 	log.V(debugLogLevel).Info("new initdb Job created")
+
+	return nil
+}
+
+func (r *PostgresReconciler) createOrUpdateCertificate(log logr.Logger, ctx context.Context, instance *pg.Postgres) error {
+
+	c := &cmapi.Certificate{ObjectMeta: metav1.ObjectMeta{Name: instance.ToPeripheralResourceName(), Namespace: instance.ToPeripheralResourceNamespace()}}
+	if _, err := controllerutil.CreateOrUpdate(ctx, r.SvcClient, c, func() error {
+		c.Spec = cmapi.CertificateSpec{
+			CommonName: instance.ToPeripheralResourceName(),
+			SecretName: instance.ToTLSSecretName(),
+			IssuerRef: cmmeta.ObjectReference{
+				Group: "cert-manager.io",
+				Kind:  "ClusterIssuer",
+				Name:  r.TLSClusterIssuer,
+			},
+		}
+		return nil
+	}); err != nil {
+		return fmt.Errorf("unable to create or update certificate: %w", err)
+	}
 
 	return nil
 }
