@@ -78,6 +78,7 @@ const (
 	enableBootstrapStandbyFromS3Flg        = "enable-bootsrtap-standby-from-s3"
 	enableSuperUserForDBOFlg               = "enable-superuser-for-dbo"
 	tlsClusterIssuerFlg                    = "tls-cluster-issuer"
+	tlsSubDomainFlg                        = "tls-sub-domain"
 )
 
 var (
@@ -121,6 +122,7 @@ func main() {
 		postgresletFullname     string
 		initDBJobCMName         string
 		tlsClusterIssuer        string
+		tlsSubDomain            string
 
 		enableLeaderElection                bool
 		enableCRDValidation                 bool
@@ -288,6 +290,7 @@ func main() {
 	if tlsClusterIssuer != "" {
 		enableCustomTLSCert = true
 	}
+	tlsSubDomain = viper.GetString(tlsSubDomainFlg)
 
 	ctrl.Log.Info("flag",
 		metricsAddrSvcMgrFlg, metricsAddrSvcMgr,
@@ -330,6 +333,7 @@ func main() {
 		enableBootstrapStandbyFromS3Flg, enableBootstrapStandbyFromS3,
 		enableSuperUserForDBOFlg, enableSuperUserForDBO,
 		tlsClusterIssuerFlg, tlsClusterIssuer,
+		tlsSubDomainFlg, tlsSubDomain,
 	)
 
 	svcClusterConf := ctrl.GetConfigOrDie()
@@ -443,6 +447,7 @@ func main() {
 		EnableSuperUserForDBO:               enableSuperUserForDBO,
 		EnableCustomTLSCert:                 enableCustomTLSCert,
 		TLSClusterIssuer:                    tlsClusterIssuer,
+		TLSSubDomain:                        tlsSubDomain,
 	}).SetupWithManager(ctrlPlaneClusterMgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Postgres")
 		os.Exit(1)

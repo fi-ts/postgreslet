@@ -98,6 +98,7 @@ type PostgresReconciler struct {
 	EnableSuperUserForDBO               bool
 	EnableCustomTLSCert                 bool
 	TLSClusterIssuer                    string
+	TLSSubDomain                        string
 }
 
 // Reconcile is the entry point for postgres reconciliation.
@@ -1723,11 +1724,15 @@ func (r *PostgresReconciler) ensureInitDBJob(log logr.Logger, ctx context.Contex
 }
 
 func (r *PostgresReconciler) createOrUpdateCertificate(log logr.Logger, ctx context.Context, instance *pg.Postgres) error {
+	commonName := instance.ToPeripheralResourceName()
+	if r.TLSSubDomain != "" {
+		commonName = instance.ToDNSName(r.TLSSubDomain)
+	}
 
 	c := &cmapi.Certificate{ObjectMeta: metav1.ObjectMeta{Name: instance.ToPeripheralResourceName(), Namespace: instance.ToPeripheralResourceNamespace()}}
 	if _, err := controllerutil.CreateOrUpdate(ctx, r.SvcClient, c, func() error {
 		c.Spec = cmapi.CertificateSpec{
-			CommonName: instance.ToPeripheralResourceName(),
+			CommonName: commonName,
 			SecretName: instance.ToTLSSecretName(),
 			IssuerRef: cmmeta.ObjectReference{
 				Group: "cert-manager.io",
