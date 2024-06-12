@@ -1724,6 +1724,11 @@ func (r *PostgresReconciler) ensureInitDBJob(log logr.Logger, ctx context.Contex
 }
 
 func (r *PostgresReconciler) createOrUpdateCertificate(log logr.Logger, ctx context.Context, instance *pg.Postgres) error {
+	if r.TLSClusterIssuer == "" {
+		log.V(debugLogLevel).Info("certificate skipped")
+		return nil
+	}
+
 	commonName := instance.ToPeripheralResourceName()
 	if r.TLSSubDomain != "" {
 		commonName = instance.ToDNSName(r.TLSSubDomain)
