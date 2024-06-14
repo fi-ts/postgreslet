@@ -97,13 +97,14 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	}
 
 	log.V(debugLogLevel).Info("updating socket")
-	if owner.Spec.DedicatedLoadBalancerIP == nil {
+	if !owner.EnableDedicatedSVCLB() {
 		// no dedicated load balancer configured, use the shared one
 		shared := &corev1.Service{}
 		if err := r.SvcClient.Get(ctx, *owner.ToSharedSvcLBNamespacedName(), shared); err == nil {
 			// update IP and port
 			owner.Status.Socket.IP = shared.Spec.LoadBalancerIP
 			owner.Status.Socket.Port = shared.Spec.Ports[0].Port
+			owner.Status.AdditionalSockets = []pg.Socket{} // reset additional sockets
 
 		} else {
 			// Todo: Handle errors other than `NotFound`

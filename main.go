@@ -31,7 +31,9 @@ import (
 	firewall "github.com/metal-stack/firewall-controller/api/v1"
 	"github.com/spf13/viper"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+
 	// +kubebuilder:scaffold:imports
+	cmapi "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 )
 
 const (
@@ -75,6 +77,8 @@ const (
 	initDBJobCMNameFlg                     = "initdb-job-configmap-name"
 	enableBootstrapStandbyFromS3Flg        = "enable-bootsrtap-standby-from-s3"
 	enableSuperUserForDBOFlg               = "enable-superuser-for-dbo"
+	tlsClusterIssuerFlg                    = "tls-cluster-issuer"
+	tlsSubDomainFlg                        = "tls-sub-domain"
 )
 
 var (
@@ -90,6 +94,7 @@ func init() {
 	_ = zalando.AddToScheme(scheme)
 	_ = coreosv1.AddToScheme(scheme)
 	// +kubebuilder:scaffold:scheme
+	_ = cmapi.AddToScheme(scheme)
 }
 
 func main() {
@@ -116,6 +121,8 @@ func main() {
 		etcdPSPName             string
 		postgresletFullname     string
 		initDBJobCMName         string
+		tlsClusterIssuer        string
+		tlsSubDomain            string
 
 		enableLeaderElection                bool
 		enableCRDValidation                 bool
@@ -277,6 +284,13 @@ func main() {
 	viper.SetDefault(enableSuperUserForDBOFlg, false)
 	enableSuperUserForDBO = viper.GetBool(enableSuperUserForDBOFlg)
 
+	tlsClusterIssuer = viper.GetString(tlsClusterIssuerFlg)
+	enableCustomTLSCert := false
+	if tlsClusterIssuer != "" {
+		enableCustomTLSCert = true
+	}
+	tlsSubDomain = viper.GetString(tlsSubDomainFlg)
+
 	ctrl.Log.Info("flag",
 		metricsAddrSvcMgrFlg, metricsAddrSvcMgr,
 		metricsAddrCtrlMgrFlg, metricsAddrCtrlMgr,
@@ -317,6 +331,8 @@ func main() {
 		initDBJobCMNameFlg, initDBJobCMName,
 		enableBootstrapStandbyFromS3Flg, enableBootstrapStandbyFromS3,
 		enableSuperUserForDBOFlg, enableSuperUserForDBO,
+		tlsClusterIssuerFlg, tlsClusterIssuer,
+		tlsSubDomainFlg, tlsSubDomain,
 	)
 
 	svcClusterConf := ctrl.GetConfigOrDie()
@@ -428,6 +444,9 @@ func main() {
 		InitDBJobConfigMapName:              initDBJobCMName,
 		EnableBootstrapStandbyFromS3:        enableBootstrapStandbyFromS3,
 		EnableSuperUserForDBO:               enableSuperUserForDBO,
+		EnableCustomTLSCert:                 enableCustomTLSCert,
+		TLSClusterIssuer:                    tlsClusterIssuer,
+		TLSSubDomain:                        tlsSubDomain,
 	}).SetupWithManager(ctrlPlaneClusterMgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Postgres")
 		os.Exit(1)
