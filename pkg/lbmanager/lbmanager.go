@@ -59,7 +59,7 @@ func (m *LBManager) ReconcileSvcLBs(ctx context.Context, in *api.Postgres) error
 
 // CreateOrUpdateSharedSvcLB Creates or updates a Service of type LoadBalancer with a shared ip for the given Postgres resource if necessary
 func (m *LBManager) CreateOrUpdateSharedSvcLB(ctx context.Context, in *api.Postgres) error {
-	if m.options.EnableForceSharedIP != true && in.Spec.DedicatedLoadBalancerIP != nil && *in.Spec.DedicatedLoadBalancerIP != "" {
+	if !in.EnableSharedSVCLB(m.options.EnableForceSharedIP) {
 		// TODO logging?
 		err := m.DeleteSharedSvcLB(ctx, in)
 		if err != nil {
@@ -115,6 +115,8 @@ func (m *LBManager) CreateOrUpdateSharedSvcLB(ctx context.Context, in *api.Postg
 		// leave empty / disable source ranges
 		svc.Spec.LoadBalancerSourceRanges = []string{}
 	}
+	// also update the annotations for our custom tls certs
+	svc.ObjectMeta.Annotations = updated.ObjectMeta.Annotations
 
 	if err := m.client.Update(ctx, svc); err != nil {
 		return fmt.Errorf("failed to update Service of type LoadBalancer (shared): %w", err)
@@ -125,7 +127,7 @@ func (m *LBManager) CreateOrUpdateSharedSvcLB(ctx context.Context, in *api.Postg
 
 // CreateOrUpdateDedicatedSvcLB Creates or updates a Service of type LoadBalancer with a dedicated ip for the given Postgres resource if necessary
 func (m *LBManager) CreateOrUpdateDedicatedSvcLB(ctx context.Context, in *api.Postgres) error {
-	if in.Spec.DedicatedLoadBalancerIP == nil || *in.Spec.DedicatedLoadBalancerIP == "" {
+	if !in.EnableDedicatedSVCLB() {
 		// TODO logging?
 		err := m.DeleteDedicatedSvcLB(ctx, in)
 		if err != nil {
@@ -140,7 +142,9 @@ func (m *LBManager) CreateOrUpdateDedicatedSvcLB(ctx context.Context, in *api.Po
 	}
 	var lbIPToUse string = *in.Spec.DedicatedLoadBalancerIP
 
-	new := in.ToDedicatedSvcLB(lbIPToUse, nextFreePort, m.options.StandbyClustersSourceRanges)
+	sharedSvcLbAlsoEnabled := in.EnableSharedSVCLB(m.options.EnableForceSharedIP)
+
+	new := in.ToDedicatedSvcLB(lbIPToUse, nextFreePort, m.options.StandbyClustersSourceRanges, sharedSvcLbAlsoEnabled)
 	if !m.options.EnableLBSourceRanges {
 		// leave empty / disable source ranges
 		new.Spec.LoadBalancerSourceRanges = []string{}
@@ -163,6 +167,9 @@ func (m *LBManager) CreateOrUpdateDedicatedSvcLB(ctx context.Context, in *api.Po
 
 	// replace the whole spec
 	existing.Spec = new.Spec
+
+	// also update the annotations for our custom tls certs
+	existing.ObjectMeta.Annotations = new.ObjectMeta.Annotations
 
 	if err := m.client.Update(ctx, existing); err != nil {
 		return fmt.Errorf("failed to update Service of type LoadBalancer (dedicated): %w", err)

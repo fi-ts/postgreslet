@@ -44,6 +44,9 @@ import (
 	pg "github.com/fi-ts/postgreslet/api/v1"
 	"github.com/fi-ts/postgreslet/pkg/lbmanager"
 	"github.com/fi-ts/postgreslet/pkg/operatormanager"
+
+	cmapi "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
+	cmmeta "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
 )
 
 const (
@@ -91,6 +94,9 @@ type PostgresReconciler struct {
 	InitDBJobConfigMapName              string
 	EnableBootstrapStandbyFromS3        bool
 	EnableSuperUserForDBO               bool
+	EnableCustomTLSCert                 bool
+	TLSClusterIssuer                    string
+	TLSSubDomain                        string
 }
 
 // Reconcile is the entry point for postgres reconciliation.
@@ -235,6 +241,12 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		}
 	}
 
+	// Request certificate, if neccessary
+	if err := r.createOrUpdateCertificate(log, ctx, instance); err != nil {
+		r.recorder.Eventf(instance, "Warning", "Error", "failed to create certificate request: %v", err)
+		return ctrl.Result{}, fmt.Errorf("error while creating certificate request: %w", err)
+	}
+
 	// Make sure the postgres secrets exist, if necessary
 	if err := r.ensurePostgresSecrets(log, ctx, instance); err != nil {
 		r.recorder.Eventf(instance, "Warning", "Error", "failed to create postgres secrets: %v", err)
@@ -371,7 +383,7 @@ func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context
 			return fmt.Errorf("failed to fetch zalando postgresql: %w", err)
 		}
 
-		u, err := instance.ToUnstructuredZalandoPostgresql(nil, sidecarsCM, r.StorageClass, r.PgParamBlockList, restoreBackupConfig, restoreSourceInstance, patroniTTL, patroniLoopWait, patroniRetryTimeout, r.EnableSuperUserForDBO)
+		u, err := instance.ToUnstructuredZalandoPostgresql(nil, sidecarsCM, r.StorageClass, r.PgParamBlockList, restoreBackupConfig, restoreSourceInstance, patroniTTL, patroniLoopWait, patroniRetryTimeout, r.EnableSuperUserForDBO, r.EnableCustomTLSCert)
 		if err != nil {
 			return fmt.Errorf("failed to convert to unstructured zalando postgresql: %w", err)
 		}
@@ -387,7 +399,7 @@ func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context
 	// Update zalando postgresql
 	mergeFrom := client.MergeFrom(rawZ.DeepCopy())
 
-	u, err := instance.ToUnstructuredZalandoPostgresql(rawZ, sidecarsCM, r.StorageClass, r.PgParamBlockList, restoreBackupConfig, restoreSourceInstance, patroniTTL, patroniLoopWait, patroniRetryTimeout, r.EnableSuperUserForDBO)
+	u, err := instance.ToUnstructuredZalandoPostgresql(rawZ, sidecarsCM, r.StorageClass, r.PgParamBlockList, restoreBackupConfig, restoreSourceInstance, patroniTTL, patroniLoopWait, patroniRetryTimeout, r.EnableSuperUserForDBO, r.EnableCustomTLSCert)
 	if err != nil {
 		return fmt.Errorf("failed to convert to unstructured zalando postgresql: %w", err)
 	}
@@ -1647,5 +1659,36 @@ func (r *PostgresReconciler) ensureInitDBJob(log logr.Logger, ctx context.Contex
 	}
 	log.V(debugLogLevel).Info("new initdb Job created")
 
+	return nil
+}
+
+func (r *PostgresReconciler) createOrUpdateCertificate(log logr.Logger, ctx context.Context, instance *pg.Postgres) error {
+	if r.TLSClusterIssuer == "" {
+		log.V(debugLogLevel).Info("certificate skipped")
+		return nil
+	}
+
+	commonName := instance.ToPeripheralResourceName()
+	if r.TLSSubDomain != "" {
+		commonName = instance.ToDNSName(r.TLSSubDomain)
+	}
+
+	c := &cmapi.Certificate{ObjectMeta: metav1.ObjectMeta{Name: instance.ToPeripheralResourceName(), Namespace: instance.ToPeripheralResourceNamespace()}}
+	if _, err := controllerutil.CreateOrUpdate(ctx, r.SvcClient, c, func() error {
+		c.Spec = cmapi.CertificateSpec{
+			CommonName: commonName,
+			SecretName: instance.ToTLSSecretName(),
+			IssuerRef: cmmeta.ObjectReference{
+				Group: "cert-manager.io",
+				Kind:  "ClusterIssuer",
+				Name:  r.TLSClusterIssuer,
+			},
+		}
+		return nil
+	}); err != nil {
+		return fmt.Errorf("unable to create or update certificate: %w", err)
+	}
+
+	log.V(debugLogLevel).Info("certificate created or updated")
 	return nil
 }

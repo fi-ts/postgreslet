@@ -50,6 +50,7 @@ const (
 
 	localSidecarsCMName = "postgres-sidecars-configmap"
 
+	spilo_fsgroup     = "103"
 	debugLogLevel int = 1
 )
 
@@ -435,6 +436,9 @@ func (m *OperatorManager) editConfigMap(cm *corev1.ConfigMap, namespace string, 
 	cm.Data["secret_name_template"] = "{username}.{cluster}.credentials"
 	cm.Data["master_dns_name_format"] = "{cluster}.{team}.{hostedzone}"
 	cm.Data["replica_dns_name_format"] = "{cluster}-repl.{team}.{hostedzone}"
+
+	// set the spilo_fsgroup for correct tls cert permissions
+	cm.Data["spilo_fsgroup"] = spilo_fsgroup
 }
 
 // ensureCleanMetadata ensures obj has clean metadata
