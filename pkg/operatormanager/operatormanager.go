@@ -69,6 +69,7 @@ type Options struct {
 	SidecarsConfigMapName   string
 	PodAntiaffinity         bool
 	PartitionID             string
+	PatroniFailsafeMode     bool
 }
 
 // OperatorManager manages the operator
@@ -439,6 +440,9 @@ func (m *OperatorManager) editConfigMap(cm *corev1.ConfigMap, namespace string, 
 
 	// set the spilo_fsgroup for correct tls cert permissions
 	cm.Data["spilo_fsgroup"] = spilo_fsgroup
+
+	cm.Data["enable_patroni_failsafe_mode"] = strconv.FormatBool(options.PatroniFailsafeMode)
+
 }
 
 // ensureCleanMetadata ensures obj has clean metadata

@@ -80,6 +80,7 @@ const (
 	enableSuperUserForDBOFlg               = "enable-superuser-for-dbo"
 	tlsClusterIssuerFlg                    = "tls-cluster-issuer"
 	tlsSubDomainFlg                        = "tls-sub-domain"
+	enablePatroniFailsafeModeFlg           = "enable-patroni-failsafe-mode"
 )
 
 var (
@@ -138,6 +139,7 @@ func main() {
 		enableForceSharedIP                 bool
 		enableBootstrapStandbyFromS3        bool
 		enableSuperUserForDBO               bool
+		enablePatroniFailsafeMode           bool
 
 		portRangeStart int
 		portRangeSize  int
@@ -292,6 +294,9 @@ func main() {
 	}
 	tlsSubDomain = viper.GetString(tlsSubDomainFlg)
 
+	viper.SetDefault(enablePatroniFailsafeModeFlg, true)
+	enablePatroniFailsafeMode = viper.GetBool(enablePatroniFailsafeModeFlg)
+
 	ctrl.Log.Info("flag",
 		metricsAddrSvcMgrFlg, metricsAddrSvcMgr,
 		metricsAddrCtrlMgrFlg, metricsAddrCtrlMgr,
@@ -334,6 +339,7 @@ func main() {
 		enableSuperUserForDBOFlg, enableSuperUserForDBO,
 		tlsClusterIssuerFlg, tlsClusterIssuer,
 		tlsSubDomainFlg, tlsSubDomain,
+		enablePatroniFailsafeModeFlg, enablePatroniFailsafeMode,
 	)
 
 	svcClusterConf := ctrl.GetConfigOrDie()
@@ -404,6 +410,7 @@ func main() {
 		SidecarsConfigMapName:   sidecarsCMName,
 		PodAntiaffinity:         enablePodAntiaffinity,
 		PartitionID:             partitionID,
+		PatroniFailsafeMode:     enablePatroniFailsafeMode,
 	}
 	opMgr, err := operatormanager.New(svcClusterConf, "external/svc-postgres-operator.yaml", scheme, ctrl.Log.WithName("OperatorManager"), opMgrOpts)
 	if err != nil {
