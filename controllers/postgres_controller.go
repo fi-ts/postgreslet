@@ -1027,7 +1027,7 @@ func (r *PostgresReconciler) checkAndUpdatePatroniReplicationConfig(log logr.Log
 		return continueWithReconciliation, nil
 	}
 
-	r.Log.Info("Checking replication config from Patroni API")
+	log.V(debugLogLevel).Info("Checking replication config from Patroni API")
 
 	// Get the leader pod
 	leaderPods, err := r.findLeaderPods(log, ctx, instance)
@@ -1037,7 +1037,7 @@ func (r *PostgresReconciler) checkAndUpdatePatroniReplicationConfig(log logr.Log
 	}
 
 	if len(leaderPods.Items) != 1 {
-		r.Log.Info("expected exactly one leader pod, selecting all spilo pods as a last resort (might be ok if it is still creating)")
+		log.Info("expected exactly one leader pod, selecting all spilo pods as a last resort (might be ok if it is still creating)")
 		// To make sure any updates to the Zalando postgresql manifest are written, we do not requeue in this case
 		return continueWithReconciliation, r.updatePatroniReplicationConfigOnAllPods(log, ctx, instance)
 	}
@@ -1049,14 +1049,14 @@ func (r *PostgresReconciler) checkAndUpdatePatroniReplicationConfig(log logr.Log
 		return continueWithReconciliation, err
 	}
 	if resp == nil {
-		return continueWithReconciliation, r.httpPatchPatroni(log, ctx, instance, leaderIP)
+		return continueWithReconciliation, nil
 	}
 
 	if instance.IsReplicationPrimary() {
 		if resp.StandbyCluster != nil {
 			log.Info("standby_cluster mistmatch, updating and requeing", "response", resp)
 			// what happens, if patroni does not do what it is asked to do? what if it returns an error here?
-			return requeueImmediately, r.httpPatchPatroni(log, ctx, instance, leaderIP)
+			return requeueImmediately, nil
 		}
 		if instance.Spec.PostgresConnection.SynchronousReplication {
 			if resp.SynchronousNodesAdditional == nil || *resp.SynchronousNodesAdditional != instance.Spec.PostgresConnection.ConnectedPostgresID {
@@ -1073,19 +1073,19 @@ func (r *PostgresReconciler) checkAndUpdatePatroniReplicationConfig(log logr.Log
 	} else {
 		if resp.StandbyCluster == nil {
 			log.Info("standby_cluster mismatch, updating and requeing", "response", resp)
-			return requeueImmediately, r.httpPatchPatroni(log, ctx, instance, leaderIP)
+			return requeueImmediately, nil
 		}
 		if resp.StandbyCluster.CreateReplicaMethods == nil {
 			log.Info("create_replica_methods mismatch, updating and requeing", "response", resp)
-			return requeueImmediately, r.httpPatchPatroni(log, ctx, instance, leaderIP)
+			return requeueImmediately, nil
 		}
 		if resp.StandbyCluster.Host != instance.Spec.PostgresConnection.ConnectionIP {
 			log.Info("host mismatch, updating and requeing", "response", resp)
-			return requeueImmediately, r.httpPatchPatroni(log, ctx, instance, leaderIP)
+			return requeueImmediately, nil
 		}
 		if resp.StandbyCluster.Port != int(instance.Spec.PostgresConnection.ConnectionPort) {
 			log.Info("port mismatch, updating and requeing", "response", resp)
-			return requeueImmediately, r.httpPatchPatroni(log, ctx, instance, leaderIP)
+			return requeueImmediately, nil
 		}
 		if resp.StandbyCluster.ApplicationName != instance.ObjectMeta.Name {
 			log.Info("application_name mismatch, updating and requeing", "response", resp)
@@ -1178,10 +1178,10 @@ func (r *PostgresReconciler) httpPatchPatroni(log logr.Logger, ctx context.Conte
 		// TODO check values first
 		request = PatroniConfig{
 			StandbyCluster: &PatroniStandbyCluster{
-				CreateReplicaMethods: []string{"basebackup_fast_xlog"},
-				Host:                 instance.Spec.PostgresConnection.ConnectionIP,
-				Port:                 int(instance.Spec.PostgresConnection.ConnectionPort),
-				ApplicationName:      instance.ObjectMeta.Name,
+				// CreateReplicaMethods: []string{"basebackup_fast_xlog"},
+				// Host:                 instance.Spec.PostgresConnection.ConnectionIP,
+				// Port:                 int(instance.Spec.PostgresConnection.ConnectionPort),
+				ApplicationName: instance.ObjectMeta.Name,
 			},
 			SynchronousNodesAdditional: nil,
 		}
