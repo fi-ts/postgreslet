@@ -32,48 +32,56 @@ import (
 	firewall "github.com/metal-stack/firewall-controller/api/v1"
 	"github.com/spf13/viper"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+
 	// +kubebuilder:scaffold:imports
+	cmapi "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 )
 
 const (
 	// envPrefix               = "pg"
 
-	metricsAddrSvcMgrFlg                  = "metrics-addr-svc-mgr"
-	metricsAddrCtrlMgrFlg                 = "metrics-addr-ctrl-mgr"
-	enableLeaderElectionFlg               = "enable-leader-election"
-	partitionIDFlg                        = "partition-id"
-	tenantFlg                             = "tenant"
-	ctrlPlaneKubeConfifgFlg               = "controlplane-kubeconfig"
-	loadBalancerIPFlg                     = "load-balancer-ip"
-	portRangeStartFlg                     = "port-range-start"
-	portRangeSizeFlg                      = "port-range-size"
-	customPSPNameFlg                      = "custom-psp-name"
-	storageClassFlg                       = "storage-class"
-	postgresImageFlg                      = "postgres-image"
-	etcdHostFlg                           = "etcd-host"
-	crdValidationFlg                      = "enable-crd-validation"
-	operatorImageFlg                      = "operator-image"
-	pgParamBlockListFlg                   = "postgres-param-blocklist" // nolint
-	majorVersionUpgradeModeFlg            = "major-version-upgrade-mode"
-	standbyClustersSourceRangesFlg        = "standby-clusters-source-ranges"
-	postgresletNamespaceFlg               = "postgreslet-namespace"
-	sidecarsCMNameFlg                     = "sidecars-configmap-name"
-	enableNetPolFlg                       = "enable-netpol"
-	enablePodAntiaffinityFlg              = "enable-pod-antiaffinity"
-	patroniRetryTimeoutFlg                = "patroni-retry-timeout"
-	enableStandbyLeaderSelectorFlg        = "enable-standby-leader-selector"
-	ControlPlaneNamespaceFlg              = "control-plane-namespace"
-	enableLegacyStandbySelectorFlg        = "enable-legacy-standby-selector"
-	deployEtcdFlg                         = "deploy-etcd"
-	etcdImageFlg                          = "etcd-image"
-	etcdBackupSidecarImageFlg             = "etcd-backup-sidecar-image"
-	etcdBackupSecretNameFlg               = "etcd-backup-secret-name" // nolint
-	etcdPSPNameFlg                        = "etcd-psp-name"
-	postgresletFullnameFlg                = "postgreslet-fullname"
-	replicationChangeRequeueTimeFlg       = "replication-change-requeue-time-in-seconds"
-	enableLBSourceRangesFlg               = "enable-lb-source-ranges"
-	enableRandomStorageEncrytionSecretFlg = "enable-random-storage-encryption-secret"
-	enableWalGEncryptionFlg               = "enable-walg-encryption"
+	metricsAddrSvcMgrFlg                   = "metrics-addr-svc-mgr"
+	metricsAddrCtrlMgrFlg                  = "metrics-addr-ctrl-mgr"
+	enableLeaderElectionFlg                = "enable-leader-election"
+	partitionIDFlg                         = "partition-id"
+	tenantFlg                              = "tenant"
+	ctrlPlaneKubeConfifgFlg                = "controlplane-kubeconfig"
+	loadBalancerIPFlg                      = "load-balancer-ip"
+	portRangeStartFlg                      = "port-range-start"
+	portRangeSizeFlg                       = "port-range-size"
+	customPSPNameFlg                       = "custom-psp-name"
+	storageClassFlg                        = "storage-class"
+	postgresImageFlg                       = "postgres-image"
+	etcdHostFlg                            = "etcd-host"
+	crdValidationFlg                       = "enable-crd-validation"
+	operatorImageFlg                       = "operator-image"
+	pgParamBlockListFlg                    = "postgres-param-blocklist" // nolint
+	majorVersionUpgradeModeFlg             = "major-version-upgrade-mode"
+	standbyClustersSourceRangesFlg         = "standby-clusters-source-ranges"
+	postgresletNamespaceFlg                = "postgreslet-namespace"
+	sidecarsCMNameFlg                      = "sidecars-configmap-name"
+	enableNetPolFlg                        = "enable-netpol"
+	enablePodAntiaffinityFlg               = "enable-pod-antiaffinity"
+	patroniRetryTimeoutFlg                 = "patroni-retry-timeout"
+	enableStandbyLeaderSelectorFlg         = "enable-standby-leader-selector"
+	ControlPlaneNamespaceFlg               = "control-plane-namespace"
+	enableLegacyStandbySelectorFlg         = "enable-legacy-standby-selector"
+	deployEtcdFlg                          = "deploy-etcd"
+	etcdImageFlg                           = "etcd-image"
+	etcdBackupSidecarImageFlg              = "etcd-backup-sidecar-image"
+	etcdBackupSecretNameFlg                = "etcd-backup-secret-name" // nolint
+	etcdPSPNameFlg                         = "etcd-psp-name"
+	replicationChangeRequeueTimeFlg        = "replication-change-requeue-time-in-seconds"
+	postgresletFullnameFlg                 = "postgreslet-fullname"
+	enableLBSourceRangesFlg                = "enable-lb-source-ranges"
+	enableRandomStorageEncryptionSecretFlg = "enable-random-storage-encryption-secret"
+	enableWalGEncryptionFlg                = "enable-walg-encryption"
+	enableForceSharedIPFlg                 = "enable-force-shared-ip"
+	initDBJobCMNameFlg                     = "initdb-job-configmap-name"
+	enableBootstrapStandbyFromS3Flg        = "enable-bootsrtap-standby-from-s3"
+	enableSuperUserForDBOFlg               = "enable-superuser-for-dbo"
+	tlsClusterIssuerFlg                    = "tls-cluster-issuer"
+	tlsSubDomainFlg                        = "tls-sub-domain"
 )
 
 var (
@@ -89,6 +97,7 @@ func init() {
 	_ = zalando.AddToScheme(scheme)
 	_ = coreosv1.AddToScheme(scheme)
 	// +kubebuilder:scaffold:scheme
+	_ = cmapi.AddToScheme(scheme)
 }
 
 func main() {
@@ -114,17 +123,23 @@ func main() {
 		etcdBackupSecretName    string
 		etcdPSPName             string
 		postgresletFullname     string
+		initDBJobCMName         string
+		tlsClusterIssuer        string
+		tlsSubDomain            string
 
-		enableLeaderElection               bool
-		enableCRDValidation                bool
-		enableNetPol                       bool
-		enablePodAntiaffinity              bool
-		enableStandbyLeaderSelector        bool
-		enableLegacyStandbySelector        bool
-		deployEtcd                         bool
-		enableLBSourceRanges               bool
-		enableRandomStorageEncrytionSecret bool
-		enableWalGEncryption               bool
+		enableLeaderElection                bool
+		enableCRDValidation                 bool
+		enableNetPol                        bool
+		enablePodAntiaffinity               bool
+		enableStandbyLeaderSelector         bool
+		enableLegacyStandbySelector         bool
+		deployEtcd                          bool
+		enableLBSourceRanges                bool
+		enableRandomStorageEncryptionSecret bool
+		enableWalGEncryption                bool
+		enableForceSharedIP                 bool
+		enableBootstrapStandbyFromS3        bool
+		enableSuperUserForDBO               bool
 
 		portRangeStart                        int
 		portRangeSize                         int
@@ -138,6 +153,8 @@ func main() {
 
 		standbyClusterSourceRanges []string
 	)
+
+	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 
 	// TODO enable Prefix and update helm chart
 	// viper.SetEnvPrefix(envPrefix)
@@ -166,7 +183,7 @@ func main() {
 	if len(lbIP) > 0 {
 		// todo: Shift the logic to a dedicated pkg for args validation.
 		if ip := net.ParseIP(lbIP); ip == nil {
-			ctrl.Log.Error(nil, fmt.Sprintf("Cannot parse provided %s %q, exiting.", loadBalancerIPFlg, lbIP))
+			setupLog.Error(nil, fmt.Sprintf("Cannot parse provided %s %q, exiting.", loadBalancerIPFlg, lbIP))
 			os.Exit(1)
 		}
 	}
@@ -257,13 +274,30 @@ func main() {
 	viper.SetDefault(enableLBSourceRangesFlg, true)
 	enableLBSourceRanges = viper.GetBool(enableLBSourceRangesFlg)
 
-	viper.SetDefault(enableRandomStorageEncrytionSecretFlg, false)
-	enableRandomStorageEncrytionSecret = viper.GetBool(enableRandomStorageEncrytionSecretFlg)
+	viper.SetDefault(enableRandomStorageEncryptionSecretFlg, false)
+	enableRandomStorageEncryptionSecret = viper.GetBool(enableRandomStorageEncryptionSecretFlg)
 
 	viper.SetDefault(enableWalGEncryptionFlg, false)
 	enableWalGEncryption = viper.GetBool(enableWalGEncryptionFlg)
 
-	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
+	viper.SetDefault(enableForceSharedIPFlg, true) // TODO switch to false?
+	enableForceSharedIP = viper.GetBool(enableForceSharedIPFlg)
+
+	viper.SetDefault(initDBJobCMNameFlg, "postgreslet-postgres-initdbjob")
+	initDBJobCMName = viper.GetString(initDBJobCMNameFlg)
+
+	viper.SetDefault(enableBootstrapStandbyFromS3Flg, true)
+	enableBootstrapStandbyFromS3 = viper.GetBool(enableBootstrapStandbyFromS3Flg)
+
+	viper.SetDefault(enableSuperUserForDBOFlg, false)
+	enableSuperUserForDBO = viper.GetBool(enableSuperUserForDBOFlg)
+
+	tlsClusterIssuer = viper.GetString(tlsClusterIssuerFlg)
+	enableCustomTLSCert := false
+	if tlsClusterIssuer != "" {
+		enableCustomTLSCert = true
+	}
+	tlsSubDomain = viper.GetString(tlsSubDomainFlg)
 
 	ctrl.Log.Info("flag",
 		metricsAddrSvcMgrFlg, metricsAddrSvcMgr,
@@ -298,10 +332,16 @@ func main() {
 		etcdBackupSecretNameFlg, etcdBackupSecretName,
 		etcdPSPNameFlg, etcdPSPName,
 		enableLBSourceRangesFlg, enableLBSourceRanges,
-		enableRandomStorageEncrytionSecretFlg, enableRandomStorageEncrytionSecret,
+		enableRandomStorageEncryptionSecretFlg, enableRandomStorageEncryptionSecret,
 		postgresletFullnameFlg, postgresletFullname,
 		replicationChangeRequeueTimeFlg, replicationChangeRequeueTimeInSeconds,
 		enableWalGEncryptionFlg, enableWalGEncryption,
+		enableForceSharedIPFlg, enableForceSharedIP,
+		initDBJobCMNameFlg, initDBJobCMName,
+		enableBootstrapStandbyFromS3Flg, enableBootstrapStandbyFromS3,
+		enableSuperUserForDBOFlg, enableSuperUserForDBO,
+		tlsClusterIssuerFlg, tlsClusterIssuer,
+		tlsSubDomainFlg, tlsSubDomain,
 	)
 
 	svcClusterConf := ctrl.GetConfigOrDie()
@@ -385,6 +425,7 @@ func main() {
 		EnableLegacyStandbySelector: enableLegacyStandbySelector,
 		StandbyClustersSourceRanges: standbyClusterSourceRanges,
 		EnableLBSourceRanges:        enableLBSourceRanges,
+		EnableForceSharedIP:         enableForceSharedIP,
 	}
 	if err = (&controllers.PostgresReconciler{
 		CtrlClient:                          ctrlPlaneClusterMgr.GetClient(),
@@ -406,9 +447,16 @@ func main() {
 		PatroniLoopWait:                     patroniLoopWait,
 		PatroniRetryTimeout:                 patroniRetryTimeout,
 		ReplicationChangeRequeueDuration:    replicationChangeRequeueDuration,
-		EnableRandomStorageEncryptionSecret: enableRandomStorageEncrytionSecret,
+		EnableRandomStorageEncryptionSecret: enableRandomStorageEncryptionSecret,
 		EnableWalGEncryption:                enableWalGEncryption,
 		PostgresletFullname:                 postgresletFullname,
+		PostgresImage:                       postgresImage,
+		InitDBJobConfigMapName:              initDBJobCMName,
+		EnableBootstrapStandbyFromS3:        enableBootstrapStandbyFromS3,
+		EnableSuperUserForDBO:               enableSuperUserForDBO,
+		EnableCustomTLSCert:                 enableCustomTLSCert,
+		TLSClusterIssuer:                    tlsClusterIssuer,
+		TLSSubDomain:                        tlsSubDomain,
 	}).SetupWithManager(ctrlPlaneClusterMgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Postgres")
 		os.Exit(1)
@@ -421,6 +469,7 @@ func main() {
 		Scheme:                svcClusterMgr.GetScheme(),
 		PartitionID:           partitionID,
 		ControlPlaneNamespace: controlPlaneNamespace,
+		EnableForceSharedIP:   enableForceSharedIP,
 	}).SetupWithManager(svcClusterMgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Status")
 		os.Exit(1)

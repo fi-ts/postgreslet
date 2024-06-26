@@ -8,23 +8,25 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      docker_registry_token: ${{ secrets.DOCKER_REGISTRY_TOKEN }}
     steps:
     - name: Checkout
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
 
     - name: Ensure Go Version
-      uses: actions/setup-go@v3
+      uses: actions/setup-go@v4
       with:
         go-version-file: 'go.mod'
 
     - name: Lint
-      uses: golangci/golangci-lint-action@v3
+      uses: golangci/golangci-lint-action@v4
       with:
         args: -p bugs -p unused --timeout=5m
 
     - name: Get Kubebuilder Version
       id: get-kubebuilder-version
-      run: echo "::set-output name=version::$(make kubebuilder-version-ci)"
+      run: echo "version=$(make kubebuilder-version-ci)" >> $GITHUB_OUTPUT
       shell: bash
 
     - name: Ensure etcd
@@ -54,17 +56,13 @@ jobs:
     - name: Run tests
       run: make test
 
-    - name: Figure out if running fork PR
-      id: fork
-      run: '["${{ secrets.DOCKER_REGISTRY_TOKEN }}" == ""] && echo "::set-output name=is_fork_pr::true" || echo "::set-output name=is_fork_pr::false"'
-
     - name: Docker Login
-      uses: docker/login-action@v1
+      uses: docker/login-action@v3
       with:
         registry: ${{ secrets.DOCKER_REGISTRY }}
         username: ${{ secrets.DOCKER_REGISTRY_USER }}
         password: ${{ secrets.DOCKER_REGISTRY_TOKEN }}
-      if: steps.fork.outputs.is_fork_pr == 'false'
+      if: ${{ env.docker_registry_token != '' }}
 
     - name: Build Docker image
       run: |
@@ -76,4 +74,4 @@ jobs:
         # pull request images are prefixed with 'pr' to prevent them from overriding released images
         export DOCKER_TAG=pr-$(echo ${GITHUB_HEAD_REF} | tr '/' '-')
         make docker-push
-      if: steps.fork.outputs.is_fork_pr == 'false'
+      if: ${{ env.docker_registry_token != '' }}

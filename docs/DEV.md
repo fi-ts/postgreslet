@@ -3,7 +3,7 @@
 ```bash
 # Create a local control-cluster. This step is optional if you already have a working kubeconfig/cluster
 # IMPORTANT: update the apiServerAddress to your needs so the service-cluster from down below can access the control-cluster.
-kind create cluster --name ctrl --kubeconfig ./kubeconfig --config ctrl-cluster-config
+kind create cluster --name ctrl --kubeconfig ./kubeconfig
 
 # Copy the kubeconfig of the control-cluster to the project folder and name it `kubeconfig`.
 # When using kind as describe above, this file was already created
@@ -15,7 +15,8 @@ kind create cluster
 
 # Build and install our CRD in the control-cluster.
 # This step uses the "external" kubeconfig we copied to ./kubeconfig earlier. This can be configured in the Makefile
-make generate && make manifests && make install
+make generate && make manifests
+kubectl kustomize --kubeconfig kubeconfig config/crd | kubectl apply --kubeconfig kubeconfig -f -
 
 # Run the postgreslet in the service-cluster
 # This step uses the current-context of your default kubeconfig (e.g. ~/.kube/config)
@@ -33,7 +34,7 @@ kubectl get postgresql,pod -A
 kubectl --kubeconfig kubeconfig delete -f config/samples/complete.yaml
 
 # Uninstall the dependencies of this project from the remote control-cluster.
-make uninstall
+kubectl kustomize --kubeconfig kubeconfig config/crd | kubectl delete --kubeconfig kubeconfig -f -
 ```
 
 ## Install a local kubeconfig as secret in the service-cluster

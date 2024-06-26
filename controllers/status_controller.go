@@ -8,6 +8,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
@@ -34,15 +35,16 @@ type StatusReconciler struct {
 	Scheme                *runtime.Scheme
 	PartitionID           string
 	ControlPlaneNamespace string
+	EnableForceSharedIP   bool
 }
 
 // Reconcile updates the status of the remote Postgres object based on the status of the local zalando object.
 // +kubebuilder:rbac:groups=acid.zalan.do,resources=postgresqls,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=acid.zalan.do,resources=postgresqls/status,verbs=get;update;patch
 func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	log := r.Log.WithValues("postgresql", req.NamespacedName)
+	log := r.Log.WithValues("ns", req.NamespacedName.Namespace)
 
-	log.Info("fetching postgresql")
+	log.V(debugLogLevel).Info("fetching postgresql")
 	instance := &zalando.Postgresql{}
 	if err := r.SvcClient.Get(ctx, req.NamespacedName, instance); err != nil {
 		if !errors.IsNotFound(err) {
@@ -59,7 +61,7 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{}, err
 	}
 
-	log.Info("fetching owner")
+	log.V(debugLogLevel).Info("fetching owner")
 	ownerNs := types.NamespacedName{
 		Namespace: r.ControlPlaneNamespace,
 		Name:      derivedOwnerName,
@@ -69,6 +71,9 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{}, fmt.Errorf("could not find the owner")
 	}
 
+	log = log.WithValues("pgID", owner.Name)
+
+	log.V(debugLogLevel).Info("updating status")
 	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		// get a fresh copy of the owner object
 		if err := r.CtrlClient.Get(ctx, types.NamespacedName{Name: owner.Name, Namespace: owner.Namespace}, owner); err != nil {
@@ -79,7 +84,7 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		// update the reference to the zalando instance in the remote object
 		owner.Status.ChildName = instance.ObjectMeta.Name
 
-		log.Info("Updating owner", "owner", owner.UID)
+		log.V(debugLogLevel).Info("Updating owner", "owner", owner.UID)
 		if err := r.CtrlClient.Status().Update(ctx, owner); err != nil {
 			log.Error(err, "failed to update owner object")
 			return err
@@ -91,18 +96,82 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{}, retryErr
 	}
 
-	lb := &corev1.Service{}
-	if err := r.SvcClient.Get(ctx, *owner.ToSvcLBNamespacedName(), lb); err == nil {
-		owner.Status.Socket.IP = lb.Spec.LoadBalancerIP
-		owner.Status.Socket.Port = lb.Spec.Ports[0].Port
+	log.V(debugLogLevel).Info("updating socket")
+	if !owner.EnableDedicatedSVCLB() {
+		// no dedicated load balancer configured, use the shared one
+		shared := &corev1.Service{}
+		if err := r.SvcClient.Get(ctx, *owner.ToSharedSvcLBNamespacedName(), shared); err == nil {
+			// update IP and port
+			owner.Status.Socket.IP = shared.Spec.LoadBalancerIP
+			owner.Status.Socket.Port = shared.Spec.Ports[0].Port
+			owner.Status.AdditionalSockets = []pg.Socket{} // reset additional sockets
+
+		} else {
+			// Todo: Handle errors other than `NotFound`
+			log.Info("unable to fetch the shared LoadBalancer to update postgres status socket")
+			owner.Status.Socket = pg.Socket{}
+		}
 
 		if err := r.CtrlClient.Status().Update(ctx, owner); err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to update lbSocket of Postgres: %w", err)
+			return ctrl.Result{}, fmt.Errorf("failed to update simple postgres status socket: %w", err)
 		}
-		log.Info("postgres status socket updated")
+		log.V(debugLogLevel).Info("simple postgres status socket updated", "socket", owner.Status.Socket, "additionalsockets", owner.Status.AdditionalSockets)
+
 	} else {
-		// Todo: Handle errors other than `NotFound`
-		log.Info("unable to fetch the corresponding Service of type LoadBalancer")
+		// dedicated load balancer configured, so we fetch it
+		dedicated := &corev1.Service{}
+		derr := r.SvcClient.Get(ctx, *owner.ToDedicatedSvcLBNamespacedName(), dedicated)
+
+		if r.EnableForceSharedIP {
+
+			// we still have a shared load balancer, so we keep using this one as primary socket
+			shared := &corev1.Service{}
+			serr := r.SvcClient.Get(ctx, *owner.ToSharedSvcLBNamespacedName(), shared)
+			if serr == nil {
+				// the shared load balancer is usable, use it for status
+				owner.Status.Socket.IP = shared.Spec.LoadBalancerIP
+				owner.Status.Socket.Port = shared.Spec.Ports[0].Port
+				log.V(debugLogLevel).Info("using shared loadbalancer as primary status socket")
+			} else {
+				// we couldn't use the shared load balancer, use empty socket instead
+				log.Info("failed to use shared loadbalancer as primary status socket")
+				owner.Status.Socket = pg.Socket{}
+			}
+
+			// now we use the dedicated load balancer as additional socket
+			if derr == nil && dedicated.Status.LoadBalancer.Ingress != nil && len(dedicated.Status.LoadBalancer.Ingress) == 1 {
+				// the dedicated load balancer is usable, use it for status
+				additionalSocket := pg.Socket{
+					IP:   dedicated.Spec.LoadBalancerIP,
+					Port: dedicated.Spec.Ports[0].Port,
+				}
+				owner.Status.AdditionalSockets = []pg.Socket{additionalSocket}
+				log.V(debugLogLevel).Info("using dedicated loadbalancer as additional status socket")
+			} else {
+				log.Info("failed to use dedicated loadbalancer as additional status socket")
+			}
+
+		} else {
+
+			// no more shared load balancer, only use the dedicated one
+			if derr == nil && dedicated.Status.LoadBalancer.Ingress != nil && len(dedicated.Status.LoadBalancer.Ingress) == 1 {
+				// the dedicated load balancer is usable, use it for status
+				owner.Status.Socket.IP = dedicated.Spec.LoadBalancerIP
+				owner.Status.Socket.Port = dedicated.Spec.Ports[0].Port
+				log.V(debugLogLevel).Info("using dedicated loadbalancer as primary status socket")
+			} else {
+				// we couldn't use the dedicated load balancer, use empty socket instead
+				log.Info("failed to use dedicated loadbalancer as primary status socket")
+				owner.Status.Socket = pg.Socket{}
+			}
+		}
+
+		// actually perform the status update
+		if err := r.CtrlClient.Status().Update(ctx, owner); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to update advanced postgres status socket: %w", err)
+		}
+		log.V(debugLogLevel).Info("advanced postgres status socket updated", "socket", owner.Status.Socket, "additionalsockets", owner.Status.AdditionalSockets)
+
 	}
 
 	// TODO also update the port/ip of databases mentioned in owner.Spec.PostgresConnectionInfo so that e.g. CWNP are always up to date
@@ -114,7 +183,8 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	}
 
 	if len(secrets.Items) == 0 {
-		return ctrl.Result{Requeue: true}, nil
+		log.Info("no local secrets found yet, requeuing", "status", owner.Status)
+		return ctrl.Result{Requeue: true, RequeueAfter: 2 * time.Second}, nil
 	}
 
 	// TODO: #176 delete the secrets in the end as well
@@ -122,6 +192,8 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	if err := r.createOrUpdateSecret(ctx, owner, secrets, log); err != nil {
 		return ctrl.Result{}, err
 	}
+
+	log.Info("status reconciled", "status", owner.Status)
 
 	return ctrl.Result{}, nil
 }
@@ -164,7 +236,7 @@ func (r *StatusReconciler) createOrUpdateSecret(ctx context.Context, in *pg.Post
 		return fmt.Errorf("failed to create or update the secret containing user password pairs: %w", err)
 	}
 	// todo: better the log
-	log.Info("secret created or updated", "operation result", result)
+	log.V(debugLogLevel).Info("secret created or updated", "operation result", result)
 
 	return nil
 }

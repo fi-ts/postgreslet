@@ -57,7 +57,7 @@ var _ = Describe("postgres controller", func() {
 			Eventually(func() bool {
 				return svcClusterClient.Get(newCtx(), types.NamespacedName{
 					Namespace: instance.ToPeripheralResourceNamespace(),
-					Name:      instance.ToSvcLBName(),
+					Name:      instance.ToSharedSvcLBName(),
 				}, &core.Service{}) == nil
 			}, timeout, interval).Should(BeTrue())
 		})
@@ -96,7 +96,7 @@ var _ = Describe("postgres controller", func() {
 			Eventually(func() bool {
 				return svcClusterClient.Get(newCtx(), types.NamespacedName{
 					Namespace: instance.ToPeripheralResourceNamespace(),
-					Name:      instance.ToSvcLBName(),
+					Name:      instance.ToSharedSvcLBName(),
 				}, &core.Service{}) == nil
 			}, timeout, interval).ShouldNot(BeTrue())
 		})
