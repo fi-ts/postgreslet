@@ -327,7 +327,7 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	// Check if socket port is ready
 	port := instance.Status.Socket.Port
 	if port == 0 {
-		r.recorder.Event(instance, "Warning", "Self-Reconciliation", "socket port not ready")
+		r.recorder.Event(instance, "Warning", "Self-Reconcilation", "socket port not ready")
 		log.Info("socket port not ready, requeueing")
 		return requeue, nil
 	}
@@ -1773,8 +1773,15 @@ func (r *PostgresReconciler) ensureInitDBJob(log logr.Logger, ctx context.Contex
 							AllowPrivilegeEscalation: pointer.Bool(false),
 							Privileged:               pointer.Bool(false),
 							ReadOnlyRootFilesystem:   pointer.Bool(true),
+							RunAsNonRoot:             pointer.Bool(true),
 							RunAsUser:                pointer.Int64(101),
 							RunAsGroup:               pointer.Int64(101),
+							Capabilities: &corev1.Capabilities{
+								Drop: []corev1.Capability{"ALL"},
+							},
+							SeccompProfile: &corev1.SeccompProfile{
+								Type: corev1.SeccompProfileTypeRuntimeDefault,
+							},
 						},
 						VolumeMounts: []corev1.VolumeMount{
 							{

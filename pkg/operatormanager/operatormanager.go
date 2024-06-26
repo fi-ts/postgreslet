@@ -32,9 +32,7 @@ import (
 
 const (
 	// The serviceAccount name to use for the database pods.
-	// TODO: create new account per namespace
-	// TODO: use different account for operator and database
-	serviceAccountName string = "postgres-operator"
+	serviceAccountName string = "postgres-pod"
 
 	// PodEnvCMName Name of the pod environment configmap to create and use
 	PodEnvCMName string = "postgres-pod-config"
@@ -71,6 +69,7 @@ type Options struct {
 	SidecarsConfigMapName   string
 	PodAntiaffinity         bool
 	PartitionID             string
+	PatroniFailsafeMode     bool
 }
 
 // OperatorManager manages the operator
@@ -122,7 +121,7 @@ func New(confRest *rest.Config, fileName string, scheme *runtime.Scheme, log log
 func (m *OperatorManager) InstallOrUpdateOperator(ctx context.Context, namespace string) error {
 
 	// Make sure the namespace exists.
-	if err := m.createNamespace(ctx, namespace); err != nil {
+	if err := m.createOrUpdateNamespace(ctx, namespace); err != nil {
 		return fmt.Errorf("error while ensuring the existence of namespace %v: %w", namespace, err)
 	}
 
@@ -435,8 +434,15 @@ func (m *OperatorManager) editConfigMap(cm *corev1.ConfigMap, namespace string, 
 
 	cm.Data["enable_pod_antiaffinity"] = strconv.FormatBool(options.PodAntiaffinity)
 
+	cm.Data["secret_name_template"] = "{username}.{cluster}.credentials"
+	cm.Data["master_dns_name_format"] = "{cluster}.{team}.{hostedzone}"
+	cm.Data["replica_dns_name_format"] = "{cluster}-repl.{team}.{hostedzone}"
+
 	// set the spilo_fsgroup for correct tls cert permissions
 	cm.Data["spilo_fsgroup"] = spilo_fsgroup
+
+	cm.Data["enable_patroni_failsafe_mode"] = strconv.FormatBool(options.PatroniFailsafeMode)
+
 }
 
 // ensureCleanMetadata ensures obj has clean metadata
@@ -459,9 +465,16 @@ func (m *OperatorManager) ensureCleanMetadata(obj runtime.Object) error {
 	return nil
 }
 
-// createNamespace ensures namespace exists
-func (m *OperatorManager) createNamespace(ctx context.Context, namespace string) error {
-	if err := m.client.Get(ctx, client.ObjectKey{Name: namespace}, &corev1.Namespace{}); err != nil {
+// createOrUpdateNamespace ensures namespace exists
+func (m *OperatorManager) createOrUpdateNamespace(ctx context.Context, namespace string) error {
+	log := m.log.WithValues("ns", namespace)
+	labels := map[string]string{
+		pg.ManagedByLabelName: pg.ManagedByLabelValue,
+		// TODO const and make configurable
+		"pod-security.kubernetes.io/enforce": "privileged",
+	}
+	ns := corev1.Namespace{}
+	if err := m.client.Get(ctx, client.ObjectKey{Name: namespace}, &ns); err != nil {
 		// errors other than `not found`
 		if !errors.IsNotFound(err) {
 			return fmt.Errorf("error while fetching namespace %v: %w", namespace, err)
@@ -470,13 +483,18 @@ func (m *OperatorManager) createNamespace(ctx context.Context, namespace string)
 		// Create the namespace.
 		nsObj := &corev1.Namespace{}
 		nsObj.Name = namespace
-		nsObj.ObjectMeta.Labels = map[string]string{
-			pg.ManagedByLabelName: pg.ManagedByLabelValue,
-		}
+		nsObj.ObjectMeta.Labels = labels
 		if err := m.client.Create(ctx, nsObj); err != nil {
 			return fmt.Errorf("error while creating namespace %v: %w", namespace, err)
 		}
-		m.log.Info("namespace created", "ns", namespace)
+		log.Info("namespace created")
+	} else {
+		// update namespace
+		ns.ObjectMeta.Labels = labels
+		if err := m.client.Update(ctx, &ns); err != nil {
+			return fmt.Errorf("error while updating namespace: %w", err)
+		}
+		log.Info("namespace updated")
 	}
 
 	return nil
