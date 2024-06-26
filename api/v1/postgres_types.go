@@ -647,7 +647,7 @@ func (p *Postgres) ToDNSName(tlsSubDomain string) string {
 }
 
 func (p *Postgres) ToTLSSecretName() string {
-	return p.ToPeripheralResourceName()
+	return "pg-tls"
 }
 
 func (p *Postgres) ToPeripheralResourceLookupKey() types.NamespacedName {
