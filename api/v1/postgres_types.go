@@ -788,6 +788,8 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 		z.Spec.TLS = &zalando.TLSDescription{
 			SecretName: p.ToTLSSecretName(),
 		}
+	} else {
+		z.Spec.TLS = nil
 	}
 
 	jsonZ, err := runtime.DefaultUnstructuredConverter.ToUnstructured(z)
