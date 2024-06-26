@@ -1053,7 +1053,7 @@ func (r *PostgresReconciler) checkAndUpdatePatroniReplicationConfig(log logr.Log
 		if resp.StandbyCluster != nil {
 			log.Info("standby_cluster mistmatch, requeing", "response", resp)
 			// what happens, if patroni does not do what it is asked to do? what if it returns an error here?
-			return requeueImmediately, nil
+			return continueWithReconciliation, nil
 		}
 		if instance.Spec.PostgresConnection.SynchronousReplication {
 			if resp.SynchronousNodesAdditional == nil || *resp.SynchronousNodesAdditional != instance.Spec.PostgresConnection.ConnectedPostgresID {
@@ -1070,7 +1070,7 @@ func (r *PostgresReconciler) checkAndUpdatePatroniReplicationConfig(log logr.Log
 	} else {
 		if resp.StandbyCluster == nil {
 			log.Info("standby_cluster mismatch, requeing", "response", resp)
-			return requeueImmediately, nil
+			return continueWithReconciliation, nil
 		}
 		if resp.StandbyCluster.ApplicationName != instance.ObjectMeta.Name {
 			log.Info("application_name mismatch, updating and requeing", "response", resp)
