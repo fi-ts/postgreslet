@@ -1163,9 +1163,6 @@ func (r *PostgresReconciler) httpPatchPatroni(log logr.Logger, ctx context.Conte
 		// TODO check values first
 		request = PatroniConfig{
 			StandbyCluster: &PatroniStandbyCluster{
-				// CreateReplicaMethods: []string{"basebackup_fast_xlog"},
-				// Host:                 instance.Spec.PostgresConnection.ConnectionIP,
-				// Port:                 int(instance.Spec.PostgresConnection.ConnectionPort),
 				ApplicationName: instance.ObjectMeta.Name,
 			},
 			SynchronousNodesAdditional: nil,
