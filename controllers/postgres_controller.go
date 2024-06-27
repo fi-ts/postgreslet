@@ -324,7 +324,7 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	// Check if socket port is ready
 	port := instance.Status.Socket.Port
 	if port == 0 {
-		r.recorder.Event(instance, "Warning", "Self-Reconcilation", "socket port not ready")
+		r.recorder.Event(instance, "Warning", "Self-Reconciliation", "socket port not ready")
 		log.Info("socket port not ready, requeueing")
 		return requeue, nil
 	}
@@ -1091,15 +1091,15 @@ func (r *PostgresReconciler) checkAndUpdatePatroniReplicationConfig(log logr.Log
 			return allDone, r.httpPatchPatroni(log, ctx, instance, leaderIP)
 		}
 		if resp.StandbyCluster.CreateReplicaMethods == nil {
-			log.Info("create_replica_methods mismatch, requeing", "response", resp)
+			log.Info("create_replica_methods mismatch, updating", "response", resp)
 			return requeueAfterReconcile, r.httpPatchPatroni(log, ctx, instance, leaderIP)
 		}
 		if resp.StandbyCluster.Host != instance.Spec.PostgresConnection.ConnectionIP {
-			log.Info("host mismatch, requeing", "response", resp)
+			log.Info("host mismatch, requeing", "updating", resp)
 			return requeueAfterReconcile, r.httpPatchPatroni(log, ctx, instance, leaderIP)
 		}
 		if resp.StandbyCluster.Port != int(instance.Spec.PostgresConnection.ConnectionPort) {
-			log.Info("port mismatch, requeing", "response", resp)
+			log.Info("port mismatch, requeing", "updating", resp)
 			return requeueAfterReconcile, r.httpPatchPatroni(log, ctx, instance, leaderIP)
 		}
 	}
