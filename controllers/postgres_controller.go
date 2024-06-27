@@ -1018,6 +1018,8 @@ func (r *PostgresReconciler) copySecrets(log logr.Logger, ctx context.Context, s
 
 func (r *PostgresReconciler) checkAndUpdatePatroniReplicationConfig(log logr.Logger, ctx context.Context, instance *pg.Postgres) (bool, error) {
 
+	log = log.WithValues("func", "checkAndUpdatePatroniReplicationConfig")
+
 	const requeueAfterReconcile = true
 	const allDone = false
 
@@ -1043,11 +1045,13 @@ func (r *PostgresReconciler) checkAndUpdatePatroniReplicationConfig(log logr.Log
 	leaderIP := leaderPods.Items[0].Status.PodIP
 
 	var resp *PatroniConfig
-	resp, err = r.httpGetPatroniConfig(ctx, leaderIP)
+	resp, err = r.httpGetPatroniConfig(log, ctx, leaderIP)
 	if err != nil {
+		log.Info("could not query patroni, requeuing")
 		return requeueAfterReconcile, err
 	}
 	if resp == nil {
+		log.Info("got nil response from patroni, requeuing")
 		return requeueAfterReconcile, nil
 	}
 
@@ -1059,13 +1063,13 @@ func (r *PostgresReconciler) checkAndUpdatePatroniReplicationConfig(log logr.Log
 		}
 		if instance.Spec.PostgresConnection.SynchronousReplication {
 			if resp.SynchronousNodesAdditional == nil || *resp.SynchronousNodesAdditional != instance.Spec.PostgresConnection.ConnectedPostgresID {
-				log.Info("synchronous_nodes_additional mistmatch, updating and requeing", "response", resp)
+				log.Info("synchronous_nodes_additional mistmatch, updating", "response", resp)
 				// TODO requeueAfterReconcile or allDone?
 				return allDone, r.httpPatchPatroni(log, ctx, instance, leaderIP)
 			}
 		} else {
 			if resp.SynchronousNodesAdditional != nil {
-				log.Info("synchronous_nodes_additional mistmatch, updating and requeing", "response", resp)
+				log.Info("synchronous_nodes_additional mistmatch, updating", "response", resp)
 				// TODO requeueAfterReconcile or allDone?
 				return allDone, r.httpPatchPatroni(log, ctx, instance, leaderIP)
 			}
@@ -1077,25 +1081,25 @@ func (r *PostgresReconciler) checkAndUpdatePatroniReplicationConfig(log logr.Log
 			return requeueAfterReconcile, nil
 		}
 		if resp.StandbyCluster.CreateReplicaMethods == nil {
-			log.Info("create_replica_methods mismatch, updating and requeing", "response", resp)
+			log.Info("create_replica_methods mismatch, requeing", "response", resp)
 			return requeueAfterReconcile, nil
 		}
 		if resp.StandbyCluster.Host != instance.Spec.PostgresConnection.ConnectionIP {
-			log.Info("host mismatch, updating and requeing", "response", resp)
+			log.Info("host mismatch, requeing", "response", resp)
 			return requeueAfterReconcile, nil
 		}
 		if resp.StandbyCluster.Port != int(instance.Spec.PostgresConnection.ConnectionPort) {
-			log.Info("port mismatch, updating and requeing", "response", resp)
+			log.Info("port mismatch, requeing", "response", resp)
 			return requeueAfterReconcile, nil
 		}
 		if resp.StandbyCluster.ApplicationName != instance.ObjectMeta.Name {
-			log.Info("application_name mismatch, updating and requeing", "response", resp)
+			log.Info("application_name mismatch, updating", "response", resp)
 			// TODO requeueAfterReconcile or allDone?
 			return allDone, r.httpPatchPatroni(log, ctx, instance, leaderIP)
 		}
 
 		if resp.SynchronousNodesAdditional != nil {
-			log.Info("synchronous_nodes_additional mistmatch, updating and requeing", "response", resp)
+			log.Info("synchronous_nodes_additional mistmatch, updating", "response", resp)
 			// TODO requeueAfterReconcile or allDone?
 			return allDone, r.httpPatchPatroni(log, ctx, instance, leaderIP)
 		}
@@ -1135,7 +1139,7 @@ func (r *PostgresReconciler) updatePatroniReplicationConfigOnAllPods(log logr.Lo
 		log.Info("no spilo pods found at all, requeueing")
 		return errors.New("no spilo pods found at all")
 	} else if len(pods.Items) < int(instance.Spec.NumberOfInstances) {
-		r.Log.Info("expected %d pods, but only found %d (might be ok if it is still creating)", instance.Spec.NumberOfInstances, len(pods.Items))
+		log.Info("expected %d pods, but only found %d (might be ok if it is still creating)", instance.Spec.NumberOfInstances, len(pods.Items))
 	}
 
 	// iterate all spilo pods
@@ -1164,7 +1168,7 @@ func (r *PostgresReconciler) httpPatchPatroni(log logr.Logger, ctx context.Conte
 	podPort := "8008"
 	path := "config"
 
-	r.Log.Info("Preparing request")
+	log.Info("Preparing request")
 	var request PatroniConfig
 	if instance.IsReplicationPrimary() {
 		request = PatroniConfig{
@@ -1216,7 +1220,7 @@ func (r *PostgresReconciler) httpPatchPatroni(log logr.Logger, ctx context.Conte
 	return nil
 }
 
-func (r *PostgresReconciler) httpGetPatroniConfig(ctx context.Context, podIP string) (*PatroniConfig, error) {
+func (r *PostgresReconciler) httpGetPatroniConfig(log logr.Logger, ctx context.Context, podIP string) (*PatroniConfig, error) {
 	if podIP == "" {
 		return nil, errors.New("podIP must not be empty")
 	}
@@ -1229,14 +1233,14 @@ func (r *PostgresReconciler) httpGetPatroniConfig(ctx context.Context, podIP str
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
-		r.Log.Error(err, "could not create request")
+		log.Error(err, "could not create request")
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		r.Log.Error(err, "could not perform request")
+		log.Error(err, "could not perform request")
 		return nil, err
 	}
 
@@ -1244,17 +1248,17 @@ func (r *PostgresReconciler) httpGetPatroniConfig(ctx context.Context, podIP str
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		r.Log.Info("could not read body")
+		log.Info("could not read body")
 		return nil, err
 	}
 	var jsonResp PatroniConfig
 	err = json.Unmarshal(body, &jsonResp)
 	if err != nil {
-		r.Log.Info("could not parse config")
+		log.Info("could not parse config")
 		return nil, err
 	}
 
-	r.Log.Info("Got config", "response", jsonResp)
+	log.Info("Got config", "response", jsonResp)
 
 	return &jsonResp, err
 }
