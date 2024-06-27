@@ -105,7 +105,10 @@ type PostgresReconciler struct {
 }
 
 type PatroniStandbyCluster struct {
-	ApplicationName string `json:"application_name"`
+	CreateReplicaMethods []string `json:"create_replica_methods"`
+	Host                 string   `json:"host"`
+	Port                 int      `json:"port"`
+	ApplicationName      string   `json:"application_name"`
 }
 type PatroniConfig struct {
 	StandbyCluster             *PatroniStandbyCluster `json:"standby_cluster"`
@@ -1072,6 +1075,18 @@ func (r *PostgresReconciler) checkAndUpdatePatroniReplicationConfig(log logr.Log
 		if resp.StandbyCluster == nil {
 			log.Info("standby_cluster mismatch, requeing", "response", resp)
 			return requeueAfterReconcile, nil
+		}
+		if resp.StandbyCluster.CreateReplicaMethods == nil {
+			log.Info("create_replica_methods mismatch, updating and requeing", "response", resp)
+			return requeueImmediately, nil
+		}
+		if resp.StandbyCluster.Host != instance.Spec.PostgresConnection.ConnectionIP {
+			log.Info("host mismatch, updating and requeing", "response", resp)
+			return requeueImmediately, nil
+		}
+		if resp.StandbyCluster.Port != int(instance.Spec.PostgresConnection.ConnectionPort) {
+			log.Info("port mismatch, updating and requeing", "response", resp)
+			return requeueImmediately, nil
 		}
 		if resp.StandbyCluster.ApplicationName != instance.ObjectMeta.Name {
 			log.Info("application_name mismatch, updating and requeing", "response", resp)
