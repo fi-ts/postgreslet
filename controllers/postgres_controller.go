@@ -1080,28 +1080,27 @@ func (r *PostgresReconciler) checkAndUpdatePatroniReplicationConfig(log logr.Log
 			log.Info("standby_cluster mismatch, requeing", "response", resp)
 			return requeueAfterReconcile, nil
 		}
-		if resp.StandbyCluster.CreateReplicaMethods == nil {
-			log.Info("create_replica_methods mismatch, requeing", "response", resp)
-			return requeueAfterReconcile, nil
-		}
-		if resp.StandbyCluster.Host != instance.Spec.PostgresConnection.ConnectionIP {
-			log.Info("host mismatch, requeing", "response", resp)
-			return requeueAfterReconcile, nil
-		}
-		if resp.StandbyCluster.Port != int(instance.Spec.PostgresConnection.ConnectionPort) {
-			log.Info("port mismatch, requeing", "response", resp)
-			return requeueAfterReconcile, nil
-		}
 		if resp.StandbyCluster.ApplicationName != instance.ObjectMeta.Name {
 			log.Info("application_name mismatch, updating", "response", resp)
 			// TODO requeueAfterReconcile or allDone?
 			return allDone, r.httpPatchPatroni(log, ctx, instance, leaderIP)
 		}
-
 		if resp.SynchronousNodesAdditional != nil {
 			log.Info("synchronous_nodes_additional mistmatch, updating", "response", resp)
 			// TODO requeueAfterReconcile or allDone?
 			return allDone, r.httpPatchPatroni(log, ctx, instance, leaderIP)
+		}
+		if resp.StandbyCluster.CreateReplicaMethods == nil {
+			log.Info("create_replica_methods mismatch, requeing", "response", resp)
+			return requeueAfterReconcile, r.httpPatchPatroni(log, ctx, instance, leaderIP)
+		}
+		if resp.StandbyCluster.Host != instance.Spec.PostgresConnection.ConnectionIP {
+			log.Info("host mismatch, requeing", "response", resp)
+			return requeueAfterReconcile, r.httpPatchPatroni(log, ctx, instance, leaderIP)
+		}
+		if resp.StandbyCluster.Port != int(instance.Spec.PostgresConnection.ConnectionPort) {
+			log.Info("port mismatch, requeing", "response", resp)
+			return requeueAfterReconcile, r.httpPatchPatroni(log, ctx, instance, leaderIP)
 		}
 	}
 
