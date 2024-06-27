@@ -267,13 +267,7 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	}
 
 	// check (and update if neccessary) the current patroni replication config.
-	immediateRequeue, patroniConfigChangeErr := r.checkAndUpdatePatroniReplicationConfig(log, ctx, instance)
-	if immediateRequeue && patroniConfigChangeErr == nil {
-		// if a (successful) config change was performed that requires a while to settle in, we simply requeue.
-		// on the next reconciliation loop, the config should be correct already so we can continue with the rest.
-		log.Info("Requeueing after patroni replication config change")
-		return ctrl.Result{Requeue: true, RequeueAfter: r.ReplicationChangeRequeueDuration}, nil
-	}
+	requeueAfterReconcile, patroniConfigChangeErr := r.checkAndUpdatePatroniReplicationConfig(log, ctx, instance)
 
 	// create standby egress rule first, so the standby can actually connect to the primary
 	if err := r.createOrUpdateEgressCWNP(ctx, instance); err != nil {
@@ -338,11 +332,16 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, fmt.Errorf("unable to create or update ingress ClusterwideNetworkPolicy: %w", err)
 	}
 
-	// when an error occurred while updating the patroni config, requeue here
-	// this is done down here to make sure the rest of the resource updates were performed
 	if patroniConfigChangeErr != nil {
-		log.Info("Requeueing after modifying patroni replication config failed")
+		// when an error occurred while updating the patroni config, requeue here
+		// we try again in the next loop, hoping things will settle
+		log.Info("Requeueing after getting/setting patroni replication config failed")
 		return ctrl.Result{Requeue: true, RequeueAfter: 10 * time.Second}, patroniConfigChangeErr
+	} else if requeueAfterReconcile {
+		// if the config isn't in the expected state yet (we only add values to an existing config, we do not perform the actual switch), we simply requeue.
+		// on the next reconciliation loop, postgres-operator shoud have catched up and the config should hopefully be correct already so we can continue with adding our values.
+		log.Info("Requeueing after patroni replication hasn't returned the expected state (yet)")
+		return ctrl.Result{Requeue: true, RequeueAfter: r.ReplicationChangeRequeueDuration}, nil
 	}
 
 	log.Info("postgres reconciled")
@@ -1016,12 +1015,12 @@ func (r *PostgresReconciler) copySecrets(log logr.Logger, ctx context.Context, s
 
 func (r *PostgresReconciler) checkAndUpdatePatroniReplicationConfig(log logr.Logger, ctx context.Context, instance *pg.Postgres) (bool, error) {
 
-	const requeueImmediately = true
-	const continueWithReconciliation = false
+	const requeueAfterReconcile = true
+	const allDone = false
 
 	// If there is no connected postgres, no need to tinker with patroni directly
 	if instance.Spec.PostgresConnection == nil {
-		return continueWithReconciliation, nil
+		return allDone, nil
 	}
 
 	log.V(debugLogLevel).Info("Checking replication config from Patroni API")
@@ -1030,61 +1029,65 @@ func (r *PostgresReconciler) checkAndUpdatePatroniReplicationConfig(log logr.Log
 	leaderPods, err := r.findLeaderPods(log, ctx, instance)
 	if err != nil {
 		log.Info("could not query pods, requeuing")
-		return requeueImmediately, err
+		return requeueAfterReconcile, err
 	}
 
 	if len(leaderPods.Items) != 1 {
 		log.Info("expected exactly one leader pod, selecting all spilo pods as a last resort (might be ok if it is still creating)")
 		// To make sure any updates to the Zalando postgresql manifest are written, we do not requeue in this case
-		return continueWithReconciliation, r.updatePatroniReplicationConfigOnAllPods(log, ctx, instance)
+		return allDone, r.updatePatroniReplicationConfigOnAllPods(log, ctx, instance)
 	}
 	leaderIP := leaderPods.Items[0].Status.PodIP
 
 	var resp *PatroniConfig
 	resp, err = r.httpGetPatroniConfig(ctx, leaderIP)
 	if err != nil {
-		return continueWithReconciliation, err
+		return requeueAfterReconcile, err
 	}
 	if resp == nil {
-		return continueWithReconciliation, nil
+		return requeueAfterReconcile, nil
 	}
 
 	if instance.IsReplicationPrimary() {
 		if resp.StandbyCluster != nil {
 			log.Info("standby_cluster mistmatch, requeing", "response", resp)
 			// what happens, if patroni does not do what it is asked to do? what if it returns an error here?
-			return continueWithReconciliation, nil
+			return requeueAfterReconcile, nil
 		}
 		if instance.Spec.PostgresConnection.SynchronousReplication {
 			if resp.SynchronousNodesAdditional == nil || *resp.SynchronousNodesAdditional != instance.Spec.PostgresConnection.ConnectedPostgresID {
 				log.Info("synchronous_nodes_additional mistmatch, updating and requeing", "response", resp)
-				return requeueImmediately, r.httpPatchPatroni(log, ctx, instance, leaderIP)
+				// TODO requeueAfterReconcile or allDone?
+				return allDone, r.httpPatchPatroni(log, ctx, instance, leaderIP)
 			}
 		} else {
 			if resp.SynchronousNodesAdditional != nil {
 				log.Info("synchronous_nodes_additional mistmatch, updating and requeing", "response", resp)
-				return requeueImmediately, r.httpPatchPatroni(log, ctx, instance, leaderIP)
+				// TODO requeueAfterReconcile or allDone?
+				return allDone, r.httpPatchPatroni(log, ctx, instance, leaderIP)
 			}
 		}
 
 	} else {
 		if resp.StandbyCluster == nil {
 			log.Info("standby_cluster mismatch, requeing", "response", resp)
-			return continueWithReconciliation, nil
+			return requeueAfterReconcile, nil
 		}
 		if resp.StandbyCluster.ApplicationName != instance.ObjectMeta.Name {
 			log.Info("application_name mismatch, updating and requeing", "response", resp)
-			return requeueImmediately, r.httpPatchPatroni(log, ctx, instance, leaderIP)
+			// TODO requeueAfterReconcile or allDone?
+			return allDone, r.httpPatchPatroni(log, ctx, instance, leaderIP)
 		}
 
 		if resp.SynchronousNodesAdditional != nil {
 			log.Info("synchronous_nodes_additional mistmatch, updating and requeing", "response", resp)
-			return requeueImmediately, r.httpPatchPatroni(log, ctx, instance, leaderIP)
+			// TODO requeueAfterReconcile or allDone?
+			return allDone, r.httpPatchPatroni(log, ctx, instance, leaderIP)
 		}
 	}
 
 	log.Info("replication config from Patroni API up to date")
-	return continueWithReconciliation, nil
+	return allDone, nil
 }
 
 func (r *PostgresReconciler) findLeaderPods(log logr.Logger, ctx context.Context, instance *pg.Postgres) (*corev1.PodList, error) {
