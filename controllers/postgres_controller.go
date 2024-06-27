@@ -1078,15 +1078,15 @@ func (r *PostgresReconciler) checkAndUpdatePatroniReplicationConfig(log logr.Log
 		}
 		if resp.StandbyCluster.CreateReplicaMethods == nil {
 			log.Info("create_replica_methods mismatch, updating and requeing", "response", resp)
-			return requeueImmediately, nil
+			return requeueAfterReconcile, nil
 		}
 		if resp.StandbyCluster.Host != instance.Spec.PostgresConnection.ConnectionIP {
 			log.Info("host mismatch, updating and requeing", "response", resp)
-			return requeueImmediately, nil
+			return requeueAfterReconcile, nil
 		}
 		if resp.StandbyCluster.Port != int(instance.Spec.PostgresConnection.ConnectionPort) {
 			log.Info("port mismatch, updating and requeing", "response", resp)
-			return requeueImmediately, nil
+			return requeueAfterReconcile, nil
 		}
 		if resp.StandbyCluster.ApplicationName != instance.ObjectMeta.Name {
 			log.Info("application_name mismatch, updating and requeing", "response", resp)
