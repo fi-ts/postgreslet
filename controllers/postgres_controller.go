@@ -1058,19 +1058,16 @@ func (r *PostgresReconciler) checkAndUpdatePatroniReplicationConfig(log logr.Log
 	if instance.IsReplicationPrimary() {
 		if resp.StandbyCluster != nil {
 			log.V(debugLogLevel).Info("standby_cluster mistmatch, requeing", "response", resp)
-			// what happens, if patroni does not do what it is asked to do? what if it returns an error here?
 			return requeueAfterReconcile, nil
 		}
 		if instance.Spec.PostgresConnection.SynchronousReplication {
 			if resp.SynchronousNodesAdditional == nil || *resp.SynchronousNodesAdditional != instance.Spec.PostgresConnection.ConnectedPostgresID {
 				log.V(debugLogLevel).Info("synchronous_nodes_additional mistmatch, updating", "response", resp)
-				// TODO requeueAfterReconcile or allDone?
 				return allDone, r.httpPatchPatroni(log, ctx, instance, leaderIP)
 			}
 		} else {
 			if resp.SynchronousNodesAdditional != nil {
 				log.V(debugLogLevel).Info("synchronous_nodes_additional mistmatch, updating", "response", resp)
-				// TODO requeueAfterReconcile or allDone?
 				return allDone, r.httpPatchPatroni(log, ctx, instance, leaderIP)
 			}
 		}
@@ -1082,12 +1079,10 @@ func (r *PostgresReconciler) checkAndUpdatePatroniReplicationConfig(log logr.Log
 		}
 		if resp.StandbyCluster.ApplicationName != instance.ObjectMeta.Name {
 			log.V(debugLogLevel).Info("application_name mismatch, updating", "response", resp)
-			// TODO requeueAfterReconcile or allDone?
 			return allDone, r.httpPatchPatroni(log, ctx, instance, leaderIP)
 		}
 		if resp.SynchronousNodesAdditional != nil {
 			log.V(debugLogLevel).Info("synchronous_nodes_additional mistmatch, updating", "response", resp)
-			// TODO requeueAfterReconcile or allDone?
 			return allDone, r.httpPatchPatroni(log, ctx, instance, leaderIP)
 		}
 		if resp.StandbyCluster.CreateReplicaMethods == nil {
