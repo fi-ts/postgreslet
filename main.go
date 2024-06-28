@@ -12,6 +12,7 @@ import (
 	"net"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/metal-stack/v"
 	coreosv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
@@ -22,6 +23,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	databasev1 "github.com/fi-ts/postgreslet/api/v1"
 	"github.com/fi-ts/postgreslet/controllers"
@@ -38,6 +40,7 @@ import (
 
 const (
 	// envPrefix               = "pg"
+
 	metricsAddrSvcMgrFlg                   = "metrics-addr-svc-mgr"
 	metricsAddrCtrlMgrFlg                  = "metrics-addr-ctrl-mgr"
 	enableLeaderElectionFlg                = "enable-leader-election"
@@ -69,6 +72,7 @@ const (
 	etcdBackupSidecarImageFlg              = "etcd-backup-sidecar-image"
 	etcdBackupSecretNameFlg                = "etcd-backup-secret-name" // nolint
 	etcdPSPNameFlg                         = "etcd-psp-name"
+	replicationChangeRequeueTimeFlg        = "replication-change-requeue-time-in-seconds"
 	postgresletFullnameFlg                 = "postgreslet-fullname"
 	enableLBSourceRangesFlg                = "enable-lb-source-ranges"
 	enableRandomStorageEncryptionSecretFlg = "enable-random-storage-encryption-secret"
@@ -79,6 +83,7 @@ const (
 	enableSuperUserForDBOFlg               = "enable-superuser-for-dbo"
 	tlsClusterIssuerFlg                    = "tls-cluster-issuer"
 	tlsSubDomainFlg                        = "tls-sub-domain"
+	enablePatroniFailsafeModeFlg           = "enable-patroni-failsafe-mode"
 )
 
 var (
@@ -137,9 +142,11 @@ func main() {
 		enableForceSharedIP                 bool
 		enableBootstrapStandbyFromS3        bool
 		enableSuperUserForDBO               bool
+		enablePatroniFailsafeMode           bool
 
-		portRangeStart int
-		portRangeSize  int
+		portRangeStart                        int
+		portRangeSize                         int
+		replicationChangeRequeueTimeInSeconds int
 
 		patroniTTL          uint32
 		patroniLoopWait     uint32
@@ -263,6 +270,10 @@ func main() {
 	viper.SetDefault(postgresletFullnameFlg, partitionID) // fall back to partition id
 	postgresletFullname = viper.GetString(postgresletFullnameFlg)
 
+	viper.SetDefault(replicationChangeRequeueTimeFlg, 10)
+	replicationChangeRequeueTimeInSeconds = viper.GetInt(replicationChangeRequeueTimeFlg)
+	replicationChangeRequeueDuration := time.Duration(replicationChangeRequeueTimeInSeconds) * time.Second
+
 	viper.SetDefault(enableLBSourceRangesFlg, true)
 	enableLBSourceRanges = viper.GetBool(enableLBSourceRangesFlg)
 
@@ -290,6 +301,9 @@ func main() {
 		enableCustomTLSCert = true
 	}
 	tlsSubDomain = viper.GetString(tlsSubDomainFlg)
+
+	viper.SetDefault(enablePatroniFailsafeModeFlg, true)
+	enablePatroniFailsafeMode = viper.GetBool(enablePatroniFailsafeModeFlg)
 
 	ctrl.Log.Info("flag",
 		metricsAddrSvcMgrFlg, metricsAddrSvcMgr,
@@ -326,6 +340,7 @@ func main() {
 		enableLBSourceRangesFlg, enableLBSourceRanges,
 		enableRandomStorageEncryptionSecretFlg, enableRandomStorageEncryptionSecret,
 		postgresletFullnameFlg, postgresletFullname,
+		replicationChangeRequeueTimeFlg, replicationChangeRequeueTimeInSeconds,
 		enableWalGEncryptionFlg, enableWalGEncryption,
 		enableForceSharedIPFlg, enableForceSharedIP,
 		initDBJobCMNameFlg, initDBJobCMName,
@@ -333,15 +348,17 @@ func main() {
 		enableSuperUserForDBOFlg, enableSuperUserForDBO,
 		tlsClusterIssuerFlg, tlsClusterIssuer,
 		tlsSubDomainFlg, tlsSubDomain,
+		enablePatroniFailsafeModeFlg, enablePatroniFailsafeMode,
 	)
 
 	svcClusterConf := ctrl.GetConfigOrDie()
 	svcClusterMgr, err := ctrl.NewManager(svcClusterConf, ctrl.Options{
-		Scheme:             scheme,
-		MetricsBindAddress: metricsAddrSvcMgr,
-		Port:               9443,
-		LeaderElection:     enableLeaderElection,
-		LeaderElectionID:   "908dd13e.fits.cloud",
+		Scheme: scheme,
+		Metrics: metricsserver.Options{
+			BindAddress: metricsAddrSvcMgr,
+		},
+		LeaderElection:   enableLeaderElection,
+		LeaderElectionID: "908dd13e.fits.cloud",
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start service cluster manager")
@@ -354,11 +371,12 @@ func main() {
 		os.Exit(1)
 	}
 	ctrlPlaneClusterMgr, err := ctrl.NewManager(ctrlPlaneClusterConf, ctrl.Options{
-		Scheme:             scheme,
-		MetricsBindAddress: metricsAddrCtrlMgr,
-		Port:               9443,
-		LeaderElection:     enableLeaderElection,
-		LeaderElectionID:   "4d69ceab.fits.cloud",
+		Scheme: scheme,
+		Metrics: metricsserver.Options{
+			BindAddress: metricsAddrCtrlMgr,
+		},
+		LeaderElection:   enableLeaderElection,
+		LeaderElectionID: "4d69ceab.fits.cloud",
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start control plane cluster manager")
@@ -401,6 +419,7 @@ func main() {
 		SidecarsConfigMapName:   sidecarsCMName,
 		PodAntiaffinity:         enablePodAntiaffinity,
 		PartitionID:             partitionID,
+		PatroniFailsafeMode:     enablePatroniFailsafeMode,
 	}
 	opMgr, err := operatormanager.New(svcClusterConf, "external/svc-postgres-operator.yaml", scheme, ctrl.Log.WithName("OperatorManager"), opMgrOpts)
 	if err != nil {
@@ -437,6 +456,7 @@ func main() {
 		PatroniTTL:                          patroniTTL,
 		PatroniLoopWait:                     patroniLoopWait,
 		PatroniRetryTimeout:                 patroniRetryTimeout,
+		ReplicationChangeRequeueDuration:    replicationChangeRequeueDuration,
 		EnableRandomStorageEncryptionSecret: enableRandomStorageEncryptionSecret,
 		EnableWalGEncryption:                enableWalGEncryption,
 		PostgresletFullname:                 postgresletFullname,

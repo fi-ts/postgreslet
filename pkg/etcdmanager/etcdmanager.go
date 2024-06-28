@@ -231,6 +231,8 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 		configYaml.WriteString("backup-cron-schedule: \"*/1 * * * *\"\n")
 		configYaml.WriteString("object-prefix: " + m.options.PartitionID + "\n")
 		configYaml.WriteString("compression-method: tarlz4\n")
+		configYaml.WriteString("post-exec-cmds:\n")
+		configYaml.WriteString("- etcd --data-dir=/data/etcd --listen-metrics-urls http://0.0.0.0:2381\n")
 		v.Data["config.yaml"] = configYaml.String()
 
 		// Use the updated name to get the resource

@@ -33,6 +33,7 @@ import (
 	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -101,8 +102,10 @@ var _ = BeforeSuite(func() {
 		Expect(ctrlClusterMgr).ToNot(BeNil())
 
 		svcClusterMgr, err := cr.NewManager(svcClusterCfg, cr.Options{
-			MetricsBindAddress: "0",
-			Scheme:             scheme,
+			Metrics: metricsserver.Options{
+				BindAddress: "0",
+			},
+			Scheme: scheme,
 		})
 		Expect(err).ToNot(HaveOccurred())
 		Expect(svcClusterMgr).ToNot(BeNil())
