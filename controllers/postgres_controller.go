@@ -335,14 +335,15 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, fmt.Errorf("unable to create or update ingress ClusterwideNetworkPolicy: %w", err)
 	}
 
+	// when an error occurred while updating the patroni config, requeue here
+	// we try again in the next loop, hoping things will settle
 	if patroniConfigChangeErr != nil {
-		// when an error occurred while updating the patroni config, requeue here
-		// we try again in the next loop, hoping things will settle
 		log.Info("Requeueing after getting/setting patroni replication config failed")
 		return ctrl.Result{Requeue: true, RequeueAfter: 10 * time.Second}, patroniConfigChangeErr
-	} else if requeueAfterReconcile {
-		// if the config isn't in the expected state yet (we only add values to an existing config, we do not perform the actual switch), we simply requeue.
-		// on the next reconciliation loop, postgres-operator shoud have catched up and the config should hopefully be correct already so we can continue with adding our values.
+	}
+	// if the config isn't in the expected state yet (we only add values to an existing config, we do not perform the actual switch), we simply requeue.
+	// on the next reconciliation loop, postgres-operator shoud have catched up and the config should hopefully be correct already so we can continue with adding our values.
+	if requeueAfterReconcile {
 		log.Info("Requeueing after patroni replication hasn't returned the expected state (yet)")
 		return ctrl.Result{Requeue: true, RequeueAfter: r.ReplicationChangeRequeueDuration}, nil
 	}
