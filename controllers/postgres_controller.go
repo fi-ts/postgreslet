@@ -13,12 +13,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"math/big"
 	"net"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-logr/logr"
 	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
@@ -72,13 +74,13 @@ var requeue = ctrl.Result{
 
 // PostgresReconciler reconciles a Postgres object
 type PostgresReconciler struct {
-	CtrlClient                          client.Client
-	SvcClient                           client.Client
-	Log                                 logr.Logger
-	Scheme                              *runtime.Scheme
-	PartitionID, Tenant, StorageClass   string
-	OperatorManager                     *operatormanager.OperatorManager
-	LBManager                           *lbmanager.LBManager
+	CtrlClient                        client.Client
+	SvcClient                         client.Client
+	Log                               logr.Logger
+	Scheme                            *runtime.Scheme
+	PartitionID, Tenant, StorageClass string
+	*operatormanager.OperatorManager
+	*lbmanager.LBManager
 	recorder                            record.EventRecorder
 	PgParamBlockList                    map[string]bool
 	StandbyClustersSourceRanges         []string
@@ -89,6 +91,7 @@ type PostgresReconciler struct {
 	PatroniTTL                          uint32
 	PatroniLoopWait                     uint32
 	PatroniRetryTimeout                 uint32
+	ReplicationChangeRequeueDuration    time.Duration
 	EnableRandomStorageEncryptionSecret bool
 	EnableWalGEncryption                bool
 	PostgresletFullname                 string
@@ -99,6 +102,17 @@ type PostgresReconciler struct {
 	EnableCustomTLSCert                 bool
 	TLSClusterIssuer                    string
 	TLSSubDomain                        string
+}
+
+type PatroniStandbyCluster struct {
+	CreateReplicaMethods []string `json:"create_replica_methods"`
+	Host                 string   `json:"host"`
+	Port                 int      `json:"port"`
+	ApplicationName      string   `json:"application_name"`
+}
+type PatroniConfig struct {
+	StandbyCluster             *PatroniStandbyCluster `json:"standby_cluster"`
+	SynchronousNodesAdditional *string                `json:"synchronous_nodes_additional"`
 }
 
 // Reconcile is the entry point for postgres reconciliation.
@@ -255,18 +269,8 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, fmt.Errorf("error while creating postgres secrets: %w", err)
 	}
 
-	if instance.IsReplicationPrimary() {
-		// the field is not empty, which means we were either a regular, standalone database that was promoted to leader
-		//  (meaning we are already running) or we are a standby which was promoted to leader (also meaning we are
-		// already running)
-		// That means we should be able to call the patroni api already. this is required, as updating the custom
-		// resource of a standby db seems to fail (maybe because of the users/databases?)...
-		// anyway, let's get on with it
-		if err := r.updatePatroniConfig(log, ctx, instance); err != nil {
-			// TODO what to do here? reschedule or ignore?
-			log.Error(err, "failed to update patroni config via REST call")
-		}
-	}
+	// check (and update if neccessary) the current patroni replication config.
+	requeueAfterReconcile, patroniConfigChangeErr := r.checkAndUpdatePatroniReplicationConfig(log, ctx, instance)
 
 	// create standby egress rule first, so the standby can actually connect to the primary
 	if err := r.createOrUpdateEgressCWNP(ctx, instance); err != nil {
@@ -331,9 +335,17 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, fmt.Errorf("unable to create or update ingress ClusterwideNetworkPolicy: %w", err)
 	}
 
-	// this is the call for standbys
-	if err := r.updatePatroniConfig(log, ctx, instance); err != nil {
-		return requeue, fmt.Errorf("unable to update patroni config: %w", err)
+	// when an error occurred while updating the patroni config, requeue here
+	// we try again in the next loop, hoping things will settle
+	if patroniConfigChangeErr != nil {
+		log.Info("Requeueing after getting/setting patroni replication config failed")
+		return ctrl.Result{Requeue: true, RequeueAfter: 10 * time.Second}, patroniConfigChangeErr
+	}
+	// if the config isn't in the expected state yet (we only add values to an existing config, we do not perform the actual switch), we simply requeue.
+	// on the next reconciliation loop, postgres-operator shoud have catched up and the config should hopefully be correct already so we can continue with adding our values.
+	if requeueAfterReconcile {
+		log.Info("Requeueing after patroni replication hasn't returned the expected state (yet)")
+		return ctrl.Result{Requeue: true, RequeueAfter: r.ReplicationChangeRequeueDuration}, nil
 	}
 
 	log.Info("postgres reconciled")
@@ -1005,60 +1017,124 @@ func (r *PostgresReconciler) copySecrets(log logr.Logger, ctx context.Context, s
 	return nil
 }
 
-func (r *PostgresReconciler) updatePatroniConfig(log logr.Logger, ctx context.Context, instance *pg.Postgres) error {
-	// Finally, send a POST to to the database with the correct config
+func (r *PostgresReconciler) checkAndUpdatePatroniReplicationConfig(log logr.Logger, ctx context.Context, instance *pg.Postgres) (bool, error) {
+
+	log = log.WithValues("label", "patroni")
+
+	const requeueAfterReconcile = true
+	const allDone = false
+
+	// If there is no connected postgres, no need to tinker with patroni directly
 	if instance.Spec.PostgresConnection == nil {
-		return nil
+		return allDone, nil
 	}
 
-	log.V(debugLogLevel).Info("Sending REST call to Patroni API")
-	pods := &corev1.PodList{}
+	log.V(debugLogLevel).Info("Checking replication config from Patroni API")
 
+	// Get the leader pod
+	leaderPods, err := r.findLeaderPods(log, ctx, instance)
+	if err != nil {
+		log.V(debugLogLevel).Info("could not query pods, requeuing")
+		return requeueAfterReconcile, err
+	}
+
+	if len(leaderPods.Items) != 1 {
+		log.V(debugLogLevel).Info("expected exactly one leader pod, selecting all spilo pods as a last resort (might be ok if it is still creating)")
+		// To make sure any updates to the Zalando postgresql manifest are written, we do not requeue in this case
+		return allDone, r.updatePatroniReplicationConfigOnAllPods(log, ctx, instance)
+	}
+	leaderIP := leaderPods.Items[0].Status.PodIP
+
+	var resp *PatroniConfig
+	resp, err = r.httpGetPatroniConfig(log, ctx, leaderIP)
+	if err != nil {
+		log.V(debugLogLevel).Info("could not query patroni, requeuing")
+		return requeueAfterReconcile, err
+	}
+	if resp == nil {
+		log.V(debugLogLevel).Info("got nil response from patroni, requeuing")
+		return requeueAfterReconcile, nil
+	}
+
+	if instance.IsReplicationPrimary() {
+		if resp.StandbyCluster != nil {
+			log.V(debugLogLevel).Info("standby_cluster mistmatch, requeing", "response", resp)
+			return requeueAfterReconcile, nil
+		}
+		if instance.Spec.PostgresConnection.SynchronousReplication {
+			if resp.SynchronousNodesAdditional == nil || *resp.SynchronousNodesAdditional != instance.Spec.PostgresConnection.ConnectedPostgresID {
+				log.V(debugLogLevel).Info("synchronous_nodes_additional mistmatch, updating", "response", resp)
+				return allDone, r.httpPatchPatroni(log, ctx, instance, leaderIP)
+			}
+		} else {
+			if resp.SynchronousNodesAdditional != nil {
+				log.V(debugLogLevel).Info("synchronous_nodes_additional mistmatch, updating", "response", resp)
+				return allDone, r.httpPatchPatroni(log, ctx, instance, leaderIP)
+			}
+		}
+
+	} else {
+		if resp.StandbyCluster == nil {
+			log.V(debugLogLevel).Info("standby_cluster mismatch, requeing", "response", resp)
+			return requeueAfterReconcile, nil
+		}
+		if resp.StandbyCluster.ApplicationName != instance.ObjectMeta.Name {
+			log.V(debugLogLevel).Info("application_name mismatch, updating", "response", resp)
+			return allDone, r.httpPatchPatroni(log, ctx, instance, leaderIP)
+		}
+		if resp.SynchronousNodesAdditional != nil {
+			log.V(debugLogLevel).Info("synchronous_nodes_additional mistmatch, updating", "response", resp)
+			return allDone, r.httpPatchPatroni(log, ctx, instance, leaderIP)
+		}
+		if resp.StandbyCluster.CreateReplicaMethods == nil {
+			log.V(debugLogLevel).Info("create_replica_methods mismatch, updating", "response", resp)
+			return requeueAfterReconcile, r.httpPatchPatroni(log, ctx, instance, leaderIP)
+		}
+		if resp.StandbyCluster.Host != instance.Spec.PostgresConnection.ConnectionIP {
+			log.V(debugLogLevel).Info("host mismatch, requeing", "updating", resp)
+			return requeueAfterReconcile, r.httpPatchPatroni(log, ctx, instance, leaderIP)
+		}
+		if resp.StandbyCluster.Port != int(instance.Spec.PostgresConnection.ConnectionPort) {
+			log.V(debugLogLevel).Info("port mismatch, requeing", "updating", resp)
+			return requeueAfterReconcile, r.httpPatchPatroni(log, ctx, instance, leaderIP)
+		}
+	}
+
+	log.V(debugLogLevel).Info("replication config from Patroni API up to date")
+	return allDone, nil
+}
+
+func (r *PostgresReconciler) findLeaderPods(log logr.Logger, ctx context.Context, instance *pg.Postgres) (*corev1.PodList, error) {
+	leaderPods := &corev1.PodList{}
 	roleReq, err := labels.NewRequirement(pg.SpiloRoleLabelName, selection.In, []string{pg.SpiloRoleLabelValueMaster, pg.SpiloRoleLabelValueStandbyLeader})
 	if err != nil {
-		log.Info("could not create requirements for label selector to query pods, requeuing")
-		return err
+		log.V(debugLogLevel).Info("could not create requirements for label selector to query pods, requeuing")
+		return leaderPods, err
 	}
-	leaderSelector := labels.NewSelector()
-	leaderSelector = leaderSelector.Add(*roleReq)
-
+	leaderSelector := labels.NewSelector().Add(*roleReq)
 	opts := []client.ListOption{
 		client.InNamespace(instance.ToPeripheralResourceNamespace()),
 		client.MatchingLabelsSelector{Selector: leaderSelector},
 	}
-	if err := r.SvcClient.List(ctx, pods, opts...); err != nil {
-		log.Info("could not query pods, requeuing")
-		return err
-	}
-	if len(pods.Items) == 0 {
-		log.Info("no leader pod found, selecting all spilo pods as a last resort (might be ok if it is still creating)")
-
-		err = r.updatePatroniConfigOnAllPods(log, ctx, instance)
-		if err != nil {
-			log.Info("updating patroni config failed, got one or more errors")
-			return err
-		}
-		return nil
-	}
-	podIP := pods.Items[0].Status.PodIP
-
-	return r.httpPatchPatroni(log, ctx, instance, podIP)
+	return leaderPods, r.SvcClient.List(ctx, leaderPods, opts...)
 }
 
-func (r *PostgresReconciler) updatePatroniConfigOnAllPods(log logr.Logger, ctx context.Context, instance *pg.Postgres) error {
+func (r *PostgresReconciler) updatePatroniReplicationConfigOnAllPods(log logr.Logger, ctx context.Context, instance *pg.Postgres) error {
 	pods := &corev1.PodList{}
 	opts := []client.ListOption{
 		client.InNamespace(instance.ToPeripheralResourceNamespace()),
 		client.MatchingLabels{pg.ApplicationLabelName: pg.ApplicationLabelValue},
 	}
 	if err := r.SvcClient.List(ctx, pods, opts...); err != nil {
-		log.Info("could not query pods, requeuing")
+		log.V(debugLogLevel).Info("could not query pods, requeuing")
 		return err
 	}
 
 	if len(pods.Items) == 0 {
-		log.Info("no spilo pods found at all, requeueing")
+		log.V(debugLogLevel).Info("no spilo pods found at all, requeueing")
 		return errors.New("no spilo pods found at all")
+	} else if len(pods.Items) < int(instance.Spec.NumberOfInstances) {
+		log.V(debugLogLevel).Info("expected %d pods, but only found %d (might be ok if it is still creating)", instance.Spec.NumberOfInstances, len(pods.Items))
 	}
 
 	// iterate all spilo pods
@@ -1072,7 +1148,7 @@ func (r *PostgresReconciler) updatePatroniConfigOnAllPods(log logr.Logger, ctx c
 		}
 	}
 	if lastErr != nil {
-		log.Info("updating patroni config failed, got one or more errors")
+		log.V(debugLogLevel).Info("updating patroni config failed, got one or more errors")
 		return lastErr
 	}
 	log.V(debugLogLevel).Info("updating patroni config succeeded")
@@ -1087,21 +1163,10 @@ func (r *PostgresReconciler) httpPatchPatroni(log logr.Logger, ctx context.Conte
 	podPort := "8008"
 	path := "config"
 
-	type PatroniStandbyCluster struct {
-		CreateReplicaMethods []string `json:"create_replica_methods"`
-		Host                 string   `json:"host"`
-		Port                 int      `json:"port"`
-		ApplicationName      string   `json:"application_name"`
-	}
-	type PatroniConfigRequest struct {
-		StandbyCluster             *PatroniStandbyCluster `json:"standby_cluster"`
-		SynchronousNodesAdditional *string                `json:"synchronous_nodes_additional"`
-	}
-
-	log.Info("Preparing request")
-	var request PatroniConfigRequest
+	log.V(debugLogLevel).Info("Preparing request")
+	var request PatroniConfig
 	if instance.IsReplicationPrimary() {
-		request = PatroniConfigRequest{
+		request = PatroniConfig{
 			StandbyCluster: nil,
 		}
 		if instance.Spec.PostgresConnection.SynchronousReplication {
@@ -1113,7 +1178,7 @@ func (r *PostgresReconciler) httpPatchPatroni(log logr.Logger, ctx context.Conte
 		}
 	} else {
 		// TODO check values first
-		request = PatroniConfigRequest{
+		request = PatroniConfig{
 			StandbyCluster: &PatroniStandbyCluster{
 				CreateReplicaMethods: []string{"basebackup_fast_xlog"},
 				Host:                 instance.Spec.PostgresConnection.ConnectionIP,
@@ -1126,7 +1191,7 @@ func (r *PostgresReconciler) httpPatchPatroni(log logr.Logger, ctx context.Conte
 	log.V(debugLogLevel).Info("Prepared request", "request", request)
 	jsonReq, err := json.Marshal(request)
 	if err != nil {
-		log.Info("could not create config")
+		log.V(debugLogLevel).Info("could not create config")
 		return err
 	}
 
@@ -1135,19 +1200,62 @@ func (r *PostgresReconciler) httpPatchPatroni(log logr.Logger, ctx context.Conte
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPatch, url, bytes.NewBuffer(jsonReq))
 	if err != nil {
-		log.Error(err, "could not create request")
+		log.Error(err, "could not create PATCH request")
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		log.Error(err, "could not perform request")
+		log.Error(err, "could not perform PATCH request")
 		return err
 	}
 	defer resp.Body.Close()
 
 	return nil
+}
+
+func (r *PostgresReconciler) httpGetPatroniConfig(log logr.Logger, ctx context.Context, podIP string) (*PatroniConfig, error) {
+	if podIP == "" {
+		return nil, errors.New("podIP must not be empty")
+	}
+
+	podPort := "8008"
+	path := "config"
+
+	httpClient := &http.Client{}
+	url := "http://" + podIP + ":" + podPort + "/" + path
+
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		log.Error(err, "could not create GET request")
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		log.Error(err, "could not perform GET request")
+		return nil, err
+	}
+
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Info("could not read body")
+		return nil, err
+	}
+	var jsonResp PatroniConfig
+	err = json.Unmarshal(body, &jsonResp)
+	if err != nil {
+		log.V(debugLogLevel).Info("could not parse config response")
+		return nil, err
+	}
+
+	log.V(debugLogLevel).Info("Got config", "response", jsonResp)
+
+	return &jsonResp, err
 }
 
 func (r *PostgresReconciler) getBackupConfig(ctx context.Context, ns, name string) (*pg.BackupConfig, error) {
@@ -1685,8 +1793,15 @@ func (r *PostgresReconciler) ensureInitDBJob(log logr.Logger, ctx context.Contex
 							AllowPrivilegeEscalation: pointer.Bool(false),
 							Privileged:               pointer.Bool(false),
 							ReadOnlyRootFilesystem:   pointer.Bool(true),
+							RunAsNonRoot:             pointer.Bool(true),
 							RunAsUser:                pointer.Int64(101),
 							RunAsGroup:               pointer.Int64(101),
+							Capabilities: &corev1.Capabilities{
+								Drop: []corev1.Capability{"ALL"},
+							},
+							SeccompProfile: &corev1.SeccompProfile{
+								Type: corev1.SeccompProfileTypeRuntimeDefault,
+							},
 						},
 						VolumeMounts: []corev1.VolumeMount{
 							{
