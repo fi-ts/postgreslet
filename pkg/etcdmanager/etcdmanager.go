@@ -496,7 +496,7 @@ func (m *EtcdManager) UninstallEtcd() error {
 
 	matchingLabels := client.MatchingLabels{
 		pg.PartitionIDLabelName: m.options.PartitionID,
-		pg.ManagedByLabelName:   pg.ManagedByLabelValue,
+		pg.ManagedByLabelName:   m.options.PostgresletFullname,
 		etcdComponentLabelName:  etcdComponentLabelValue,
 	}
 	deleteAllOpts := []client.DeleteAllOfOption{
