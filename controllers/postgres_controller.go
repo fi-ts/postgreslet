@@ -1041,7 +1041,7 @@ func (r *PostgresReconciler) checkAndUpdatePatroniReplicationConfig(log logr.Log
 	if len(leaderPods.Items) != 1 {
 		log.V(debugLogLevel).Info("expected exactly one leader pod, selecting all spilo pods as a last resort (might be ok if it is still creating)")
 		// To make sure any updates to the Zalando postgresql manifest are written, we do not requeue in this case
-		return allDone, r.updatePatroniReplicationConfigOnAllPods(log, ctx, instance)
+		return requeueAfterReconcile, r.updatePatroniReplicationConfigOnAllPods(log, ctx, instance)
 	}
 	leaderIP := leaderPods.Items[0].Status.PodIP
 
