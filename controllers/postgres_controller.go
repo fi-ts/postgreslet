@@ -1041,7 +1041,7 @@ func (r *PostgresReconciler) checkAndUpdatePatroniReplicationConfig(log logr.Log
 	if len(leaderPods.Items) != 1 {
 		log.V(debugLogLevel).Info("expected exactly one leader pod, selecting all spilo pods as a last resort (might be ok if it is still creating)")
 		// To make sure any updates to the Zalando postgresql manifest are written, we do not requeue in this case
-		return requeueAfterReconcile, r.updatePatroniReplicationConfigOnAllPods(log, ctx, instance)
+		return allDone, r.updatePatroniReplicationConfigOnAllPods(log, ctx, instance)
 	}
 	leaderIP := leaderPods.Items[0].Status.PodIP
 
@@ -1170,24 +1170,8 @@ func (r *PostgresReconciler) httpPatchPatroni(log logr.Logger, ctx context.Conte
 			StandbyCluster: nil,
 		}
 		if instance.Spec.PostgresConnection.SynchronousReplication {
-			// fetch standby
-			standby := &pg.Postgres{}
-			ns := types.NamespacedName{
-				Name:      instance.Spec.PostgresConnection.ConnectedPostgresID,
-				Namespace: instance.Namespace,
-			}
-			if err := r.CtrlClient.Get(ctx, ns, standby); err != nil {
-				if apierrors.IsNotFound(err) {
-					// the instance was updated, but does not exist anymore -> do nothing, it was probably deleted
-					// enable sync replication
-					request.SynchronousNodesAdditional = nil
-				}
-				r.recorder.Eventf(standby, "Warning", "Error", "failed to get referenced standby postgres: %v", err)
-				request.SynchronousNodesAdditional = nil
-			} else {
-				// enable sync replication
-				request.SynchronousNodesAdditional = pointer.String(standby.ToPeripheralResourceName())
-			}
+			// enable sync replication
+			request.SynchronousNodesAdditional = pointer.String(instance.Spec.PostgresConnection.ConnectedPostgresID)
 		} else {
 			// disable sync replication
 			request.SynchronousNodesAdditional = nil
@@ -1199,7 +1183,7 @@ func (r *PostgresReconciler) httpPatchPatroni(log logr.Logger, ctx context.Conte
 				CreateReplicaMethods: []string{"basebackup_fast_xlog"},
 				Host:                 instance.Spec.PostgresConnection.ConnectionIP,
 				Port:                 int(instance.Spec.PostgresConnection.ConnectionPort),
-				ApplicationName:      instance.ToPeripheralResourceName(),
+				ApplicationName:      instance.ObjectMeta.Name,
 			},
 			SynchronousNodesAdditional: nil,
 		}
