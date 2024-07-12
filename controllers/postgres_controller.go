@@ -1064,12 +1064,12 @@ func (r *PostgresReconciler) checkAndUpdatePatroniReplicationConfig(log logr.Log
 		if instance.Spec.PostgresConnection.SynchronousReplication {
 			if resp.SynchronousNodesAdditional == nil || *resp.SynchronousNodesAdditional != instance.Spec.PostgresConnection.ConnectedPostgresID {
 				log.V(debugLogLevel).Info("synchronous_nodes_additional mistmatch, updating", "response", resp)
-				return allDone, r.httpPatchPatroni(log, ctx, instance, leaderIP)
+				return requeueAfterReconcile, r.httpPatchPatroni(log, ctx, instance, leaderIP)
 			}
 		} else {
 			if resp.SynchronousNodesAdditional != nil {
 				log.V(debugLogLevel).Info("synchronous_nodes_additional mistmatch, updating", "response", resp)
-				return allDone, r.httpPatchPatroni(log, ctx, instance, leaderIP)
+				return requeueAfterReconcile, r.httpPatchPatroni(log, ctx, instance, leaderIP)
 			}
 		}
 
@@ -1080,11 +1080,11 @@ func (r *PostgresReconciler) checkAndUpdatePatroniReplicationConfig(log logr.Log
 		}
 		if resp.StandbyCluster.ApplicationName != instance.ObjectMeta.Name {
 			log.V(debugLogLevel).Info("application_name mismatch, updating", "response", resp)
-			return allDone, r.httpPatchPatroni(log, ctx, instance, leaderIP)
+			return requeueAfterReconcile, r.httpPatchPatroni(log, ctx, instance, leaderIP)
 		}
 		if resp.SynchronousNodesAdditional != nil {
 			log.V(debugLogLevel).Info("synchronous_nodes_additional mistmatch, updating", "response", resp)
-			return allDone, r.httpPatchPatroni(log, ctx, instance, leaderIP)
+			return requeueAfterReconcile, r.httpPatchPatroni(log, ctx, instance, leaderIP)
 		}
 		if resp.StandbyCluster.CreateReplicaMethods == nil {
 			log.V(debugLogLevel).Info("create_replica_methods mismatch, updating", "response", resp)
