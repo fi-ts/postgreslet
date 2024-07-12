@@ -1078,7 +1078,7 @@ func (r *PostgresReconciler) checkAndUpdatePatroniReplicationConfig(log logr.Log
 			log.V(debugLogLevel).Info("standby_cluster mismatch, requeing", "response", resp)
 			return requeueAfterReconcile, nil
 		}
-		if resp.StandbyCluster.ApplicationName != instance.ToPeripheralResourceName() {
+		if resp.StandbyCluster.ApplicationName != instance.ObjectMeta.Name {
 			log.V(debugLogLevel).Info("application_name mismatch, updating and requeing", "response", resp)
 			return requeueAfterReconcile, r.httpPatchPatroni(log, ctx, instance, leaderIP)
 		}
