@@ -1062,10 +1062,6 @@ func (r *PostgresReconciler) checkAndUpdatePatroniReplicationConfig(log logr.Log
 			return requeueAfterReconcile, nil
 		}
 		if instance.Spec.PostgresConnection.SynchronousReplication {
-			if resp.SynchronousNodesAdditional == nil {
-				log.V(debugLogLevel).Info("synchronous_nodes_additional mistmatch, updating and requeing", "response", resp)
-				return requeueAfterReconcile, r.httpPatchPatroni(log, ctx, instance, leaderIP, nil)
-			}
 			// fetch the sync standby to determine the correct application_name of the instance
 			var synchronousStandbyApplicationName *string
 			s := &pg.Postgres{}
@@ -1079,7 +1075,7 @@ func (r *PostgresReconciler) checkAndUpdatePatroniReplicationConfig(log logr.Log
 			} else {
 				synchronousStandbyApplicationName = pointer.String(s.ToPeripheralResourceName())
 			}
-			if *resp.SynchronousNodesAdditional != *synchronousStandbyApplicationName {
+			if resp.SynchronousNodesAdditional == nil || *resp.SynchronousNodesAdditional != *synchronousStandbyApplicationName {
 				log.V(debugLogLevel).Info("synchronous_nodes_additional mistmatch, updating and requeing", "response", resp)
 				return requeueAfterReconcile, r.httpPatchPatroni(log, ctx, instance, leaderIP, synchronousStandbyApplicationName)
 			}
