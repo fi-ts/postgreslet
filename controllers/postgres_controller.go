@@ -1185,7 +1185,7 @@ func (r *PostgresReconciler) httpPatchPatroni(log logr.Logger, ctx context.Conte
 		if instance.Spec.PostgresConnection.SynchronousReplication {
 			if synchronousStandbyApplicationName == nil {
 				// fetch the sync standby to determine the correct application_name of the instance
-				log.V(debugLogLevel).Info("fetching referenced sync standby")
+				log.V(debugLogLevel).Info("unexpectetly having to fetch the referenced sync standby")
 				s := &pg.Postgres{}
 				ns := types.NamespacedName{
 					Name:      instance.Spec.PostgresConnection.ConnectedPostgresID,
