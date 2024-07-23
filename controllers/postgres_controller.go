@@ -1067,7 +1067,7 @@ func (r *PostgresReconciler) checkAndUpdatePatroniReplicationConfig(log logr.Log
 				return requeueAfterReconcile, r.httpPatchPatroni(log, ctx, instance, leaderIP, nil)
 			}
 			// fetch the sync standby to determine the correct application_name of the instance
-			var synchronousStandbyApplicationName *string = nil
+			var synchronousStandbyApplicationName *string
 			s := &pg.Postgres{}
 			ns := types.NamespacedName{
 				Name:      instance.Spec.PostgresConnection.ConnectedPostgresID,
