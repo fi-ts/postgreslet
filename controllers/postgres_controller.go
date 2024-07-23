@@ -1187,6 +1187,21 @@ func (r *PostgresReconciler) httpPatchPatroni(log logr.Logger, ctx context.Conte
 			StandbyCluster: nil,
 		}
 		if instance.Spec.PostgresConnection.SynchronousReplication {
+			if synchronousStandbyApplicationName == nil {
+				// fetch the sync standby to determine the correct application_name of the instance
+				log.V(debugLogLevel).Info("fetching referenced sync standby")
+				s := &pg.Postgres{}
+				ns := types.NamespacedName{
+					Name:      instance.Spec.PostgresConnection.ConnectedPostgresID,
+					Namespace: instance.Namespace,
+				}
+				if err := r.CtrlClient.Get(ctx, ns, s); err != nil {
+					r.recorder.Eventf(s, "Warning", "Error", "failed to get referenced sync standby: %v", err)
+					synchronousStandbyApplicationName = nil
+				} else {
+					synchronousStandbyApplicationName = pointer.String(s.ToPeripheralResourceName())
+				}
+			}
 			// enable sync replication
 			request.SynchronousNodesAdditional = synchronousStandbyApplicationName
 		} else {
