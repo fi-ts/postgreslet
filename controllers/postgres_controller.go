@@ -1058,7 +1058,7 @@ func (r *PostgresReconciler) checkAndUpdatePatroniReplicationConfig(log logr.Log
 
 	if instance.IsReplicationPrimary() {
 		if resp.StandbyCluster != nil {
-			log.V(debugLogLevel).Info("standby_cluster mistmatch, requeing", "response", resp)
+			log.V(debugLogLevel).Info("standby_cluster mismatch, requeing", "response", resp)
 			return requeueAfterReconcile, nil
 		}
 		if instance.Spec.PostgresConnection.SynchronousReplication {
@@ -1076,12 +1076,12 @@ func (r *PostgresReconciler) checkAndUpdatePatroniReplicationConfig(log logr.Log
 				synchronousStandbyApplicationName = pointer.String(s.ToPeripheralResourceName())
 			}
 			if resp.SynchronousNodesAdditional == nil || *resp.SynchronousNodesAdditional != *synchronousStandbyApplicationName {
-				log.V(debugLogLevel).Info("synchronous_nodes_additional mistmatch, updating and requeing", "response", resp)
+				log.V(debugLogLevel).Info("synchronous_nodes_additional mismatch, updating and requeing", "response", resp)
 				return requeueAfterReconcile, r.httpPatchPatroni(log, ctx, instance, leaderIP, synchronousStandbyApplicationName)
 			}
 		} else {
 			if resp.SynchronousNodesAdditional != nil {
-				log.V(debugLogLevel).Info("synchronous_nodes_additional mistmatch, updating and requeing", "response", resp)
+				log.V(debugLogLevel).Info("synchronous_nodes_additional mismatch, updating and requeing", "response", resp)
 				return requeueAfterReconcile, r.httpPatchPatroni(log, ctx, instance, leaderIP, nil)
 			}
 		}
@@ -1108,7 +1108,7 @@ func (r *PostgresReconciler) checkAndUpdatePatroniReplicationConfig(log logr.Log
 			return requeueAfterReconcile, r.httpPatchPatroni(log, ctx, instance, leaderIP, nil)
 		}
 		if resp.SynchronousNodesAdditional != nil {
-			log.V(debugLogLevel).Info("synchronous_nodes_additional mistmatch, updating and requeing", "response", resp)
+			log.V(debugLogLevel).Info("synchronous_nodes_additional mismatch, updating and requeing", "response", resp)
 			return requeueAfterReconcile, r.httpPatchPatroni(log, ctx, instance, leaderIP, nil)
 		}
 	}
