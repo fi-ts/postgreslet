@@ -1063,6 +1063,7 @@ func (r *PostgresReconciler) checkAndUpdatePatroniReplicationConfig(log logr.Log
 		}
 		if instance.Spec.PostgresConnection.SynchronousReplication {
 			// fetch the sync standby to determine the correct application_name of the instance
+			log.V(debugLogLevel).Info("fetching the referenced sync standby")
 			var synchronousStandbyApplicationName *string
 			s := &pg.Postgres{}
 			ns := types.NamespacedName{
