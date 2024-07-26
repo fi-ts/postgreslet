@@ -1224,7 +1224,6 @@ func (r *PostgresReconciler) httpPatchPatroni(log logr.Logger, ctx context.Conte
 		}
 	}
 	log.V(debugLogLevel).Info("Prepared request", "request", request)
-	log.V(debugLogLevel).Info("Marshalling request", "request", request)
 	jsonReq, err := json.Marshal(request)
 	if err != nil {
 		log.V(debugLogLevel).Info("could not create config")
@@ -1232,25 +1231,23 @@ func (r *PostgresReconciler) httpPatchPatroni(log logr.Logger, ctx context.Conte
 	}
 
 	httpClient := &http.Client{}
-	log.V(debugLogLevel).Info("Building url", "jsonReq", jsonReq)
 	url := "http://" + podIP + ":" + podPort + "/" + path
 
-	log.V(debugLogLevel).Info("Create request with context", "url", url)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPatch, url, bytes.NewBuffer(jsonReq))
 	if err != nil {
 		log.Error(err, "could not create PATCH request")
 		return err
 	}
-	log.V(debugLogLevel).Info("Setting header", "req", req)
 	req.Header.Set("Content-Type", "application/json")
 
-	log.V(debugLogLevel).Info("Doing request", "req", req)
+	log.V(debugLogLevel).Info("Performing request", "req", req)
 	resp, err := httpClient.Do(req)
 	if err != nil {
 		log.Error(err, "could not perform PATCH request")
 		return err
 	}
 	defer resp.Body.Close()
+	log.V(debugLogLevel).Info("Performed request", "req", req, "resp", resp)
 
 	// fake error when standbyApplicationName is required but not provided
 	if instance.IsReplicationPrimary() && instance.Spec.PostgresConnection.SynchronousReplication && synchronousStandbyApplicationName == nil {
