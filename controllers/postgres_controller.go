@@ -1240,14 +1240,13 @@ func (r *PostgresReconciler) httpPatchPatroni(log logr.Logger, ctx context.Conte
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	log.V(debugLogLevel).Info("Performing request", "req", req)
 	resp, err := httpClient.Do(req)
 	if err != nil {
 		log.Error(err, "could not perform PATCH request")
 		return err
 	}
 	defer resp.Body.Close()
-	log.V(debugLogLevel).Info("Performed request", "req", req, "resp", resp)
+	log.V(debugLogLevel).Info("Performed request")
 
 	// fake error when standbyApplicationName is required but not provided
 	if instance.Spec.PostgresConnection != nil && instance.IsReplicationPrimary() && instance.Spec.PostgresConnection.SynchronousReplication && synchronousStandbyApplicationName == nil {
