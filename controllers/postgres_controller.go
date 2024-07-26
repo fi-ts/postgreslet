@@ -1250,7 +1250,7 @@ func (r *PostgresReconciler) httpPatchPatroni(log logr.Logger, ctx context.Conte
 	log.V(debugLogLevel).Info("Performed request", "req", req, "resp", resp)
 
 	// fake error when standbyApplicationName is required but not provided
-	if instance.IsReplicationPrimary() && instance.Spec.PostgresConnection.SynchronousReplication && synchronousStandbyApplicationName == nil {
+	if instance.Spec.PostgresConnection != nil && instance.IsReplicationPrimary() && instance.Spec.PostgresConnection.SynchronousReplication && synchronousStandbyApplicationName == nil {
 		return fmt.Errorf("missing application_name of synchronous standby, disable synchronous replication")
 	}
 
