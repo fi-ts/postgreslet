@@ -1043,7 +1043,7 @@ func (r *PostgresReconciler) checkAndUpdatePatroniReplicationConfig(log logr.Log
 	// If there is no connected postgres, we still need to possibly clean up a former synchronous primary
 	if instance.Spec.PostgresConnection == nil {
 		log.V(debugLogLevel).Info("single instance, updating with empty config and requeing")
-		return requeueAfterReconcile, r.httpPatchPatroni(log, ctx, instance, leaderIP, nil)
+		return allDone, r.httpPatchPatroni(log, ctx, instance, leaderIP, nil)
 	}
 
 	var resp *PatroniConfig
