@@ -1182,10 +1182,6 @@ func (r *PostgresReconciler) httpPatchPatroni(log logr.Logger, ctx context.Conte
 	var request PatroniConfig
 	if instance.Spec.PostgresConnection == nil {
 		// use empty config
-		request = PatroniConfig{
-			StandbyCluster:             nil,
-			SynchronousNodesAdditional: nil,
-		}
 	} else if instance.IsReplicationPrimary() {
 		request = PatroniConfig{
 			StandbyCluster: nil,
