@@ -1024,11 +1024,6 @@ func (r *PostgresReconciler) checkAndUpdatePatroniReplicationConfig(log logr.Log
 	const requeueAfterReconcile = true
 	const allDone = false
 
-	// If there is no connected postgres, no need to tinker with patroni directly
-	if instance.Spec.PostgresConnection == nil {
-		return allDone, nil
-	}
-
 	log.V(debugLogLevel).Info("Checking replication config from Patroni API")
 
 	// Get the leader pod
@@ -1044,6 +1039,12 @@ func (r *PostgresReconciler) checkAndUpdatePatroniReplicationConfig(log logr.Log
 		return requeueAfterReconcile, r.updatePatroniReplicationConfigOnAllPods(log, ctx, instance)
 	}
 	leaderIP := leaderPods.Items[0].Status.PodIP
+
+	// If there is no connected postgres, we still need to possibly clean up a former synchronous primary
+	if instance.Spec.PostgresConnection == nil {
+		log.V(debugLogLevel).Info("single instance, updating with empty config and requeing")
+		return requeueAfterReconcile, r.httpPatchPatroni(log, ctx, instance, leaderIP, nil)
+	}
 
 	var resp *PatroniConfig
 	resp, err = r.httpGetPatroniConfig(log, ctx, leaderIP)
@@ -1179,7 +1180,9 @@ func (r *PostgresReconciler) httpPatchPatroni(log logr.Logger, ctx context.Conte
 
 	log.V(debugLogLevel).Info("Preparing request")
 	var request PatroniConfig
-	if instance.IsReplicationPrimary() {
+	if instance.Spec.PostgresConnection == nil {
+		// use empty config
+	} else if instance.IsReplicationPrimary() {
 		request = PatroniConfig{
 			StandbyCluster: nil,
 		}
@@ -1206,7 +1209,6 @@ func (r *PostgresReconciler) httpPatchPatroni(log logr.Logger, ctx context.Conte
 			request.SynchronousNodesAdditional = nil
 		}
 	} else {
-		// TODO check values first
 		request = PatroniConfig{
 			StandbyCluster: &PatroniStandbyCluster{
 				CreateReplicaMethods: []string{"basebackup_fast_xlog"},
