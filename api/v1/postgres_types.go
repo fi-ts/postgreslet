@@ -84,7 +84,7 @@ const (
 	defaultPostgresParamValueWalKeepSegments        = "64"
 	defaultPostgresParamValueWalKeepSize            = "1GB"
 	defaultPostgresParamValuePGStatStatementsMax    = "500"
-	defaultPostgresParamValuePasswordEncryption     = "scram-sha-256"
+	defaultPostgresParamValuePasswordEncryption     = "scram-sha-256" // nolint
 
 	// PostgresAutoAssignedIPNamePrefix a prefix to add to the generated random name
 	PostgresAutoAssignedIPNamePrefix = "pgaas-autoassign-"
