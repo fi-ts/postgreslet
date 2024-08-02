@@ -84,6 +84,7 @@ const (
 	defaultPostgresParamValueWalKeepSegments        = "64"
 	defaultPostgresParamValueWalKeepSize            = "1GB"
 	defaultPostgresParamValuePGStatStatementsMax    = "500"
+	defaultPostgresParamValuePasswordEncryption     = "scram-sha-256"
 
 	// PostgresAutoAssignedIPNamePrefix a prefix to add to the generated random name
 	PostgresAutoAssignedIPNamePrefix = "pgaas-autoassign-"
@@ -982,6 +983,8 @@ func setDefaultPostgresParams(parameters map[string]string, version string) {
 	}
 
 	parameters["pg_stat_statements.max"] = defaultPostgresParamValuePGStatStatementsMax
+
+	parameters["password_encryption"] = defaultPostgresParamValuePasswordEncryption
 }
 
 // setPostgresParams add the provided params to the parameter map (but ignore params that are blocked)
