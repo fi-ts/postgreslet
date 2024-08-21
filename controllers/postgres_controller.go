@@ -1242,6 +1242,13 @@ func (r *PostgresReconciler) httpPatchPatroni(log logr.Logger, ctx context.Conte
 		return err
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode/100 != 2 {
+		err = fmt.Errorf("received unexpected return code %d", resp.StatusCode)
+		log.Error(err, "could not perform PATCH request")
+		return err
+	}
+
 	log.V(debugLogLevel).Info("Performed request")
 
 	// fake error when standbyApplicationName is required but not provided
