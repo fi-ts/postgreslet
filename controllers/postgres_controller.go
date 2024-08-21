@@ -1506,7 +1506,7 @@ func (r *PostgresReconciler) createOrUpdateExporterSidecarServices(log logr.Logg
 	pes.Spec.Ports = []corev1.ServicePort{
 		{
 			Name:       postgresExporterServicePortName,
-			Port:       int32(exporterServicePort),
+			Port:       int32(exporterServicePort), //nolint
 			Protocol:   corev1.ProtocolTCP,
 			TargetPort: intstr.FromInt(int(exporterServiceTargetPort)),
 		},

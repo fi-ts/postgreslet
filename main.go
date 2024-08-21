@@ -429,8 +429,8 @@ func main() {
 
 	var lbMgrOpts lbmanager.Options = lbmanager.Options{
 		LBIP:                        lbIP,
-		PortRangeStart:              int32(portRangeStart),
-		PortRangeSize:               int32(portRangeSize),
+		PortRangeStart:              int32(portRangeStart), // nolint
+		PortRangeSize:               int32(portRangeSize),  // nolint
 		EnableStandbyLeaderSelector: enableStandbyLeaderSelector,
 		EnableLegacyStandbySelector: enableLegacyStandbySelector,
 		StandbyClustersSourceRanges: standbyClusterSourceRanges,
