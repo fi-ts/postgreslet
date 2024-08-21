@@ -1077,11 +1077,7 @@ func (r *PostgresReconciler) checkAndUpdatePatroniReplicationConfig(log logr.Log
 			} else {
 				synchronousStandbyApplicationName = pointer.String(s.ToPeripheralResourceName())
 			}
-			// compare the actual value with the expected value
-			if synchronousStandbyApplicationName == nil {
-				log.V(debugLogLevel).Info("could not fetch synchronous_nodes_additional, disabling sync replication and requeing", "response", resp)
-				return requeueAfterReconcile, r.httpPatchPatroni(log, ctx, instance, leaderIP, nil)
-			} else if resp.SynchronousNodesAdditional == nil || *resp.SynchronousNodesAdditional != *synchronousStandbyApplicationName {
+			if resp.SynchronousNodesAdditional == nil || *resp.SynchronousNodesAdditional != *synchronousStandbyApplicationName {
 				log.V(debugLogLevel).Info("synchronous_nodes_additional mismatch, updating and requeing", "response", resp)
 				return requeueAfterReconcile, r.httpPatchPatroni(log, ctx, instance, leaderIP, synchronousStandbyApplicationName)
 			}
