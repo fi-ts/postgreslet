@@ -886,7 +886,7 @@ func (r *PostgresReconciler) ensurePostgresSecrets(log logr.Logger, ctx context.
 }
 
 func (r *PostgresReconciler) ensureStandbySecrets(log logr.Logger, ctx context.Context, instance *pg.Postgres) error {
-	if instance.IsReplicationPrimary() {
+	if instance.IsReplicationPrimaryOrStandalone() {
 		// nothing is configured, or we are the leader. nothing to do.
 		return nil
 	}
@@ -1057,7 +1057,7 @@ func (r *PostgresReconciler) checkAndUpdatePatroniReplicationConfig(log logr.Log
 		return requeueAfterReconcile, nil
 	}
 
-	if instance.IsReplicationPrimary() {
+	if instance.IsReplicationPrimaryOrStandalone() {
 		if resp.StandbyCluster != nil {
 			log.V(debugLogLevel).Info("standby_cluster mismatch, requeing", "response", resp)
 			return requeueAfterReconcile, nil
@@ -1182,7 +1182,7 @@ func (r *PostgresReconciler) httpPatchPatroni(log logr.Logger, ctx context.Conte
 	var request PatroniConfig
 	if instance.Spec.PostgresConnection == nil {
 		// use empty config
-	} else if instance.IsReplicationPrimary() {
+	} else if instance.IsReplicationPrimaryOrStandalone() {
 		request = PatroniConfig{
 			StandbyCluster: nil,
 		}
@@ -1252,12 +1252,12 @@ func (r *PostgresReconciler) httpPatchPatroni(log logr.Logger, ctx context.Conte
 	log.V(debugLogLevel).Info("Performed request")
 
 	// fake error when standbyApplicationName is required but not provided
-	if instance.Spec.PostgresConnection != nil && instance.IsReplicationPrimary() && instance.Spec.PostgresConnection.SynchronousReplication && synchronousStandbyApplicationName == nil {
+	if instance.Spec.PostgresConnection != nil && instance.IsReplicationPrimaryOrStandalone() && instance.Spec.PostgresConnection.SynchronousReplication && synchronousStandbyApplicationName == nil {
 		return fmt.Errorf("missing application_name of synchronous standby, disable synchronous replication")
 	}
 
 	// fake error when standbyApplicationName is required but not provided
-	if instance.IsReplicationPrimary() && instance.Spec.PostgresConnection.SynchronousReplication && synchronousStandbyApplicationName == nil {
+	if instance.Spec.PostgresConnection != nil && instance.Spec.PostgresConnection.SynchronousReplication && synchronousStandbyApplicationName == nil {
 		return fmt.Errorf("missing application_name of synchronous standby, disable synchronous replication")
 	}
 
@@ -1767,7 +1767,7 @@ func (r *PostgresReconciler) ensureInitDBJob(log logr.Logger, ctx context.Contex
 	cm.Data = map[string]string{}
 
 	// only execute SQL when encountering a **new** database, not for standbies or clones
-	if instance.IsReplicationPrimary() && instance.Spec.PostgresRestore == nil {
+	if instance.IsReplicationPrimaryOrStandalone() && instance.Spec.PostgresRestore == nil {
 		// try to fetch the global initjob configmap
 		cns := types.NamespacedName{
 			Namespace: r.PostgresletNamespace,
