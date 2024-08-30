@@ -144,8 +144,8 @@ func main() {
 		enableSuperUserForDBO               bool
 		enablePatroniFailsafeMode           bool
 
-		portRangeStart                        int
-		portRangeSize                         int
+		portRangeStart                        int32
+		portRangeSize                         int32
 		replicationChangeRequeueTimeInSeconds int
 
 		patroniTTL          uint32
@@ -193,9 +193,9 @@ func main() {
 
 	// todo: Check the default port range start and size.
 	viper.SetDefault(portRangeStartFlg, 32000)
-	portRangeStart = viper.GetInt(portRangeStartFlg)
+	portRangeStart = viper.GetInt32(portRangeStartFlg)
 	viper.SetDefault(portRangeSizeFlg, 8000)
-	portRangeSize = viper.GetInt(portRangeSizeFlg)
+	portRangeSize = viper.GetInt32(portRangeSizeFlg)
 
 	viper.SetDefault(customPSPNameFlg, "postgres-operator-psp")
 	pspName = viper.GetString(customPSPNameFlg)
@@ -429,8 +429,8 @@ func main() {
 
 	var lbMgrOpts lbmanager.Options = lbmanager.Options{
 		LBIP:                        lbIP,
-		PortRangeStart:              int32(portRangeStart), // nolint
-		PortRangeSize:               int32(portRangeSize),  // nolint
+		PortRangeStart:              portRangeStart,
+		PortRangeSize:               portRangeSize,
 		EnableStandbyLeaderSelector: enableStandbyLeaderSelector,
 		EnableLegacyStandbySelector: enableLegacyStandbySelector,
 		StandbyClustersSourceRanges: standbyClusterSourceRanges,
