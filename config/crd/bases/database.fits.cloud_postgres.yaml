@@ -113,6 +113,8 @@ spec:
               description:
                 description: Description
                 type: string
+              disableLoadBalancers:
+                type: boolean
               maintenance:
                 description: |-
                   todo: add default
