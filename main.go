@@ -24,12 +24,14 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
+	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	databasev1 "github.com/fi-ts/postgreslet/api/v1"
 	"github.com/fi-ts/postgreslet/controllers"
 	"github.com/fi-ts/postgreslet/pkg/etcdmanager"
 	"github.com/fi-ts/postgreslet/pkg/lbmanager"
 	"github.com/fi-ts/postgreslet/pkg/operatormanager"
+	"github.com/fi-ts/postgreslet/pkg/webhooks"
 	firewall "github.com/metal-stack/firewall-controller/api/v1"
 	"github.com/spf13/viper"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -506,4 +508,7 @@ func main() {
 		setupLog.Error(err, "problem running control plane cluster manager")
 		os.Exit(1)
 	}
+
+	svcClusterMgr.GetWebhookServer().Register("/mutate-v1-sts", &webhook.Admission{Handler: &webhooks.FsGroupChangePolicySetter{SvcClient: svcClusterMgr.GetClient()}})
+
 }
