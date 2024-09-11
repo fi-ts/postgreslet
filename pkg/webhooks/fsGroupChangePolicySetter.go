@@ -13,9 +13,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
-// +kubebuilder:webhook:path=/mutate--v1-sts,mutating=true,failurePolicy=fail,groups="",resources=statefulsets,verbs=create;update,versions=v1
+// +kubebuilder:webhook:path=/mutate-v1-sts,mutating=true,failurePolicy=fail,groups="",resources=statefulsets,verbs=create;update,versions=v1
 
-// stsAnnotator annotates StatefulSets
+// FsGroupChangePolicySetter Adds securityContext.fsGroupChangePolicy=OnRootMismatch when the securityContext.fsGroup field is set
 type FsGroupChangePolicySetter struct {
 	SvcClient client.Client
 	Decoder   *admission.Decoder
