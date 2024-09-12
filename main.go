@@ -22,6 +22,7 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	"k8s.io/client-go/tools/clientcmd"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
@@ -39,6 +40,8 @@ import (
 
 	// +kubebuilder:scaffold:imports
 	cmapi "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
+
+	corev1 "k8s.io/api/core/v1"
 )
 
 const (
@@ -512,6 +515,13 @@ func main() {
 
 	svcClusterMgr.GetWebhookServer().Register("/mutate-v1-sts", &webhook.Admission{Handler: &webhooks.FsGroupChangePolicySetter{SvcClient: svcClusterMgr.GetClient(), Decoder: admission.NewDecoder(svcClusterMgr.GetScheme()), Log: ctrl.Log.WithName("webhooks").WithName("FsGroupChangePolicySetter")}})
 
-	svcClusterMgr.GetWebhookServer().Register("/mutate-v1-pod", &webhook.Admission{Handler: &webhooks.PodAnnotator{Client: svcClusterMgr.GetClient(), Decoder: admission.NewDecoder(svcClusterMgr.GetScheme()), Log: ctrl.Log.WithName("webhooks").WithName("PodAnnotator")}})
+	// svcClusterMgr.GetWebhookServer().Register("/mutate-v1-pod", &webhook.Admission{Handler: &webhooks.PodAnnotator{Client: svcClusterMgr.GetClient(), Decoder: admission.NewDecoder(svcClusterMgr.GetScheme()), Log: ctrl.Log.WithName("webhooks").WithName("PodAnnotator")}})
+	if err := builder.WebhookManagedBy(svcClusterMgr).
+		For(&corev1.Pod{}).
+		WithDefaulter(&webhooks.PodAnnotator{}).
+		Complete(); err != nil {
+		setupLog.Error(err, "unable to create webhook", "webhook", "Pod")
+		os.Exit(1)
+	}
 
 }
