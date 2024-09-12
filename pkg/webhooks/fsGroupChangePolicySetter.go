@@ -24,7 +24,7 @@ type FsGroupChangePolicySetter struct {
 
 func (a *FsGroupChangePolicySetter) Handle(ctx context.Context, req admission.Request) admission.Response {
 	log := a.Log.WithValues("name", req.Name, "ns", req.Namespace)
-	log.V(1).Info("handleing admission request")
+	log.V(1).Info("handling admission request")
 
 	sts := &appsv1.StatefulSet{}
 	err := a.Decoder.Decode(req, sts)
