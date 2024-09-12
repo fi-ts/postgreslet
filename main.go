@@ -492,6 +492,17 @@ func main() {
 	}
 	// +kubebuilder:scaffold:builder
 
+	svcClusterMgr.GetWebhookServer().Register("/mutate-v1-sts", &webhook.Admission{Handler: &webhooks.FsGroupChangePolicySetter{SvcClient: svcClusterMgr.GetClient(), Decoder: admission.NewDecoder(svcClusterMgr.GetScheme()), Log: ctrl.Log.WithName("webhooks").WithName("FsGroupChangePolicySetter")}})
+
+	// svcClusterMgr.GetWebhookServer().Register("/mutate-v1-pod", &webhook.Admission{Handler: &webhooks.PodAnnotator{Client: svcClusterMgr.GetClient(), Decoder: admission.NewDecoder(svcClusterMgr.GetScheme()), Log: ctrl.Log.WithName("webhooks").WithName("PodAnnotator")}})
+	if err := builder.WebhookManagedBy(svcClusterMgr).
+		For(&corev1.Pod{}).
+		WithDefaulter(&webhooks.PodAnnotator{}).
+		Complete(); err != nil {
+		setupLog.Error(err, "unable to create webhook", "webhook", "Pod")
+		os.Exit(1)
+	}
+
 	ctx := context.Background()
 
 	// update all existing operators to the current version
@@ -510,17 +521,6 @@ func main() {
 	setupLog.Info("starting control plane cluster manager", "version", v.V)
 	if err := ctrlPlaneClusterMgr.Start(ctx); err != nil {
 		setupLog.Error(err, "problem running control plane cluster manager")
-		os.Exit(1)
-	}
-
-	svcClusterMgr.GetWebhookServer().Register("/mutate-v1-sts", &webhook.Admission{Handler: &webhooks.FsGroupChangePolicySetter{SvcClient: svcClusterMgr.GetClient(), Decoder: admission.NewDecoder(svcClusterMgr.GetScheme()), Log: ctrl.Log.WithName("webhooks").WithName("FsGroupChangePolicySetter")}})
-
-	// svcClusterMgr.GetWebhookServer().Register("/mutate-v1-pod", &webhook.Admission{Handler: &webhooks.PodAnnotator{Client: svcClusterMgr.GetClient(), Decoder: admission.NewDecoder(svcClusterMgr.GetScheme()), Log: ctrl.Log.WithName("webhooks").WithName("PodAnnotator")}})
-	if err := builder.WebhookManagedBy(svcClusterMgr).
-		For(&corev1.Pod{}).
-		WithDefaulter(&webhooks.PodAnnotator{}).
-		Complete(); err != nil {
-		setupLog.Error(err, "unable to create webhook", "webhook", "Pod")
 		os.Exit(1)
 	}
 
