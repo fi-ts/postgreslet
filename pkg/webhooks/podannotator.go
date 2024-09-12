@@ -18,7 +18,7 @@ type PodAnnotator struct {
 
 func (a *PodAnnotator) Default(ctx context.Context, obj runtime.Object) error {
 	log := a.Log.WithValues("obj", obj)
-	log.V(1).Info("handleing admission request")
+	log.V(1).Info("handling admission request")
 
 	pod, ok := obj.(*corev1.Pod)
 	if !ok {
