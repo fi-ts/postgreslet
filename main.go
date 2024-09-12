@@ -510,6 +510,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	svcClusterMgr.GetWebhookServer().Register("/mutate-v1-sts", &webhook.Admission{Handler: &webhooks.FsGroupChangePolicySetter{SvcClient: svcClusterMgr.GetClient(), Decoder: admission.NewDecoder(svcClusterMgr.GetScheme()), Log: ctrl.Log.WithName("controllers").WithName("FsGroupChangePolicySetter")}})
+	svcClusterMgr.GetWebhookServer().Register("/mutate-v1-sts", &webhook.Admission{Handler: &webhooks.FsGroupChangePolicySetter{SvcClient: svcClusterMgr.GetClient(), Decoder: admission.NewDecoder(svcClusterMgr.GetScheme()), Log: ctrl.Log.WithName("webhooks").WithName("FsGroupChangePolicySetter")}})
+
+	svcClusterMgr.GetWebhookServer().Register("/mutate-v1-pod", &webhook.Admission{Handler: &webhooks.PodAnnotator{Client: svcClusterMgr.GetClient(), Decoder: admission.NewDecoder(svcClusterMgr.GetScheme()), Log: ctrl.Log.WithName("webhooks").WithName("PodAnnotator")}})
 
 }
