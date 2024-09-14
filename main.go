@@ -493,7 +493,7 @@ func main() {
 	}
 	// +kubebuilder:scaffold:builder
 
-	svcClusterMgr.GetWebhookServer().Register("/mutate-v1-sts", &webhook.Admission{Handler: &webhooks.FsGroupChangePolicySetter{SvcClient: svcClusterMgr.GetClient(), Decoder: admission.NewDecoder(svcClusterMgr.GetScheme()), Log: ctrl.Log.WithName("webhooks").WithName("FsGroupChangePolicySetter")}})
+	svcClusterMgr.GetWebhookServer().Register("/mutate-apps-v1-statefulset", &webhook.Admission{Handler: &webhooks.FsGroupChangePolicySetter{SvcClient: svcClusterMgr.GetClient(), Decoder: admission.NewDecoder(svcClusterMgr.GetScheme()), Log: ctrl.Log.WithName("webhooks").WithName("FsGroupChangePolicySetter")}})
 	// svcClusterMgr.GetWebhookServer().Register("/mutate-v1-pod", &webhook.Admission{Handler: &webhooks.PodAnnotator{Client: svcClusterMgr.GetClient(), Decoder: admission.NewDecoder(svcClusterMgr.GetScheme()), Log: ctrl.Log.WithName("webhooks").WithName("PodAnnotator")}})
 	if err := builder.WebhookManagedBy(svcClusterMgr).
 		For(&corev1.Pod{}).
