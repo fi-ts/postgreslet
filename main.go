@@ -496,7 +496,7 @@ func main() {
 	// svcClusterMgr.GetWebhookServer().Register("/mutate-v1-pod", &webhook.Admission{Handler: &webhooks.PodAnnotator{Client: svcClusterMgr.GetClient(), Decoder: admission.NewDecoder(svcClusterMgr.GetScheme()), Log: ctrl.Log.WithName("webhooks").WithName("PodAnnotator")}})
 	if err := builder.WebhookManagedBy(svcClusterMgr).
 		For(&corev1.Pod{}).
-		WithDefaulter(&webhooks.PodAnnotator{}).
+		WithDefaulter(&webhooks.PodAnnotator{Log: ctrl.Log.WithName("webhooks").WithName("PodAnnotator")}).
 		Complete(); err != nil {
 		setupLog.Error(err, "unable to create webhook", "webhook", "Pod")
 		os.Exit(1)

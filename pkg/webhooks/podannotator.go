@@ -29,8 +29,8 @@ func (a *PodAnnotator) Default(ctx context.Context, obj runtime.Object) error {
 	// mutate the fields in pod
 	if pod.Annotations == nil {
 		pod.Annotations = map[string]string{}
-		log.V(1).Info("Mutating Pod", "pod", pod)
 	}
+	log.V(1).Info("Mutating Pod", "pod", pod)
 	pod.Annotations["example-mutating-admission-webhook"] = "foo"
 
 	log.V(1).Info("done")
