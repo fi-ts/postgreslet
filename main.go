@@ -490,6 +490,21 @@ func main() {
 	}
 	// +kubebuilder:scaffold:builder
 
+	ctx := context.Background()
+
+	// update all existing operators to the current version
+	if err := opMgr.UpdateAllManagedOperators(ctx); err != nil {
+		setupLog.Error(err, "error updating the postgres operators")
+	}
+
+	setupLog.Info("starting service cluster manager", "version", v.V)
+	go func() {
+		if err := svcClusterMgr.Start(ctx); err != nil {
+			setupLog.Error(err, "problem running service cluster manager")
+			os.Exit(1)
+		}
+	}()
+
 	svcClusterMgr.GetWebhookServer().Register(
 		"/mutate-apps-v1-statefulset",
 		&webhook.Admission{
@@ -508,21 +523,6 @@ func main() {
 	// 	setupLog.Error(err, "unable to create webhook", "webhook", "StatefulSet")
 	// 	os.Exit(1)
 	// }
-
-	ctx := context.Background()
-
-	// update all existing operators to the current version
-	if err := opMgr.UpdateAllManagedOperators(ctx); err != nil {
-		setupLog.Error(err, "error updating the postgres operators")
-	}
-
-	setupLog.Info("starting service cluster manager", "version", v.V)
-	go func() {
-		if err := svcClusterMgr.Start(ctx); err != nil {
-			setupLog.Error(err, "problem running service cluster manager")
-			os.Exit(1)
-		}
-	}()
 
 	setupLog.Info("starting control plane cluster manager", "version", v.V)
 	if err := ctrlPlaneClusterMgr.Start(ctx); err != nil {
