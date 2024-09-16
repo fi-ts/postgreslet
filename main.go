@@ -88,6 +88,7 @@ const (
 	tlsClusterIssuerFlg                    = "tls-cluster-issuer"
 	tlsSubDomainFlg                        = "tls-sub-domain"
 	enablePatroniFailsafeModeFlg           = "enable-patroni-failsafe-mode"
+	enableFsGroupChangePolicyWebhookFlg    = "enable-fsgroup-change-policy-webhook"
 )
 
 var (
@@ -148,6 +149,7 @@ func main() {
 		enableBootstrapStandbyFromS3        bool
 		enableSuperUserForDBO               bool
 		enablePatroniFailsafeMode           bool
+		enableFsGroupChangePolicyWebhook    bool
 
 		portRangeStart                        int
 		portRangeSize                         int
@@ -310,6 +312,9 @@ func main() {
 	viper.SetDefault(enablePatroniFailsafeModeFlg, true)
 	enablePatroniFailsafeMode = viper.GetBool(enablePatroniFailsafeModeFlg)
 
+	viper.SetDefault(enableFsGroupChangePolicyWebhookFlg, false)
+	enableFsGroupChangePolicyWebhook = viper.GetBool(enableFsGroupChangePolicyWebhookFlg)
+
 	ctrl.Log.Info("flag",
 		metricsAddrSvcMgrFlg, metricsAddrSvcMgr,
 		metricsAddrCtrlMgrFlg, metricsAddrCtrlMgr,
@@ -354,6 +359,7 @@ func main() {
 		tlsClusterIssuerFlg, tlsClusterIssuer,
 		tlsSubDomainFlg, tlsSubDomain,
 		enablePatroniFailsafeModeFlg, enablePatroniFailsafeMode,
+		enableFsGroupChangePolicyWebhookFlg, enableFsGroupChangePolicyWebhook,
 	)
 
 	svcClusterConf := ctrl.GetConfigOrDie()
@@ -507,16 +513,18 @@ func main() {
 		}
 	}()
 
-	svcClusterMgr.GetWebhookServer().Register(
-		"/mutate-apps-v1-statefulset",
-		&webhook.Admission{
-			Handler: &webhooks.FsGroupChangePolicySetter{
-				SvcClient: svcClusterMgr.GetClient(),
-				Decoder:   admission.NewDecoder(svcClusterMgr.GetScheme()),
-				Log:       ctrl.Log.WithName("webhooks").WithName("FsGroupChangePolicySetter"),
+	if enableFsGroupChangePolicyWebhook {
+		svcClusterMgr.GetWebhookServer().Register(
+			"/mutate-apps-v1-statefulset",
+			&webhook.Admission{
+				Handler: &webhooks.FsGroupChangePolicySetter{
+					SvcClient: svcClusterMgr.GetClient(),
+					Decoder:   admission.NewDecoder(svcClusterMgr.GetScheme()),
+					Log:       ctrl.Log.WithName("webhooks").WithName("FsGroupChangePolicySetter"),
+				},
 			},
-		},
-	)
+		)
+	}
 
 	setupLog.Info("starting control plane cluster manager", "version", v.V)
 	if err := ctrlPlaneClusterMgr.Start(ctx); err != nil {
