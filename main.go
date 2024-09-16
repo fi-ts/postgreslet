@@ -362,7 +362,7 @@ func main() {
 		},
 		LeaderElection:   enableLeaderElection,
 		LeaderElectionID: "908dd13e.fits.cloud",
-		WebhookServer:    webhook.NewServer(webhook.Options{Port: 9444}),
+		WebhookServer:    webhook.NewServer(webhook.Options{Port: 9443}),
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start service cluster manager")
