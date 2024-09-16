@@ -17,6 +17,7 @@ import (
 	"github.com/metal-stack/v"
 	coreosv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
+	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
@@ -101,6 +102,7 @@ func init() {
 	_ = firewall.AddToScheme(scheme)
 	_ = zalando.AddToScheme(scheme)
 	_ = coreosv1.AddToScheme(scheme)
+	_ = appsv1.AddToScheme(scheme)
 	// +kubebuilder:scaffold:scheme
 	_ = cmapi.AddToScheme(scheme)
 }
