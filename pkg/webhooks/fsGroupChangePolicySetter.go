@@ -35,7 +35,8 @@ func (a *FsGroupChangePolicySetter) Handle(ctx context.Context, req admission.Re
 
 	// when the fsGroup field is set, also set the fsGroupChangePolicy to OnRootMismatch
 	if sts != nil && sts.Spec.Template.Spec.SecurityContext != nil && sts.Spec.Template.Spec.SecurityContext.FSGroup != nil {
-		*sts.Spec.Template.Spec.SecurityContext.FSGroupChangePolicy = v1.FSGroupChangeOnRootMismatch
+		p := v1.FSGroupChangeOnRootMismatch
+		sts.Spec.Template.Spec.SecurityContext.FSGroupChangePolicy = &p
 		log.V(1).Info("Mutating StatefulSet", "sts", sts)
 	}
 
