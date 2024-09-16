@@ -517,14 +517,6 @@ func main() {
 			},
 		},
 	)
-	// svcClusterMgr.GetWebhookServer().Register("/mutate-v1-pod", &webhook.Admission{Handler: &webhooks.PodAnnotator{Client: svcClusterMgr.GetClient(), Decoder: admission.NewDecoder(svcClusterMgr.GetScheme()), Log: ctrl.Log.WithName("webhooks").WithName("PodAnnotator")}})
-	// if err := builder.WebhookManagedBy(svcClusterMgr).
-	// 	For(&appsv1.StatefulSet{}).
-	// 	WithDefaulter(&webhooks.STSAnnotator{Log: ctrl.Log.WithName("webhooks").WithName("STSAnnotator")}).
-	// 	Complete(); err != nil {
-	// 	setupLog.Error(err, "unable to create webhook", "webhook", "StatefulSet")
-	// 	os.Exit(1)
-	// }
 
 	setupLog.Info("starting control plane cluster manager", "version", v.V)
 	if err := ctrlPlaneClusterMgr.Start(ctx); err != nil {
