@@ -498,6 +498,19 @@ func main() {
 	}
 	// +kubebuilder:scaffold:builder
 
+	if enableFsGroupChangePolicyWebhook {
+		svcClusterMgr.GetWebhookServer().Register(
+			"/mutate-apps-v1-statefulset",
+			&webhook.Admission{
+				Handler: &webhooks.FsGroupChangePolicySetter{
+					SvcClient: svcClusterMgr.GetClient(),
+					Decoder:   admission.NewDecoder(svcClusterMgr.GetScheme()),
+					Log:       ctrl.Log.WithName("webhooks").WithName("FsGroupChangePolicySetter"),
+				},
+			},
+		)
+	}
+
 	ctx := context.Background()
 
 	// update all existing operators to the current version
@@ -512,19 +525,6 @@ func main() {
 			os.Exit(1)
 		}
 	}()
-
-	if enableFsGroupChangePolicyWebhook {
-		svcClusterMgr.GetWebhookServer().Register(
-			"/mutate-apps-v1-statefulset",
-			&webhook.Admission{
-				Handler: &webhooks.FsGroupChangePolicySetter{
-					SvcClient: svcClusterMgr.GetClient(),
-					Decoder:   admission.NewDecoder(svcClusterMgr.GetScheme()),
-					Log:       ctrl.Log.WithName("webhooks").WithName("FsGroupChangePolicySetter"),
-				},
-			},
-		)
-	}
 
 	setupLog.Info("starting control plane cluster manager", "version", v.V)
 	if err := ctrlPlaneClusterMgr.Start(ctx); err != nil {
