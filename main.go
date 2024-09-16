@@ -17,16 +17,15 @@ import (
 	"github.com/metal-stack/v"
 	coreosv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
-	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	"k8s.io/client-go/tools/clientcmd"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	databasev1 "github.com/fi-ts/postgreslet/api/v1"
 	"github.com/fi-ts/postgreslet/controllers"
@@ -512,23 +511,23 @@ func main() {
 		os.Exit(1)
 	}
 
-	// svcClusterMgr.GetWebhookServer().Register(
-	// 	"/mutate-apps-v1-statefulset",
-	// 	&webhook.Admission{
-	// 		Handler: &webhooks.FsGroupChangePolicySetter{
-	// 			SvcClient: svcClusterMgr.GetClient(),
-	// 			Decoder:   admission.NewDecoder(svcClusterMgr.GetScheme()),
-	// 			Log:       ctrl.Log.WithName("webhooks").WithName("FsGroupChangePolicySetter"),
-	// 		},
-	// 	},
-	// )
+	svcClusterMgr.GetWebhookServer().Register(
+		"/mutate-apps-v1-statefulset",
+		&webhook.Admission{
+			Handler: &webhooks.FsGroupChangePolicySetter{
+				SvcClient: svcClusterMgr.GetClient(),
+				Decoder:   admission.NewDecoder(svcClusterMgr.GetScheme()),
+				Log:       ctrl.Log.WithName("webhooks").WithName("FsGroupChangePolicySetter"),
+			},
+		},
+	)
 	// svcClusterMgr.GetWebhookServer().Register("/mutate-v1-pod", &webhook.Admission{Handler: &webhooks.PodAnnotator{Client: svcClusterMgr.GetClient(), Decoder: admission.NewDecoder(svcClusterMgr.GetScheme()), Log: ctrl.Log.WithName("webhooks").WithName("PodAnnotator")}})
-	if err := builder.WebhookManagedBy(svcClusterMgr).
-		For(&appsv1.StatefulSet{}).
-		WithDefaulter(&webhooks.STSAnnotator{Log: ctrl.Log.WithName("webhooks").WithName("STSAnnotator")}).
-		Complete(); err != nil {
-		setupLog.Error(err, "unable to create webhook", "webhook", "StatefulSet")
-		os.Exit(1)
-	}
+	// if err := builder.WebhookManagedBy(svcClusterMgr).
+	// 	For(&appsv1.StatefulSet{}).
+	// 	WithDefaulter(&webhooks.STSAnnotator{Log: ctrl.Log.WithName("webhooks").WithName("STSAnnotator")}).
+	// 	Complete(); err != nil {
+	// 	setupLog.Error(err, "unable to create webhook", "webhook", "StatefulSet")
+	// 	os.Exit(1)
+	// }
 
 }
