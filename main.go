@@ -312,7 +312,7 @@ func main() {
 	viper.SetDefault(enablePatroniFailsafeModeFlg, true)
 	enablePatroniFailsafeMode = viper.GetBool(enablePatroniFailsafeModeFlg)
 
-	viper.SetDefault(enableFsGroupChangePolicyWebhookFlg, false)
+	viper.SetDefault(enableFsGroupChangePolicyWebhookFlg, true)
 	enableFsGroupChangePolicyWebhook = viper.GetBool(enableFsGroupChangePolicyWebhookFlg)
 
 	ctrl.Log.Info("flag",
