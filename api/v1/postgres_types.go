@@ -385,7 +385,7 @@ func (p *Postgres) ToSharedSvcLB(lbIP string, lbPort int32, enableStandbyLeaderS
 		"cluster-name":       p.ToPeripheralResourceName(),
 		"team":               p.generateTeamID(),
 	}
-	if p.IsReplicationPrimary() {
+	if p.IsReplicationPrimaryOrStandalone() {
 		lb.Spec.Selector[SpiloRoleLabelName] = SpiloRoleLabelValueMaster
 	} else {
 		if enableStandbyLeaderSelector {
@@ -479,7 +479,7 @@ func (p *Postgres) ToDedicatedSvcLB(lbIP string, lbPort int32, standbyClustersSo
 		"cluster-name":       p.ToPeripheralResourceName(),
 		"team":               p.generateTeamID(),
 	}
-	if p.IsReplicationPrimary() {
+	if p.IsReplicationPrimaryOrStandalone() {
 		lb.Spec.Selector[SpiloRoleLabelName] = SpiloRoleLabelValueMaster
 	} else {
 		// select the first pod in the statefulset
@@ -770,7 +770,7 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 	}
 
 	// Enable replication (using unstructured json)
-	if p.IsReplicationPrimary() {
+	if p.IsReplicationPrimaryOrStandalone() {
 		// delete field
 		z.Spec.StandbyCluster = nil
 	} else {
@@ -930,7 +930,7 @@ func setSharedBufferSize(parameters map[string]string, shmSize string) {
 	}
 }
 
-func (p *Postgres) IsReplicationPrimary() bool {
+func (p *Postgres) IsReplicationPrimaryOrStandalone() bool {
 	if p.Spec.PostgresConnection == nil || p.Spec.PostgresConnection.ReplicationPrimary {
 		// nothing is configured, or we are the leader. nothing to do.
 		return true
@@ -939,7 +939,7 @@ func (p *Postgres) IsReplicationPrimary() bool {
 }
 
 func (p *Postgres) IsReplicationTarget() bool {
-	if p.Spec.PostgresConnection != nil && p.Spec.PostgresConnection.ReplicationPrimary == false {
+	if p.Spec.PostgresConnection != nil && !p.Spec.PostgresConnection.ReplicationPrimary {
 		// sth is configured and we are not the leader
 		return true
 	}

@@ -17,6 +17,7 @@ import (
 	"github.com/metal-stack/v"
 	coreosv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
+	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
@@ -24,12 +25,15 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
+	"sigs.k8s.io/controller-runtime/pkg/webhook"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	databasev1 "github.com/fi-ts/postgreslet/api/v1"
 	"github.com/fi-ts/postgreslet/controllers"
 	"github.com/fi-ts/postgreslet/pkg/etcdmanager"
 	"github.com/fi-ts/postgreslet/pkg/lbmanager"
 	"github.com/fi-ts/postgreslet/pkg/operatormanager"
+	"github.com/fi-ts/postgreslet/pkg/webhooks"
 	firewall "github.com/metal-stack/firewall-controller/api/v1"
 	"github.com/spf13/viper"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -84,6 +88,7 @@ const (
 	tlsClusterIssuerFlg                    = "tls-cluster-issuer"
 	tlsSubDomainFlg                        = "tls-sub-domain"
 	enablePatroniFailsafeModeFlg           = "enable-patroni-failsafe-mode"
+	enableFsGroupChangePolicyWebhookFlg    = "enable-fsgroup-change-policy-webhook"
 )
 
 var (
@@ -98,6 +103,7 @@ func init() {
 	_ = firewall.AddToScheme(scheme)
 	_ = zalando.AddToScheme(scheme)
 	_ = coreosv1.AddToScheme(scheme)
+	_ = appsv1.AddToScheme(scheme)
 	// +kubebuilder:scaffold:scheme
 	_ = cmapi.AddToScheme(scheme)
 }
@@ -143,6 +149,7 @@ func main() {
 		enableBootstrapStandbyFromS3        bool
 		enableSuperUserForDBO               bool
 		enablePatroniFailsafeMode           bool
+		enableFsGroupChangePolicyWebhook    bool
 
 		portRangeStart                        int
 		portRangeSize                         int
@@ -305,6 +312,9 @@ func main() {
 	viper.SetDefault(enablePatroniFailsafeModeFlg, true)
 	enablePatroniFailsafeMode = viper.GetBool(enablePatroniFailsafeModeFlg)
 
+	viper.SetDefault(enableFsGroupChangePolicyWebhookFlg, true)
+	enableFsGroupChangePolicyWebhook = viper.GetBool(enableFsGroupChangePolicyWebhookFlg)
+
 	ctrl.Log.Info("flag",
 		metricsAddrSvcMgrFlg, metricsAddrSvcMgr,
 		metricsAddrCtrlMgrFlg, metricsAddrCtrlMgr,
@@ -349,6 +359,7 @@ func main() {
 		tlsClusterIssuerFlg, tlsClusterIssuer,
 		tlsSubDomainFlg, tlsSubDomain,
 		enablePatroniFailsafeModeFlg, enablePatroniFailsafeMode,
+		enableFsGroupChangePolicyWebhookFlg, enableFsGroupChangePolicyWebhook,
 	)
 
 	svcClusterConf := ctrl.GetConfigOrDie()
@@ -429,8 +440,8 @@ func main() {
 
 	var lbMgrOpts lbmanager.Options = lbmanager.Options{
 		LBIP:                        lbIP,
-		PortRangeStart:              int32(portRangeStart),
-		PortRangeSize:               int32(portRangeSize),
+		PortRangeStart:              int32(portRangeStart), // nolint
+		PortRangeSize:               int32(portRangeSize),  // nolint
 		EnableStandbyLeaderSelector: enableStandbyLeaderSelector,
 		EnableLegacyStandbySelector: enableLegacyStandbySelector,
 		StandbyClustersSourceRanges: standbyClusterSourceRanges,
@@ -486,6 +497,19 @@ func main() {
 	}
 	// +kubebuilder:scaffold:builder
 
+	if enableFsGroupChangePolicyWebhook {
+		svcClusterMgr.GetWebhookServer().Register(
+			"/mutate-v1-pod",
+			&webhook.Admission{
+				Handler: &webhooks.FsGroupChangePolicySetter{
+					SvcClient: svcClusterMgr.GetClient(),
+					Decoder:   admission.NewDecoder(svcClusterMgr.GetScheme()),
+					Log:       ctrl.Log.WithName("webhooks").WithName("FsGroupChangePolicySetter"),
+				},
+			},
+		)
+	}
+
 	ctx := context.Background()
 
 	// update all existing operators to the current version
@@ -506,4 +530,5 @@ func main() {
 		setupLog.Error(err, "problem running control plane cluster manager")
 		os.Exit(1)
 	}
+
 }
