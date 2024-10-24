@@ -36,7 +36,7 @@ func (a *FsGroupChangePolicySetter) Handle(ctx context.Context, req admission.Re
 	if pod.Spec.SecurityContext != nil && pod.Spec.SecurityContext.FSGroup != nil {
 		p := v1.FSGroupChangeOnRootMismatch
 		pod.Spec.SecurityContext.FSGroupChangePolicy = &p
-		log.V(1).Info("Mutating StatefulSet", "sts", pod)
+		log.V(1).Info("Mutating Pod", "pod", pod)
 	}
 
 	marshaledSts, err := json.Marshal(pod)
