@@ -73,7 +73,7 @@ const (
 	teamIDPrefix = "pg"
 
 	DefaultPatroniParamValueLoopWait     uint32 = 10
-	DefaultPatroniParamValueRetryTimeout uint32 = 60
+	DefaultPatroniParamValueRetryTimeout uint32 = 10
 
 	defaultPostgresParamValueTCPKeepAlivesIdle      = "200"
 	defaultPostgresParamValueTCPKeepAlivesInterval  = "30"
