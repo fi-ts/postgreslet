@@ -1153,7 +1153,7 @@ func (r *PostgresReconciler) updatePatroniReplicationConfigOnAllPods(log logr.Lo
 		log.V(debugLogLevel).Info("no spilo pods found at all, requeueing")
 		return errors.New("no spilo pods found at all")
 	} else if len(pods.Items) < int(instance.Spec.NumberOfInstances) {
-		log.V(debugLogLevel).Info("expected %d pods, but only found %d (might be ok if it is still creating)", instance.Spec.NumberOfInstances, len(pods.Items))
+		log.V(debugLogLevel).Info("unexpected number of pods (might be ok if it is still creating)")
 	}
 
 	// iterate all spilo pods

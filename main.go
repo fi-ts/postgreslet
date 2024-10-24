@@ -499,7 +499,7 @@ func main() {
 
 	if enableFsGroupChangePolicyWebhook {
 		svcClusterMgr.GetWebhookServer().Register(
-			"/mutate-apps-v1-statefulset",
+			"/mutate-v1-pod",
 			&webhook.Admission{
 				Handler: &webhooks.FsGroupChangePolicySetter{
 					SvcClient: svcClusterMgr.GetClient(),

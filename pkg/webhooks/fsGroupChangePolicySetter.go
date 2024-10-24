@@ -6,7 +6,6 @@ import (
 	"net/http"
 
 	"github.com/go-logr/logr"
-	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -26,21 +25,21 @@ func (a *FsGroupChangePolicySetter) Handle(ctx context.Context, req admission.Re
 	log := a.Log.WithValues("name", req.Name, "ns", req.Namespace)
 	log.V(1).Info("handling admission request")
 
-	sts := &appsv1.StatefulSet{}
-	err := a.Decoder.Decode(req, sts)
+	pod := &v1.Pod{}
+	err := a.Decoder.Decode(req, pod)
 	if err != nil {
 		log.Error(err, "failed to decode request")
 		return admission.Errored(http.StatusBadRequest, err)
 	}
 
 	// when the fsGroup field is set, also set the fsGroupChangePolicy to OnRootMismatch
-	if sts.Spec.Template.Spec.SecurityContext != nil && sts.Spec.Template.Spec.SecurityContext.FSGroup != nil {
+	if pod.Spec.SecurityContext != nil && pod.Spec.SecurityContext.FSGroup != nil {
 		p := v1.FSGroupChangeOnRootMismatch
-		sts.Spec.Template.Spec.SecurityContext.FSGroupChangePolicy = &p
-		log.V(1).Info("Mutating StatefulSet", "sts", sts)
+		pod.Spec.SecurityContext.FSGroupChangePolicy = &p
+		log.V(1).Info("Mutating Pod", "pod", pod)
 	}
 
-	marshaledSts, err := json.Marshal(sts)
+	marshaledSts, err := json.Marshal(pod)
 	if err != nil {
 		log.Error(err, "failed to marshal response")
 		return admission.Errored(http.StatusInternalServerError, err)
