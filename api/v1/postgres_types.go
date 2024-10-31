@@ -85,6 +85,9 @@ const (
 	defaultPostgresParamValueWalKeepSize            = "1GB"
 	defaultPostgresParamValuePGStatStatementsMax    = "500"
 	defaultPostgresParamValuePasswordEncryption     = "scram-sha-256" // nolint
+	defaultPostgresParamValueLogMinErrorStatement   = "WARNING"
+	defaultPostgresParamValueLogErrorVerbosity      = "VERBOSE"
+	defaultPostgresParamValueLogLinePrefix          = "%m [%p]: [%l-1] db=%d,user=%u,app=%a,client=%h "
 
 	// PostgresAutoAssignedIPNamePrefix a prefix to add to the generated random name
 	PostgresAutoAssignedIPNamePrefix = "pgaas-autoassign-"
@@ -959,7 +962,10 @@ func enableAuditLogs(parameters map[string]string) {
 // setDefaultPostgresParams configures default keepalive values
 func setDefaultPostgresParams(parameters map[string]string, version string) {
 	// set default parameters
+	parameters["log_error_verbosity"] = defaultPostgresParamValueLogErrorVerbosity
 	parameters["log_file_mode"] = defaultPostgresParamValueLogFileMode
+	parameters["log_line_prefix"] = defaultPostgresParamValueLogLinePrefix
+	parameters["log_min_error_statement"] = defaultPostgresParamValueLogMinErrorStatement
 	parameters["password_encryption"] = defaultPostgresParamValuePasswordEncryption
 	parameters["pg_stat_statements.max"] = defaultPostgresParamValuePGStatStatementsMax
 	parameters["ssl_ciphers"] = defaultPostgresParamValueSSLCiphers
