@@ -959,12 +959,13 @@ func enableAuditLogs(parameters map[string]string) {
 // setDefaultPostgresParams configures default keepalive values
 func setDefaultPostgresParams(parameters map[string]string, version string) {
 	// set default parameters
+	parameters["log_file_mode"] = defaultPostgresParamValueLogFileMode
+	parameters["password_encryption"] = defaultPostgresParamValuePasswordEncryption
+	parameters["pg_stat_statements.max"] = defaultPostgresParamValuePGStatStatementsMax
+	parameters["ssl_ciphers"] = defaultPostgresParamValueSSLCiphers
+	parameters["ssl_prefer_server_ciphers"] = defaultPostgresParamValueSSLPreferServerCiphers
 	parameters["tcp_keepalives_idle"] = defaultPostgresParamValueTCPKeepAlivesIdle
 	parameters["tcp_keepalives_interval"] = defaultPostgresParamValueTCPKeepAlivesInterval
-	parameters["log_file_mode"] = defaultPostgresParamValueLogFileMode
-
-	parameters["ssl_prefer_server_ciphers"] = defaultPostgresParamValueSSLPreferServerCiphers
-	parameters["ssl_ciphers"] = defaultPostgresParamValueSSLCiphers
 
 	// set version specific parameters
 	v, err := strconv.Atoi(version)
@@ -981,10 +982,6 @@ func setDefaultPostgresParams(parameters map[string]string, version string) {
 	} else {
 		parameters["wal_keep_segments"] = defaultPostgresParamValueWalKeepSegments
 	}
-
-	parameters["pg_stat_statements.max"] = defaultPostgresParamValuePGStatStatementsMax
-
-	parameters["password_encryption"] = defaultPostgresParamValuePasswordEncryption
 }
 
 // setPostgresParams add the provided params to the parameter map (but ignore params that are blocked)
