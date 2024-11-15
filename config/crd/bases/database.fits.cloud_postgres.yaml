@@ -113,6 +113,10 @@ spec:
               description:
                 description: Description
                 type: string
+              disableLoadBalancers:
+                description: DisableLoadBalancers enable or disable the Load Balancers
+                  (Services)
+                type: boolean
               maintenance:
                 description: |-
                   todo: add default
