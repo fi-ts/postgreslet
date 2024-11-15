@@ -74,7 +74,7 @@ func TestLBManager_nextFreePort(t *testing.T) {
 			wantErr:  true,
 		},
 		{
-			name: "re-use releaased port",
+			name: "re-use released port",
 			lbMgr: &LBManager{
 				client: fake.NewClientBuilder().WithScheme(scheme()).WithLists(svcListWithPorts(0, 2, 3)).Build(),
 				options: Options{

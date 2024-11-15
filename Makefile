@@ -9,14 +9,17 @@ else
 GOBIN=$(shell go env GOBIN)
 endif
 
-# for version informations in the binary
+# for version information in the binary
 SHA := $(shell git rev-parse --short=8 HEAD)
 GITVERSION := $(shell git describe --long --all)
 BUILDDATE := $(shell date -Iseconds)
 VERSION := $(or ${DOCKER_TAG},latest)
+LOCALBIN ?= $(shell pwd)/bin
+CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
+CONTROLLER_TOOLS_VERSION ?= v0.14.0
 
 # Postgres operator variables for YAML download
-POSTGRES_OPERATOR_VERSION ?= v1.6.0
+POSTGRES_OPERATOR_VERSION ?= v1.11.0
 POSTGRES_OPERATOR_URL ?= https://raw.githubusercontent.com/zalando/postgres-operator/$(POSTGRES_OPERATOR_VERSION)/manifests
 POSTGRES_CRD_URL ?= https://raw.githubusercontent.com/zalando/postgres-operator/$(POSTGRES_OPERATOR_VERSION)/charts/postgres-operator/crds/postgresqls.yaml
 
@@ -53,26 +56,26 @@ run: generate fmt vet manifests install-configmap-sidecars install-crd-cwnp
 	-port-range-size 8000
 
 # Install CRDs into a cluster
-install: manifests
-	kustomize build config/crd | kubectl --kubeconfig kubeconfig apply -f -
+localkube-install-crd: manifests
+	kubectl kustomize config/crd | kubectl --kubeconfig kubeconfig-ctrl apply -f -
 
-# Uninstall CRDs from a cluster
-uninstall: manifests
-	kustomize build config/crd | kubectl --kubeconfig kubeconfig delete -f -
+# # Uninstall CRDs from a cluster
+# localkube-uninstall: manifests
+# 	kubectl kustomize config/crd | kubectl --kubeconfig kubeconfig-ctrl delete -f -
 
 # Deploy controller in the configured Kubernetes cluster in ~/.kube/config
-deploy: install-crd-cwnp manifests secret kind-load-image
-	cd config/manager && kustomize edit set image controller=${IMG}:${VERSION}
-	kustomize build config/default | kubectl apply -f -
+deploy: install-crd-cwnp manifests secret localkube-load-image
+	cd config/manager && kubectl kustomize edit set image controller=${IMG}:${VERSION}
+	kubectl kustomize config/default | kubectl apply -f -
 
 # clean up deployed resources in the configured Kubernetes cluster in ~/.kube/config
 cleanup: manifests
-	cd config/manager && kustomize edit set image controller=${IMG}:${VERSION}
-	kustomize build config/default | kubectl delete -f -
+	cd config/manager && kubectl kustomize edit set image controller=${IMG}:${VERSION}
+	kubectl kustomize config/default | kubectl delete -f -
 
 # Generate manifests e.g. CRD, RBAC etc.
 manifests: controller-gen
-	$(CONTROLLER_GEN) crd rbac:roleName=manager-role webhook paths="./..." output:crd:artifacts:config=config/crd/bases
+	$(CONTROLLER_GEN) +crd:generateEmbeddedObjectMeta=true paths="./..." +output:dir=config/crd/bases
 
 # Run go fmt against code
 fmt:
@@ -106,25 +109,18 @@ cacheobjs: cacheobjs-daily-base
 docker-push:
 	docker push ${IMG}:${VERSION}
 
-kind-load-image: cacheobjs
-	kind load docker-image ${IMG}:${VERSION} -v 1
+localkube-load-image: cacheobjs
+	kind load docker-image --name svc ${IMG}:${VERSION} -v 1
 
 # find or download controller-gen
 # download controller-gen if necessary
-controller-gen:
-ifeq (, $(shell which controller-gen))
-	@{ \
-	set -e ;\
-	CONTROLLER_GEN_TMP_DIR=$$(mktemp -d) ;\
-	cd $$CONTROLLER_GEN_TMP_DIR ;\
-	go mod init tmp ;\
-	go install sigs.k8s.io/controller-tools/cmd/controller-gen@v0.7.0 ;\
-	rm -rf $$CONTROLLER_GEN_TMP_DIR ;\
-	}
-CONTROLLER_GEN=$(GOBIN)/controller-gen
-else
-CONTROLLER_GEN=$(shell which controller-gen)
-endif
+.PHONY: controller-gen
+controller-gen: $(CONTROLLER_GEN)
+$(CONTROLLER_GEN): $(LOCALBIN)
+	test -s $(LOCALBIN)/controller-gen && $(LOCALBIN)/controller-gen --version | grep -q $(CONTROLLER_TOOLS_VERSION) || \
+	GOBIN=$(LOCALBIN) go install sigs.k8s.io/controller-tools/cmd/controller-gen@$(CONTROLLER_TOOLS_VERSION)
+$(LOCALBIN):
+	mkdir -p $(LOCALBIN)
 
 # Todo: Fix two metrics-addr. Not read right now.
 configmap:
@@ -146,8 +142,8 @@ svc-postgres-operator-yaml:
 	-f $(POSTGRES_OPERATOR_URL)/api-service.yaml \
 	--dry-run=client -o yaml > external/svc-postgres-operator.yaml
 
-crd-postgresql-yaml:
-	kubectl apply -f $(POSTGRES_CRD_URL) --dry-run=client -o yaml > external/crd-postgresql.yaml
+# crd-postgresql-yaml:
+# 	kubectl apply -f $(POSTGRES_CRD_URL) --dry-run=client -o yaml > external/crd-postgresql.yaml
 
 secret:
 	@{ \
@@ -160,38 +156,30 @@ secret:
 	kubectl create secret generic postgreslet -n $$NS --from-file $$SECRET_DIR/ --dry-run=client -o yaml | kubectl apply -f - ;\
 	}
 
-create-postgres:
-	kubectl create ns metal-extension-cloud --dry-run=client --save-config -o yaml | kubectl --kubeconfig kubeconfig apply -f -
-	kubectl --kubeconfig kubeconfig apply -f config/samples/complete.yaml
+localkube-create-postgres:
+	kubectl create ns metal-extension-cloud --dry-run=client --save-config -o yaml | kubectl --kubeconfig kubeconfig-ctrl apply -f -
+	kubectl --kubeconfig kubeconfig-ctrl apply -f config/samples/complete.yaml
 
-delete-postgres:
-	kubectl --kubeconfig kubeconfig delete -f config/samples/complete.yaml
-
-helm-clean:
-	rm -f charts/postgreslet/Chart.lock
-	rm -f charts/postgreslet/charts/*
-
-helm:
-	helm dependency build charts/postgreslet/
-	helm package charts/postgreslet/
+localkube-delete-postgres:
+	kubectl --kubeconfig kubeconfig-ctrl delete -f config/samples/complete.yaml
 
 test-cwnp:
 	./hack/test-cwnp.sh
 
-install-crd-cwnp:
-	kubectl apply -f https://raw.githubusercontent.com/metal-stack/firewall-controller/master/config/crd/bases/metal-stack.io_clusterwidenetworkpolicies.yaml
-	kubectl create ns firewall --dry-run=client --save-config -o yaml | kubectl apply -f -
+localkube-install-crd-cwnp:
+	kubectl apply --kubeconfig ./kubeconfig-svc -f https://raw.githubusercontent.com/metal-stack/firewall-controller/master/config/crd/bases/metal-stack.io_clusterwidenetworkpolicies.yaml
+	kubectl create ns firewall --kubeconfig ./kubeconfig-svc --dry-run=client --save-config -o yaml | kubectl apply --kubeconfig ./kubeconfig-svc -f -
 
-uninstall-crd-cwnp:
-	kubectl delete ns firewall
-	kubectl delete -f https://raw.githubusercontent.com/metal-stack/firewall-controller/master/config/crd/bases/metal-stack.io_clusterwidenetworkpolicies.yaml
+# localkube-uninstall-crd-cwnp:
+# 	kubectl delete ns firewall
+# 	kubectl delete -f https://raw.githubusercontent.com/metal-stack/firewall-controller/master/config/crd/bases/metal-stack.io_clusterwidenetworkpolicies.yaml
 
-configmap-sidecars:
-	helm template postgreslet --namespace postgreslet-system charts/postgreslet --show-only templates/configmap-sidecars.yaml > external/test/configmap-sidecars.yaml
+# configmap-sidecars:
+# 	helm template postgreslet --namespace postgreslet-system charts/postgreslet --show-only templates/configmap-sidecars.yaml > external/test/configmap-sidecars.yaml
 
-install-configmap-sidecars:
-	kubectl create ns postgreslet-system --dry-run=client --save-config -o yaml | kubectl apply -f -
-	kubectl apply -f external/test/configmap-sidecars.yaml
+# install-configmap-sidecars:
+# 	kubectl create ns postgreslet-system --dry-run=client --save-config -o yaml | kubectl apply -f -
+# 	kubectl apply -f external/test/configmap-sidecars.yaml
 
 # Todo: Add release version when the changes in main branch are released
 crd-cwnp-for-testing:
@@ -213,42 +201,51 @@ endif
 kubebuilder-version-ci:
 	@echo ${KUBEBUILDER_VERSION}
 
-two-kind-clusters:
+localkube-setup:
+	################################################################################
+	#                                                                              #
+	# Control Cluster                                                              #
+	#                                                                              #
+	################################################################################
 	#
-	## control-plane-cluster
-	########################
-	kind create cluster --name ctrl --kubeconfig ./kubeconfig
+	make localkube-ctrl
+	#
+	################################################################################
+	#                                                                              #
+	# Service Cluster                                                              #
+	#                                                                              #
+	################################################################################
+	#
+	make localkube-svc
+
+localkube-ctrl:
+	kind create cluster --name ctrl --kubeconfig ./kubeconfig-ctrl --image kindest/node:v1.24.15
 	container_ip=$$(docker inspect --format='{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' 'ctrl-control-plane') ;\
-	kubectl --kubeconfig=kubeconfig config set-cluster 'kind-ctrl' --server="https://$${container_ip}:6443"
-	make install
-	make create-postgres
-	#
-	## service-cluster
-	########################
-	kind create cluster
-	sed 's/z.Spec.Volume.StorageClass/\/\/z.Spec.Volume.StorageClass/' -i api/v1/postgres_types.go
-	make kind-load-image
-	sed 's/\/\/z.Spec.Volume.StorageClass/z.Spec.Volume.StorageClass/' -i api/v1/postgres_types.go
-	kubectl create ns postgreslet-system --dry-run=client --save-config -o yaml | kubectl apply -f -
-	make install-crd-cwnp
-	make install-crd-servicemonitor
-	# helm repo add metal-stack https://helm.metal-stack.io # stable repo
-	# helm upgrade --install postgreslet metal-stack/postgreslet --namespace postgreslet-system --values svc-cluster-values.yaml --set-file controlplaneKubeconfig=kubeconfig 
-	helm repo add metal-stack-30 https://helm.metal-stack.io/pull_requests/custom-operator-image # PR repo
-	helm upgrade --install postgreslet metal-stack-30/postgreslet --namespace postgreslet-system --values svc-cluster-values.yaml --set-file controlplaneKubeconfig=kubeconfig 
+	kubectl --kubeconfig=kubeconfig-ctrl config set-cluster 'kind-ctrl' --server="https://$${container_ip}:6443"
+	make localkube-install-crd
+	make localkube-create-postgres
 
-destroy-two-kind-clusters:
+localkube-svc:
+	kind create cluster --name svc --kubeconfig ./kubeconfig-svc --image kindest/node:v1.24.15
+	# make localkube-load-image
+	kubectl create ns postgreslet-system --dry-run=client --save-config -o yaml --kubeconfig ./kubeconfig-svc | kubectl apply --kubeconfig ./kubeconfig-svc -f -
+	make localkube-install-crd-cwnp
+	make localkube-install-crd-servicemonitor
+	make localkube-reinstall-postgreslet
+
+localkube-teardown:
 	kind delete cluster --name ctrl
-	kind delete cluster --name kind
+	kind delete cluster --name svc
 
-install-crd-servicemonitor:
-	kubectl apply -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/v0.45.0/example/prometheus-operator-crd/monitoring.coreos.com_servicemonitors.yaml
+localkube-install-crd-servicemonitor:
+	kubectl apply --kubeconfig ./kubeconfig-svc -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/v0.45.0/example/prometheus-operator-crd/monitoring.coreos.com_servicemonitors.yaml
+	kubectl apply --kubeconfig ./kubeconfig-svc -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/v0.45.0/example/prometheus-operator-crd/monitoring.coreos.com_podmonitors.yaml
 
-reinstall-postgreslet: kind-load-image
+localkube-reinstall-postgreslet: localkube-load-image
 	# helm repo add metal-stack https://helm.metal-stack.io # stable repo
-	# helm upgrade --install postgreslet metal-stack/postgreslet --namespace postgreslet-system --values svc-cluster-values.yaml --set-file controlplaneKubeconfig=kubeconfig 
+	# helm upgrade --install postgreslet metal-stack/postgreslet --namespace postgreslet-system --values svc-cluster-values.yaml --set-file controlplaneKubeconfig=kubeconfig
 	helm repo add metal-stack-30 https://helm.metal-stack.io/pull_requests/custom-operator-image # PR repo
-	helm upgrade --install postgreslet metal-stack-30/postgreslet --namespace postgreslet-system --values svc-cluster-values.yaml --set-file controlplaneKubeconfig=kubeconfig 
+	helm upgrade --install postgreslet metal-stack-30/postgreslet --namespace postgreslet-system --values svc-cluster-values.yaml --set-file controlplaneKubeconfig=kubeconfig-ctrl  --kubeconfig ./kubeconfig-svc
 
 lint:
 	golangci-lint run -p bugs -p unused --timeout=5m

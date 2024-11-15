@@ -66,6 +66,8 @@ items:
       backup-cron-schedule: "*/1 * * * *"
       object-prefix: etcd-psql
       compression-method: tarlz4
+      post-exec-cmds:
+      - etcd --data-dir=/data/etcd --listen-metrics-urls http://0.0.0.0:2381
 - kind: StatefulSet
   apiVersion: apps/v1
   metadata:
@@ -96,7 +98,7 @@ items:
       spec:
         serviceAccountName: patroni-etcd
         containers:
-        - image: quay.io/coreos/etcd:v3.5.4
+        - image: quay.io/coreos/etcd:v3.5.13
           # can also be gcr.io/etcd-development/etcd
           env:
           - name: ETCD_ENABLE_V2
@@ -113,12 +115,8 @@ items:
             value: default=http://etcd-psql-headless.ft-etcd-psql.svc.cluster.local:2380
           name: etcd
           command:
-          - tini
-          - --
-          args:
-          - sh
-          - -c
-          - backup-restore-sidecar wait && etcd --data-dir=/data/etcd --listen-metrics-urls http://0.0.0.0:2381
+          - backup-restore-sidecar
+          - wait
           imagePullPolicy: IfNotPresent
           livenessProbe:
             exec:
@@ -155,6 +153,16 @@ items:
             requests:
               cpu: 300m
               memory: 1G
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 1000
+            seccompProfile:
+              type: RuntimeDefault
+            capabilities:
+              drop:
+              - ALL
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
           volumeMounts:
@@ -165,10 +173,7 @@ items:
             mountPath: /usr/local/bin/backup-restore-sidecar
           - name: backup-restore-sidecar-config
             mountPath: /etc/backup-restore-sidecar
-          - name: bin-provision
-            subPath: tini
-            mountPath: /usr/local/bin/tini
-        - image:  quay.io/coreos/etcd:v3.5.4
+        - image:  quay.io/coreos/etcd:v3.5.13
           name: backup-restore-sidecar
           env:
             - name: BACKUP_RESTORE_SIDECAR_S3_BUCKET_NAME
@@ -197,37 +202,52 @@ items:
                   key: secret-key
                   name: etcd-backup-restore-s3-config
           command:
-          - tini
-          - --
-          args:
-          - sh
-          - -c
-          - mkdir -p /data/etcd && backup-restore-sidecar start --log-level debug
+          - backup-restore-sidecar
+          - start
+          - --log-level=debug
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 1000
+            seccompProfile:
+              type: RuntimeDefault
+            capabilities:
+              drop:
+              - ALL
           volumeMounts:
           - name: etcd
             mountPath: /data
+          - name: tmp-backup
+            mountPath: /backup
           - name: bin-provision
             subPath: backup-restore-sidecar
             mountPath: /usr/local/bin/backup-restore-sidecar
           - name: backup-restore-sidecar-config
             mountPath: /etc/backup-restore-sidecar
           - name: bin-provision
-            subPath: tini
-            mountPath: /usr/local/bin/tini
-          - name: bin-provision
             subPath: certs
             mountPath: /etc/ssl/certs
         initContainers:
         - name: backup-restore-sidecar-provider
-          image: ghcr.io/metal-stack/backup-restore-sidecar:latest
+          image: ghcr.io/metal-stack/backup-restore-sidecar:v0.10.2
           imagePullPolicy: IfNotPresent
           command:
           - cp
           - -r
           - /etc/ssl/certs
           - /backup-restore-sidecar
-          - /ubuntu/tini
           - /bin-provision
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 1000
+            seccompProfile:
+              type: RuntimeDefault
+            capabilities:
+              drop:
+              - ALL
           ports:
           - containerPort: 2112
           volumeMounts:
@@ -242,6 +262,9 @@ items:
         - emptyDir:
             sizeLimit: 1Gi
           name: etcd
+        - emptyDir:
+            sizeLimit: 1Gi
+          name: tmp-backup
 - kind: Service
   apiVersion: v1
   metadata:

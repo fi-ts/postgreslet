@@ -73,7 +73,7 @@ const (
 	teamIDPrefix = "pg"
 
 	DefaultPatroniParamValueLoopWait     uint32 = 10
-	DefaultPatroniParamValueRetryTimeout uint32 = 60
+	DefaultPatroniParamValueRetryTimeout uint32 = 10
 
 	defaultPostgresParamValueTCPKeepAlivesIdle      = "200"
 	defaultPostgresParamValueTCPKeepAlivesInterval  = "30"
@@ -81,6 +81,25 @@ const (
 	defaultPostgresParamValueSSLMinProtocolVersion  = "TLSv1.2"
 	defaultPostgresParamValueSSLPreferServerCiphers = "on"
 	defaultPostgresParamValueSSLCiphers             = "ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384"
+	defaultPostgresParamValueWalKeepSegments        = "64"
+	defaultPostgresParamValueWalKeepSize            = "1GB"
+	defaultPostgresParamValuePGStatStatementsMax    = "500"
+	defaultPostgresParamValuePasswordEncryption     = "scram-sha-256" // nolint
+	defaultPostgresParamValueLogMinErrorStatement   = "WARNING"
+	defaultPostgresParamValueLogErrorVerbosity      = "VERBOSE"
+	defaultPostgresParamValueLogLinePrefix          = "%m [%p]: [%l-1] db=%d,user=%u,app=%a,client=%h "
+
+	// PostgresAutoAssignedIPNamePrefix a prefix to add to the generated random name
+	PostgresAutoAssignedIPNamePrefix = "pgaas-autoassign-"
+	// PostgresAutoAssignedIPLabelKey tag to identify ips auto-assigned for a postgres
+	PostgresAutoAssignedIPLabelKey = "postgres.database.fits.cloud/auto-assigned-ip"
+	// PostgresAutoAssignedIPLabel tag to identify ips auto-assigned for a postgres
+	PostgresAutoAssignedIPLabel = PostgresAutoAssignedIPLabelKey + "=true"
+
+	PostresConfigSuperUsername        = "postgres"
+	PostgresConfigReplicationUsername = "standby"
+	PostgresConfigAuditorUsername     = "auditor"
+	PostgresConfigMonitoringUsername  = "monitoring"
 )
 
 var (
@@ -178,7 +197,7 @@ type PostgresSpec struct {
 	// PostgresRestore
 	PostgresRestore *PostgresRestore `json:"restore,omitempty"`
 
-	// PostgresConnection Connection info of a streaming host, independant of the current role (leader or standby)
+	// PostgresConnection Connection info of a streaming host, independent of the current role (leader or standby)
 	PostgresConnection *PostgresConnection `json:"connection,omitempty"`
 
 	// AuditLogs enable or disable default audit logs
@@ -186,6 +205,12 @@ type PostgresSpec struct {
 
 	// PostgresParams additional parameters that are passed along to the postgres config
 	PostgresParams map[string]string `json:"postgresParams,omitempty"`
+
+	// DedicatedLoadBalancerIP The ip to use for the load balancer
+	DedicatedLoadBalancerIP *string `json:"dedicatedLoadBalancerIP,omitempty"`
+
+	// DedicatedLoadBalancerPort The port to use for the load balancer
+	DedicatedLoadBalancerPort *int32 `json:"dedicatedLoadBalancerPort,omitempty"`
 }
 
 // AccessList defines the type of restrictions to access the database
@@ -225,6 +250,8 @@ type PostgresStatus struct {
 	Description string `json:"description,omitempty"`
 
 	Socket Socket `json:"socket,omitempty"`
+
+	AdditionalSockets []Socket `json:"additionalSockets,omitempty"`
 
 	ChildName string `json:"childName,omitempty"`
 }
@@ -322,7 +349,7 @@ func (p *Postgres) ToKey() *types.NamespacedName {
 	}
 }
 
-func (p *Postgres) ToSvcLB(lbIP string, lbPort int32, enableStandbyLeaderSelector bool, enableLegacyStandbySelector bool, standbyClustersSourceRanges []string) *corev1.Service {
+func (p *Postgres) ToSharedSvcLB(lbIP string, lbPort int32, enableStandbyLeaderSelector bool, enableLegacyStandbySelector bool, standbyClustersSourceRanges []string) *corev1.Service {
 	lb := &corev1.Service{}
 	lb.Spec.Type = "LoadBalancer"
 
@@ -331,7 +358,7 @@ func (p *Postgres) ToSvcLB(lbIP string, lbPort int32, enableStandbyLeaderSelecto
 	}
 
 	lb.Namespace = p.ToPeripheralResourceNamespace()
-	lb.Name = p.ToSvcLBName()
+	lb.Name = p.ToSharedSvcLBName()
 	lb.SetLabels(SvcLoadBalancerLabel)
 
 	lbsr := []string{}
@@ -361,7 +388,7 @@ func (p *Postgres) ToSvcLB(lbIP string, lbPort int32, enableStandbyLeaderSelecto
 		"cluster-name":       p.ToPeripheralResourceName(),
 		"team":               p.generateTeamID(),
 	}
-	if p.IsReplicationPrimary() {
+	if p.IsReplicationPrimaryOrStandalone() {
 		lb.Spec.Selector[SpiloRoleLabelName] = SpiloRoleLabelValueMaster
 	} else {
 		if enableStandbyLeaderSelector {
@@ -383,18 +410,118 @@ func (p *Postgres) ToSvcLB(lbIP string, lbPort int32, enableStandbyLeaderSelecto
 	return lb
 }
 
-// ToSvcLBName returns the name of the peripheral resource Service LoadBalancer.
+// ToSharedSvcLBName returns the name of the peripheral resource Service LoadBalancer.
 // It's different from all other peripheral resources because the operator
 // already generates one service with that name.
-func (p *Postgres) ToSvcLBName() string {
+func (p *Postgres) ToSharedSvcLBName() string {
 	return p.ToPeripheralResourceName() + "-external"
 }
 
-func (p *Postgres) ToSvcLBNamespacedName() *types.NamespacedName {
+func (p *Postgres) ToSharedSvcLBNamespacedName() *types.NamespacedName {
 	return &types.NamespacedName{
 		Namespace: p.ToPeripheralResourceNamespace(),
-		Name:      p.ToSvcLBName(),
+		Name:      p.ToSharedSvcLBName(),
 	}
+}
+
+func (p *Postgres) EnableSharedSVCLB(enableForceSharedIP bool) bool {
+	if enableForceSharedIP {
+		// shared IP is forced, so force it. No more questions asked.
+		return true
+	}
+
+	if p.Spec.DedicatedLoadBalancerIP == nil {
+		// No dedicated ip set at all, enabled shared lb
+		return true
+	}
+
+	if *p.Spec.DedicatedLoadBalancerIP == "" {
+		// Empty IP set, enable shared lb
+		return true
+	}
+
+	return false
+}
+
+func (p *Postgres) ToDedicatedSvcLB(lbIP string, lbPort int32, standbyClustersSourceRanges []string, sharedSvcLbAlsoEnabled bool) *corev1.Service {
+	lb := &corev1.Service{}
+	lb.Spec.Type = "LoadBalancer"
+
+	lb.Spec.ExternalTrafficPolicy = corev1.ServiceExternalTrafficPolicyTypeLocal
+
+	lb.Namespace = p.ToPeripheralResourceNamespace()
+	lb.Name = p.ToDedicatedSvcLBName()
+	lb.SetLabels(SvcLoadBalancerLabel)
+
+	lb.Annotations = map[string]string{}
+
+	lbsr := []string{}
+	if p.HasSourceRanges() {
+		for _, src := range p.Spec.AccessList.SourceRanges {
+			lbsr = append(lbsr, src)
+		}
+	}
+	for _, scsr := range standbyClustersSourceRanges {
+		lbsr = append(lbsr, scsr)
+	}
+	if len(lbsr) == 0 {
+		// block by default
+		lbsr = append(lbsr, "255.255.255.255/32")
+	}
+	lb.Spec.LoadBalancerSourceRanges = lbsr
+
+	port := corev1.ServicePort{}
+	port.Name = "postgresql"
+	port.Port = lbPort
+	port.Protocol = corev1.ProtocolTCP
+	port.TargetPort = intstr.FromInt(5432)
+	lb.Spec.Ports = []corev1.ServicePort{port}
+
+	lb.Spec.Selector = map[string]string{
+		ApplicationLabelName: ApplicationLabelValue,
+		"cluster-name":       p.ToPeripheralResourceName(),
+		"team":               p.generateTeamID(),
+	}
+	if p.IsReplicationPrimaryOrStandalone() {
+		lb.Spec.Selector[SpiloRoleLabelName] = SpiloRoleLabelValueMaster
+	} else {
+		// select the first pod in the statefulset
+		lb.Spec.Selector[StatefulsetPodNameLabelName] = p.ToPeripheralResourceName() + "-0"
+	}
+
+	if len(lbIP) > 0 {
+		lb.Spec.LoadBalancerIP = lbIP
+	}
+
+	return lb
+}
+
+// ToSharedSvcLBName returns the name of the peripheral resource Service LoadBalancer.
+// It's different from all other peripheral resources because the operator
+// already generates one service with that name.
+func (p *Postgres) ToDedicatedSvcLBName() string {
+	return p.ToPeripheralResourceName() + "-dedicated"
+}
+
+func (p *Postgres) ToDedicatedSvcLBNamespacedName() *types.NamespacedName {
+	return &types.NamespacedName{
+		Namespace: p.ToPeripheralResourceNamespace(),
+		Name:      p.ToDedicatedSvcLBName(),
+	}
+}
+
+func (p *Postgres) EnableDedicatedSVCLB() bool {
+	if p.Spec.DedicatedLoadBalancerIP == nil {
+		// No dedicated ip set at all, disable dedicated lb
+		return false
+	}
+
+	if *p.Spec.DedicatedLoadBalancerIP == "" {
+		// Empty IP set, disable dedicated lb
+		return false
+	}
+
+	return true
 }
 
 func (p *Postgres) ToPeripheralResourceName() string {
@@ -512,6 +639,21 @@ func (p *Postgres) ToPeripheralResourceNamespace() string {
 	return projectID + "-" + name
 }
 
+func (p *Postgres) ToDNSName(tlsSubDomain string) string {
+	// We only want letters and numbers
+	name := alphaNumericRegExp.ReplaceAllString(string(p.Name), "")
+	// Limit size
+	maxLen := 12
+	if len(name) > maxLen {
+		name = name[:maxLen]
+	}
+	return name + "." + tlsSubDomain
+}
+
+func (p *Postgres) ToTLSSecretName() string {
+	return "pg-tls"
+}
+
 func (p *Postgres) ToPeripheralResourceLookupKey() types.NamespacedName {
 	return types.NamespacedName{
 		Namespace: p.ToPeripheralResourceNamespace(),
@@ -519,7 +661,7 @@ func (p *Postgres) ToPeripheralResourceLookupKey() types.NamespacedName {
 	}
 }
 
-func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *corev1.ConfigMap, sc string, pgParamBlockList map[string]bool, rbs *BackupConfig, srcDB *Postgres, patroniTTL, patroniLoopWait, patroniRetryTimeout uint32) (*unstructured.Unstructured, error) {
+func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *corev1.ConfigMap, sc string, pgParamBlockList map[string]bool, rbs *BackupConfig, srcDB *Postgres, patroniTTL, patroniLoopWait, patroniRetryTimeout uint32, dboIsSuperuser bool, enableTlsCert bool) (*unstructured.Unstructured, error) {
 	if z == nil {
 		z = &zalando.Postgresql{}
 	}
@@ -527,7 +669,7 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 	z.Namespace = p.ToPeripheralResourceNamespace()
 	z.Name = p.ToPeripheralResourceName()
 	z.Labels = p.ToZalandoPostgresqlMatchingLabels()
-	// Add the newly introduced label only here, not in  p.ToZalandoPostgresqlMatchingLabels() (so that the selectors using  p.ToZalandoPostgresqlMatchingLabels() will still work untill all postgres resources have that new label)
+	// Add the newly introduced label only here, not in  p.ToZalandoPostgresqlMatchingLabels() (so that the selectors using  p.ToZalandoPostgresqlMatchingLabels() will still work until all postgres resources have that new label)
 	// TODO once all the custom resources have that new label, move this part to p.ToZalandoPostgresqlMatchingLabels()
 	z.Labels[PartitionIDLabelName] = p.Spec.PartitionID
 
@@ -541,7 +683,7 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 		enableAuditLogs(z.Spec.PostgresqlParam.Parameters)
 	}
 	// set some default postgres parameters
-	setDefaultPostgresParams(z.Spec.PostgresqlParam.Parameters)
+	setDefaultPostgresParams(z.Spec.PostgresqlParam.Parameters, p.Spec.Version)
 	// now set the given generic parameters (and potentially allow overwriting of default postgres params or audit log params)
 	setPostgresParams(z.Spec.PostgresqlParam.Parameters, p.Spec.PostgresParams, pgParamBlockList)
 	// finally, overwrite the (special to us) shared buffer parameter
@@ -574,6 +716,13 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 	// Create database owner
 	z.Spec.Users = make(map[string]zalando.UserFlags)
 	z.Spec.Users[ownerName] = zalando.UserFlags{"createdb", "createrole"}
+	if dboIsSuperuser {
+		z.Spec.Users[ownerName] = zalando.UserFlags{"createdb", "createrole", "superuser"}
+	}
+	// Add auditor user
+	z.Spec.Users[PostgresConfigAuditorUsername] = zalando.UserFlags{"nologin"}
+	// Add monitoring user
+	z.Spec.Users[PostgresConfigMonitoringUsername] = zalando.UserFlags{"login"}
 
 	// Create default database
 	z.Spec.Databases = make(map[string]string)
@@ -624,7 +773,7 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 	}
 
 	// Enable replication (using unstructured json)
-	if p.IsReplicationPrimary() {
+	if p.IsReplicationPrimaryOrStandalone() {
 		// delete field
 		z.Spec.StandbyCluster = nil
 	} else {
@@ -637,6 +786,14 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 			S3WalPath:              "",
 			StandbyApplicationName: p.ObjectMeta.Name,
 		}
+	}
+
+	if enableTlsCert {
+		z.Spec.TLS = &zalando.TLSDescription{
+			SecretName: p.ToTLSSecretName(),
+		}
+	} else {
+		z.Spec.TLS = nil
 	}
 
 	jsonZ, err := runtime.DefaultUnstructuredConverter.ToUnstructured(z)
@@ -752,7 +909,7 @@ func (p *Postgres) buildSidecars(c *corev1.ConfigMap) []zalando.Sidecar {
 	for i := range sidecars {
 		for j := range sidecars[i].Env {
 			if sidecars[i].Env[j].ValueFrom != nil && sidecars[i].Env[j].ValueFrom.SecretKeyRef != nil {
-				sidecars[i].Env[j].ValueFrom.SecretKeyRef.Name = "postgres." + p.ToPeripheralResourceName() + ".credentials"
+				sidecars[i].Env[j].ValueFrom.SecretKeyRef.Name = PostgresConfigMonitoringUsername + "." + p.ToPeripheralResourceName() + ".credentials"
 				break
 			}
 		}
@@ -776,9 +933,17 @@ func setSharedBufferSize(parameters map[string]string, shmSize string) {
 	}
 }
 
-func (p *Postgres) IsReplicationPrimary() bool {
+func (p *Postgres) IsReplicationPrimaryOrStandalone() bool {
 	if p.Spec.PostgresConnection == nil || p.Spec.PostgresConnection.ReplicationPrimary {
 		// nothing is configured, or we are the leader. nothing to do.
+		return true
+	}
+	return false
+}
+
+func (p *Postgres) IsReplicationTarget() bool {
+	if p.Spec.PostgresConnection != nil && !p.Spec.PostgresConnection.ReplicationPrimary {
+		// sth is configured and we are not the leader
 		return true
 	}
 	return false
@@ -787,7 +952,7 @@ func (p *Postgres) IsReplicationPrimary() bool {
 // enableAuditLogs configures this postgres instances audit logging
 func enableAuditLogs(parameters map[string]string) {
 	// default values: bg_mon,pg_stat_statements,pgextwlist,pg_auth_mon,set_user,timescaledb,pg_cron,pg_stat_kcache
-	parameters["shared_preload_libraries"] = "bg_mon,pg_stat_statements,pgextwlist,pg_auth_mon,set_user,timescaledb,pg_cron,pg_stat_kcache,pgaudit"
+	parameters["shared_preload_libraries"] = "pg_stat_statements,pgextwlist,pg_auth_mon,set_user,timescaledb,pg_cron,pg_stat_kcache,pgaudit"
 	parameters["pgaudit.log_catalog"] = "off"
 	parameters["pgaudit.log"] = "ddl"
 	parameters["pgaudit.log_relation"] = "on"
@@ -795,13 +960,34 @@ func enableAuditLogs(parameters map[string]string) {
 }
 
 // setDefaultPostgresParams configures default keepalive values
-func setDefaultPostgresParams(parameters map[string]string) {
+func setDefaultPostgresParams(parameters map[string]string, version string) {
+	// set default parameters
+	parameters["log_error_verbosity"] = defaultPostgresParamValueLogErrorVerbosity
+	parameters["log_file_mode"] = defaultPostgresParamValueLogFileMode
+	parameters["log_line_prefix"] = defaultPostgresParamValueLogLinePrefix
+	parameters["log_min_error_statement"] = defaultPostgresParamValueLogMinErrorStatement
+	parameters["password_encryption"] = defaultPostgresParamValuePasswordEncryption
+	parameters["pg_stat_statements.max"] = defaultPostgresParamValuePGStatStatementsMax
+	parameters["ssl_ciphers"] = defaultPostgresParamValueSSLCiphers
+	parameters["ssl_prefer_server_ciphers"] = defaultPostgresParamValueSSLPreferServerCiphers
 	parameters["tcp_keepalives_idle"] = defaultPostgresParamValueTCPKeepAlivesIdle
 	parameters["tcp_keepalives_interval"] = defaultPostgresParamValueTCPKeepAlivesInterval
-	parameters["log_file_mode"] = defaultPostgresParamValueLogFileMode
-	parameters["ssl_min_protocol_version"] = defaultPostgresParamValueSSLMinProtocolVersion
-	parameters["ssl_prefer_server_ciphers"] = defaultPostgresParamValueSSLPreferServerCiphers
-	parameters["ssl_ciphers"] = defaultPostgresParamValueSSLCiphers
+
+	// set version specific parameters
+	v, err := strconv.Atoi(version)
+	if err != nil {
+		return
+	}
+	// Postgres 12 and up
+	if v >= 12 {
+		parameters["ssl_min_protocol_version"] = defaultPostgresParamValueSSLMinProtocolVersion
+	}
+	// Postgres 13 and up
+	if v >= 13 {
+		parameters["wal_keep_size"] = defaultPostgresParamValueWalKeepSize
+	} else {
+		parameters["wal_keep_segments"] = defaultPostgresParamValueWalKeepSegments
+	}
 }
 
 // setPostgresParams add the provided params to the parameter map (but ignore params that are blocked)
