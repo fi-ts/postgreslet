@@ -539,11 +539,6 @@ func (r *PostgresReconciler) updatePodEnvironmentConfigMap(log logr.Logger, ctx 
 		data["STANDBY_WALG_DOWNLOAD_CONCURRENCY"] = downloadConcurrency
 	}
 
-	// TODO do we really want to *always* force a restart?
-	if p.DisableLoadBalancers() {
-		data["POSTGRESLET_LOADBALANCERS_DISABLED"] = "true"
-	}
-
 	cm := &corev1.ConfigMap{}
 	ns := types.NamespacedName{
 		Name:      operatormanager.PodEnvCMName,
