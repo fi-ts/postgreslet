@@ -356,9 +356,22 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 // SetupWithManager informs mgr when this reconciler should be called.
 func (r *PostgresReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.recorder = mgr.GetEventRecorderFor("PostgresController")
+
+	l := map[string]string{
+		pg.PartitionIDLabelName: r.PartitionID,
+	}
+	s := metav1.LabelSelector{
+		MatchLabels: l,
+	}
+	lsp, err := predicate.LabelSelectorPredicate(s)
+	if err != nil {
+		return fmt.Errorf("failed to create LabelSelectorPredicate: %w", err)
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&pg.Postgres{}).
 		WithEventFilter(predicate.GenerationChangedPredicate{}).
+		WithEventFilter(lsp).
 		Complete(r)
 }
 
