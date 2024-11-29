@@ -1621,6 +1621,12 @@ func (r *PostgresReconciler) createOrUpdateExporterSidecarServiceMonitor(log log
 			Port: postgresExporterServicePortName,
 		},
 	}
+	if r.EnableWalGExporter {
+		wgesme := coreosv1.Endpoint{
+			Port: walGExporterServicePortName,
+		}
+		pesm.Spec.Endpoints = append(pesm.Spec.Endpoints, wgesme)
+	}
 	pesm.Spec.NamespaceSelector = coreosv1.NamespaceSelector{
 		MatchNames: []string{namespace},
 	}
