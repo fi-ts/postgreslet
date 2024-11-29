@@ -56,12 +56,19 @@ import (
 const (
 	postgresExporterServiceName                    string = "postgres-exporter"
 	postgresExporterServicePortName                string = "metrics"
+	postgresExporterServicePortKeyName             string = "postgres-exporter-service-port"
+	postgresExporterServiceTargetPortKeyName       string = "postgres-exporter-service-target-port"
+	walGExporterServicePortName                    string = "backup-metrics"
+	walGExporterServicePortKeyName                 string = "wal-g-exporter-service-port"
+	walGExporterServiceTargetPortKeyName           string = "wal-g-exporter-service-target-port"
 	postgresExporterServiceTenantAnnotationName    string = pg.TenantLabelName
 	postgresExporterServiceProjectIDAnnotationName string = pg.ProjectIDLabelName
 	storageEncryptionKeyName                       string = "storage-encryption-key"
 	storageEncryptionKeyFinalizerName              string = "postgres.database.fits.cloud/secret-finalizer"
 	walGEncryptionSecretNamePostfix                string = "-walg-encryption"
 	walGEncryptionSecretKeyName                    string = "key"
+	podMonitorName                                 string = "patroni"
+	podMonitorPort                                 string = "8008"
 	initDBName                                     string = "postgres-initdb"
 	initDBSQLDummy                                 string = `SELECT 'NOOP';`
 	debugLogLevel                                  int    = 1
@@ -102,6 +109,7 @@ type PostgresReconciler struct {
 	EnableCustomTLSCert                 bool
 	TLSClusterIssuer                    string
 	TLSSubDomain                        string
+	EnableWalGExporter                  bool
 }
 
 type PatroniStandbyCluster struct {
@@ -298,6 +306,12 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	err := r.createOrUpdateExporterSidecarServiceMonitor(log, ctx, namespace, instance)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("error while creating sidecars servicemonitor %v: %w", namespace, err)
+	}
+
+	// Add pod monitor
+	if err := r.createOrUpdatePatroniPodMonitor(ctx, namespace, instance); err != nil {
+		r.recorder.Eventf(instance, "Warning", "Error", "failed to create podmonitor: %v", err)
+		return ctrl.Result{}, fmt.Errorf("error while creating podmonitor %v: %w", namespace, err)
 	}
 
 	// Make sure the storage secret exist, if necessary
@@ -1473,16 +1487,28 @@ func (r *PostgresReconciler) createOrUpdateNetPol(ctx context.Context, instance 
 
 // createOrUpdateExporterSidecarServices ensures the necessary services to access the sidecars exist
 func (r *PostgresReconciler) createOrUpdateExporterSidecarServices(log logr.Logger, ctx context.Context, namespace string, c *corev1.ConfigMap, in *pg.Postgres) error {
-	exporterServicePort, error := strconv.ParseInt(c.Data["postgres-exporter-service-port"], 10, 32)
+	pesPort, error := strconv.ParseInt(c.Data[postgresExporterServicePortKeyName], 10, 32)
 	if error != nil {
-		// todo log error
-		exporterServicePort = 9187
+		log.Error(error, "postgres-exporter-service-port could not be parsed to int32, falling back to default value")
+		pesPort = 9187
 	}
 
-	exporterServiceTargetPort, error := strconv.ParseInt(c.Data["postgres-exporter-service-target-port"], 10, 32)
+	pesTargetPort, error := strconv.ParseInt(c.Data[postgresExporterServiceTargetPortKeyName], 10, 32)
 	if error != nil {
-		// todo log error
-		exporterServiceTargetPort = exporterServicePort
+		log.Error(error, "postgres-exporter-service-target-port could not be parsed to int32, falling back to default value")
+		pesTargetPort = pesPort
+	}
+
+	wgesPort, error := strconv.ParseInt(c.Data[walGExporterServicePortKeyName], 10, 32)
+	if error != nil {
+		log.Error(error, "wal-g-exporter-service-port could not be parsed to int32, falling back to default value")
+		pesPort = 9351
+	}
+
+	wgesTargetPort, error := strconv.ParseInt(c.Data[walGExporterServiceTargetPortKeyName], 10, 32)
+	if error != nil {
+		log.Error(error, "wal-g-exporter-service-target-port could not be parsed to int32, falling back to default value")
+		pesTargetPort = pesPort
 	}
 
 	labels := map[string]string{
@@ -1506,10 +1532,19 @@ func (r *PostgresReconciler) createOrUpdateExporterSidecarServices(log logr.Logg
 	pes.Spec.Ports = []corev1.ServicePort{
 		{
 			Name:       postgresExporterServicePortName,
-			Port:       int32(exporterServicePort), //nolint
+			Port:       int32(pesPort), //nolint
 			Protocol:   corev1.ProtocolTCP,
-			TargetPort: intstr.FromInt(int(exporterServiceTargetPort)),
+			TargetPort: intstr.FromInt(int(pesTargetPort)),
 		},
+	}
+	if r.EnableWalGExporter {
+		wgesp := corev1.ServicePort{
+			Name:       walGExporterServicePortName,
+			Port:       int32(wgesPort), //nolint
+			Protocol:   corev1.ProtocolTCP,
+			TargetPort: intstr.FromInt(int(wgesTargetPort)),
+		}
+		pes.Spec.Ports = append(pes.Spec.Ports, wgesp)
 	}
 	selector := map[string]string{
 		pg.ApplicationLabelName: pg.ApplicationLabelValue,
@@ -1586,6 +1621,12 @@ func (r *PostgresReconciler) createOrUpdateExporterSidecarServiceMonitor(log log
 			Port: postgresExporterServicePortName,
 		},
 	}
+	if r.EnableWalGExporter {
+		wgesme := coreosv1.Endpoint{
+			Port: walGExporterServicePortName,
+		}
+		pesm.Spec.Endpoints = append(pesm.Spec.Endpoints, wgesme)
+	}
 	pesm.Spec.NamespaceSelector = coreosv1.NamespaceSelector{
 		MatchNames: []string{namespace},
 	}
@@ -1595,6 +1636,10 @@ func (r *PostgresReconciler) createOrUpdateExporterSidecarServiceMonitor(log log
 	}
 	pesm.Spec.Selector = metav1.LabelSelector{
 		MatchLabels: matchLabels,
+	}
+	pesm.Spec.TargetLabels = []string{
+		"postgres_partition_id=" + in.Spec.PartitionID,
+		"is_primary=" + strconv.FormatBool(in.IsReplicationPrimaryOrStandalone()),
 	}
 
 	// try to fetch any existing postgres-exporter service
@@ -1619,6 +1664,69 @@ func (r *PostgresReconciler) createOrUpdateExporterSidecarServiceMonitor(log log
 		return fmt.Errorf("error while creating the postgres-exporter servicemonitor: %w", err)
 	}
 	log.V(debugLogLevel).Info("postgres-exporter servicemonitor created")
+
+	return nil
+}
+
+// createOrUpdatePatroniPodMonitor ensures the servicemonitors for the sidecars exist
+func (r *PostgresReconciler) createOrUpdatePatroniPodMonitor(ctx context.Context, namespace string, in *pg.Postgres) error {
+	log := r.Log.WithValues("namespace", namespace)
+
+	labels := map[string]string{
+		"app":     "postgres-exporter",
+		"release": "prometheus",
+	}
+
+	annotations := map[string]string{
+		postgresExporterServiceTenantAnnotationName:    in.Spec.Tenant,
+		postgresExporterServiceProjectIDAnnotationName: in.Spec.ProjectID,
+	}
+
+	pm := &coreosv1.PodMonitor{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        podMonitorName,
+			Namespace:   namespace,
+			Labels:      labels,
+			Annotations: annotations,
+		},
+	}
+
+	pm.Spec.PodMetricsEndpoints = []coreosv1.PodMetricsEndpoint{
+		{
+			Port: podMonitorPort,
+		},
+	}
+	pm.Spec.NamespaceSelector = coreosv1.NamespaceSelector{
+		MatchNames: []string{namespace},
+	}
+	matchLabels := map[string]string{
+		"application": "spilo",
+	}
+	pm.Spec.Selector = metav1.LabelSelector{
+		MatchLabels: matchLabels,
+	}
+
+	// try to fetch any existing podmonitor
+	ns := types.NamespacedName{
+		Namespace: namespace,
+		Name:      podMonitorName,
+	}
+	old := &coreosv1.PodMonitor{}
+	if err := r.SvcClient.Get(ctx, ns, old); err == nil {
+		// Copy the resource version
+		pm.ObjectMeta.ResourceVersion = old.ObjectMeta.ResourceVersion
+		if err := r.SvcClient.Update(ctx, pm); err != nil {
+			return fmt.Errorf("error while updating the podmonitor: %w", err)
+		}
+		log.Info("pod monitor updated")
+		return nil
+	}
+
+	// local podmonitor does not exist, creating it
+	if err := r.SvcClient.Create(ctx, pm); err != nil {
+		return fmt.Errorf("error while creating the podmonitor: %w", err)
+	}
+	log.Info("podmonitor created")
 
 	return nil
 }

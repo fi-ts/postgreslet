@@ -89,6 +89,7 @@ const (
 	tlsSubDomainFlg                        = "tls-sub-domain"
 	enablePatroniFailsafeModeFlg           = "enable-patroni-failsafe-mode"
 	enableFsGroupChangePolicyWebhookFlg    = "enable-fsgroup-change-policy-webhook"
+	enableWalGExporterFlg                  = "enable-wal-g-exporter"
 )
 
 var (
@@ -150,6 +151,7 @@ func main() {
 		enableSuperUserForDBO               bool
 		enablePatroniFailsafeMode           bool
 		enableFsGroupChangePolicyWebhook    bool
+		enableWalGExporter                  bool
 
 		portRangeStart                        int32
 		portRangeSize                         int32
@@ -315,6 +317,9 @@ func main() {
 	viper.SetDefault(enableFsGroupChangePolicyWebhookFlg, true)
 	enableFsGroupChangePolicyWebhook = viper.GetBool(enableFsGroupChangePolicyWebhookFlg)
 
+	viper.SetDefault(enableWalGEncryptionFlg, true)
+	enableWalGExporter = viper.GetBool(enableWalGExporterFlg)
+
 	ctrl.Log.Info("flag",
 		metricsAddrSvcMgrFlg, metricsAddrSvcMgr,
 		metricsAddrCtrlMgrFlg, metricsAddrCtrlMgr,
@@ -360,6 +365,7 @@ func main() {
 		tlsSubDomainFlg, tlsSubDomain,
 		enablePatroniFailsafeModeFlg, enablePatroniFailsafeMode,
 		enableFsGroupChangePolicyWebhookFlg, enableFsGroupChangePolicyWebhook,
+		enableWalGExporterFlg, enableWalGExporter,
 	)
 
 	svcClusterConf := ctrl.GetConfigOrDie()
@@ -478,6 +484,7 @@ func main() {
 		EnableCustomTLSCert:                 enableCustomTLSCert,
 		TLSClusterIssuer:                    tlsClusterIssuer,
 		TLSSubDomain:                        tlsSubDomain,
+		EnableWalGExporter:                  enableWalGExporter,
 	}).SetupWithManager(ctrlPlaneClusterMgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Postgres")
 		os.Exit(1)
