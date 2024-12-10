@@ -689,10 +689,10 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 	// finally, overwrite the (special to us) shared buffer parameter
 	setSharedBufferSize(z.Spec.PostgresqlParam.Parameters, p.Spec.Size.SharedBuffer)
 
-	z.Spec.Resources.ResourceRequests.CPU = p.Spec.Size.CPU
-	z.Spec.Resources.ResourceRequests.Memory = p.Spec.Size.Memory
-	z.Spec.Resources.ResourceLimits.CPU = p.Spec.Size.CPU
-	z.Spec.Resources.ResourceLimits.Memory = p.Spec.Size.Memory
+	z.Spec.Resources.ResourceRequests.CPU = pointer.String(p.Spec.Size.CPU)
+	z.Spec.Resources.ResourceRequests.Memory = pointer.String(p.Spec.Size.Memory)
+	z.Spec.Resources.ResourceLimits.CPU = pointer.String(p.Spec.Size.CPU)
+	z.Spec.Resources.ResourceLimits.Memory = pointer.String(p.Spec.Size.Memory)
 	z.Spec.TeamID = p.generateTeamID()
 	z.Spec.Volume.Size = p.Spec.Size.StorageSize
 	z.Spec.Volume.StorageClass = sc
@@ -779,12 +779,9 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 	} else {
 		// overwrite connection info
 		z.Spec.StandbyCluster = &zalando.StandbyDescription{
-			StandbyMethod:          StandbyMethod,
-			StandbyHost:            p.Spec.PostgresConnection.ConnectionIP,
-			StandbyPort:            strconv.FormatInt(int64(p.Spec.PostgresConnection.ConnectionPort), 10),
-			StandbySecretName:      "standby." + p.ToPeripheralResourceName() + ".credentials",
-			S3WalPath:              "",
-			StandbyApplicationName: p.ObjectMeta.Name,
+			StandbyHost: p.Spec.PostgresConnection.ConnectionIP,
+			StandbyPort: strconv.FormatInt(int64(p.Spec.PostgresConnection.ConnectionPort), 10),
+			// S3WalPath:              "",
 		}
 	}
 
