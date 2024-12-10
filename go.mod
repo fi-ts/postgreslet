@@ -12,7 +12,7 @@ require (
 	github.com/onsi/gomega v1.27.10
 	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.56.2
 	github.com/spf13/viper v1.12.0
-	github.com/zalando/postgres-operator v1.7.0
+	github.com/zalando/postgres-operator v1.11.0
 	k8s.io/api v0.28.9
 	k8s.io/apiextensions-apiserver v0.28.9
 	k8s.io/apimachinery v0.28.9
@@ -73,7 +73,7 @@ require (
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.25.0 // indirect
 	golang.org/x/crypto v0.21.0 // indirect
-	golang.org/x/exp v0.0.0-20220722155223-a9213eeb770e // indirect
+	golang.org/x/exp v0.0.0-20240112132812-db7319d0e0e3 // indirect
 	golang.org/x/mod v0.14.0 // indirect
 	golang.org/x/net v0.23.0 // indirect
 	golang.org/x/oauth2 v0.8.0 // indirect
@@ -81,7 +81,7 @@ require (
 	golang.org/x/term v0.18.0 // indirect
 	golang.org/x/text v0.14.0 // indirect
 	golang.org/x/time v0.3.0 // indirect
-	golang.org/x/tools v0.16.1 // indirect
+	golang.org/x/tools v0.17.0 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.4.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
 	google.golang.org/protobuf v1.33.0 // indirect
@@ -98,5 +98,3 @@ require (
 	sigs.k8s.io/structured-merge-diff/v4 v4.2.3 // indirect
 	sigs.k8s.io/yaml v1.3.0 // indirect
 )
-
-replace github.com/zalando/postgres-operator v1.7.0 => github.com/ermajn/postgres-operator v1.0.1-0.20211123085256-711648b7fdde

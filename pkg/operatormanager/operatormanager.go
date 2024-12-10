@@ -63,7 +63,7 @@ type Options struct {
 	OperatorImage           string
 	DockerImage             string
 	EtcdHost                string
-	CRDValidation           bool
+	CRDRegistration         bool
 	MajorVersionUpgradeMode string
 	PostgresletNamespace    string
 	SidecarsConfigMapName   string
@@ -425,7 +425,7 @@ func (m *OperatorManager) editConfigMap(cm *corev1.ConfigMap, namespace string, 
 		cm.Data["etcd_host"] = options.EtcdHost
 	}
 
-	cm.Data["enable_crd_validation"] = strconv.FormatBool(options.CRDValidation)
+	cm.Data["enable_crd_registration"] = strconv.FormatBool(options.CRDRegistration)
 	cm.Data["major_version_upgrade_mode"] = options.MajorVersionUpgradeMode
 
 	// we specifically refer to those two users in the cloud-api, so we hardcode them here as well to be on the safe side.
