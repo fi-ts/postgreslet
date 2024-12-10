@@ -689,6 +689,7 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 	// finally, overwrite the (special to us) shared buffer parameter
 	setSharedBufferSize(z.Spec.PostgresqlParam.Parameters, p.Spec.Size.SharedBuffer)
 
+	z.Spec.Resources = &zalando.Resources{}
 	z.Spec.Resources.ResourceRequests.CPU = pointer.String(p.Spec.Size.CPU)
 	z.Spec.Resources.ResourceRequests.Memory = pointer.String(p.Spec.Size.Memory)
 	z.Spec.Resources.ResourceLimits.CPU = pointer.String(p.Spec.Size.CPU)
