@@ -317,7 +317,7 @@ func main() {
 	viper.SetDefault(enableFsGroupChangePolicyWebhookFlg, true)
 	enableFsGroupChangePolicyWebhook = viper.GetBool(enableFsGroupChangePolicyWebhookFlg)
 
-	viper.SetDefault(enableWalGEncryptionFlg, true)
+	viper.SetDefault(enableWalGExporterFlg, true)
 	enableWalGExporter = viper.GetBool(enableWalGExporterFlg)
 
 	ctrl.Log.Info("flag",
