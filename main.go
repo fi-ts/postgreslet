@@ -58,7 +58,7 @@ const (
 	storageClassFlg                        = "storage-class"
 	postgresImageFlg                       = "postgres-image"
 	etcdHostFlg                            = "etcd-host"
-	crdValidationFlg                       = "enable-crd-validation"
+	crdRegistrationFlg                     = "enable-crd-registration"
 	operatorImageFlg                       = "operator-image"
 	pgParamBlockListFlg                    = "postgres-param-blocklist" // nolint
 	majorVersionUpgradeModeFlg             = "major-version-upgrade-mode"
@@ -137,7 +137,7 @@ func main() {
 		tlsSubDomain            string
 
 		enableLeaderElection                bool
-		enableCRDValidation                 bool
+		enableCRDRegistration               bool
 		enableNetPol                        bool
 		enablePodAntiaffinity               bool
 		enableStandbyLeaderSelector         bool
@@ -216,8 +216,8 @@ func main() {
 
 	etcdHost = viper.GetString(etcdHostFlg)
 
-	viper.SetDefault(crdValidationFlg, true)
-	enableCRDValidation = viper.GetBool(crdValidationFlg)
+	viper.SetDefault(crdRegistrationFlg, true)
+	enableCRDRegistration = viper.GetBool(crdRegistrationFlg)
 
 	// read the (space-separated) list of configured blocked params
 	blockedPgParams := viper.GetStringSlice(pgParamBlockListFlg)
@@ -335,7 +335,7 @@ func main() {
 		operatorImageFlg, operatorImage,
 		postgresImageFlg, postgresImage,
 		etcdHostFlg, etcdHost,
-		crdValidationFlg, enableCRDValidation,
+		crdRegistrationFlg, enableCRDRegistration,
 		pgParamBlockListFlg, pgParamBlockList,
 		majorVersionUpgradeModeFlg, majorVersionUpgradeMode,
 		standbyClustersSourceRangesFlg, standbyClusterSourceRanges,
@@ -430,7 +430,7 @@ func main() {
 		OperatorImage:           operatorImage,
 		DockerImage:             postgresImage,
 		EtcdHost:                etcdHost,
-		CRDValidation:           enableCRDValidation,
+		CRDRegistration:         enableCRDRegistration,
 		MajorVersionUpgradeMode: majorVersionUpgradeMode,
 		PostgresletNamespace:    postgresletNamespace,
 		SidecarsConfigMapName:   sidecarsCMName,
