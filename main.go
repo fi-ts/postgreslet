@@ -58,7 +58,7 @@ const (
 	storageClassFlg                        = "storage-class"
 	postgresImageFlg                       = "postgres-image"
 	etcdHostFlg                            = "etcd-host"
-	crdValidationFlg                       = "enable-crd-validation"
+	crdRegistrationFlg                     = "enable-crd-registration"
 	operatorImageFlg                       = "operator-image"
 	pgParamBlockListFlg                    = "postgres-param-blocklist" // nolint
 	majorVersionUpgradeModeFlg             = "major-version-upgrade-mode"
@@ -89,6 +89,7 @@ const (
 	tlsSubDomainFlg                        = "tls-sub-domain"
 	enablePatroniFailsafeModeFlg           = "enable-patroni-failsafe-mode"
 	enableFsGroupChangePolicyWebhookFlg    = "enable-fsgroup-change-policy-webhook"
+	enableWalGExporterFlg                  = "enable-wal-g-exporter"
 )
 
 var (
@@ -136,7 +137,7 @@ func main() {
 		tlsSubDomain            string
 
 		enableLeaderElection                bool
-		enableCRDValidation                 bool
+		enableCRDRegistration               bool
 		enableNetPol                        bool
 		enablePodAntiaffinity               bool
 		enableStandbyLeaderSelector         bool
@@ -150,6 +151,7 @@ func main() {
 		enableSuperUserForDBO               bool
 		enablePatroniFailsafeMode           bool
 		enableFsGroupChangePolicyWebhook    bool
+		enableWalGExporter                  bool
 
 		portRangeStart                        int32
 		portRangeSize                         int32
@@ -214,8 +216,8 @@ func main() {
 
 	etcdHost = viper.GetString(etcdHostFlg)
 
-	viper.SetDefault(crdValidationFlg, true)
-	enableCRDValidation = viper.GetBool(crdValidationFlg)
+	viper.SetDefault(crdRegistrationFlg, true)
+	enableCRDRegistration = viper.GetBool(crdRegistrationFlg)
 
 	// read the (space-separated) list of configured blocked params
 	blockedPgParams := viper.GetStringSlice(pgParamBlockListFlg)
@@ -315,6 +317,9 @@ func main() {
 	viper.SetDefault(enableFsGroupChangePolicyWebhookFlg, true)
 	enableFsGroupChangePolicyWebhook = viper.GetBool(enableFsGroupChangePolicyWebhookFlg)
 
+	viper.SetDefault(enableWalGExporterFlg, true)
+	enableWalGExporter = viper.GetBool(enableWalGExporterFlg)
+
 	ctrl.Log.Info("flag",
 		metricsAddrSvcMgrFlg, metricsAddrSvcMgr,
 		metricsAddrCtrlMgrFlg, metricsAddrCtrlMgr,
@@ -330,7 +335,7 @@ func main() {
 		operatorImageFlg, operatorImage,
 		postgresImageFlg, postgresImage,
 		etcdHostFlg, etcdHost,
-		crdValidationFlg, enableCRDValidation,
+		crdRegistrationFlg, enableCRDRegistration,
 		pgParamBlockListFlg, pgParamBlockList,
 		majorVersionUpgradeModeFlg, majorVersionUpgradeMode,
 		standbyClustersSourceRangesFlg, standbyClusterSourceRanges,
@@ -360,6 +365,7 @@ func main() {
 		tlsSubDomainFlg, tlsSubDomain,
 		enablePatroniFailsafeModeFlg, enablePatroniFailsafeMode,
 		enableFsGroupChangePolicyWebhookFlg, enableFsGroupChangePolicyWebhook,
+		enableWalGExporterFlg, enableWalGExporter,
 	)
 
 	svcClusterConf := ctrl.GetConfigOrDie()
@@ -424,7 +430,7 @@ func main() {
 		OperatorImage:           operatorImage,
 		DockerImage:             postgresImage,
 		EtcdHost:                etcdHost,
-		CRDValidation:           enableCRDValidation,
+		CRDRegistration:         enableCRDRegistration,
 		MajorVersionUpgradeMode: majorVersionUpgradeMode,
 		PostgresletNamespace:    postgresletNamespace,
 		SidecarsConfigMapName:   sidecarsCMName,
@@ -478,6 +484,7 @@ func main() {
 		EnableCustomTLSCert:                 enableCustomTLSCert,
 		TLSClusterIssuer:                    tlsClusterIssuer,
 		TLSSubDomain:                        tlsSubDomain,
+		EnableWalGExporter:                  enableWalGExporter,
 	}).SetupWithManager(ctrlPlaneClusterMgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Postgres")
 		os.Exit(1)
