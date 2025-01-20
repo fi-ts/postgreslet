@@ -69,6 +69,7 @@ const (
 	SpiloRoleLabelValueMaster        = "master"
 	SpiloRoleLabelValueStandbyLeader = "standby_leader"
 	StatefulsetPodNameLabelName      = "statefulset.kubernetes.io/pod-name"
+	ClusterNameLabelName             = "cluster-name"
 
 	teamIDPrefix = "pg"
 
@@ -84,6 +85,7 @@ const (
 	defaultPostgresParamValueWalKeepSegments        = "64"
 	defaultPostgresParamValueWalKeepSize            = "1GB"
 	defaultPostgresParamValuePGStatStatementsMax    = "500"
+	defaultSelectorDisableValue                     = "selector-disabled"
 	defaultPostgresParamValuePasswordEncryption     = "scram-sha-256" // nolint
 	defaultPostgresParamValueLogMinErrorStatement   = "WARNING"
 	defaultPostgresParamValueLogErrorVerbosity      = "VERBOSE"
@@ -211,6 +213,9 @@ type PostgresSpec struct {
 
 	// DedicatedLoadBalancerPort The port to use for the load balancer
 	DedicatedLoadBalancerPort *int32 `json:"dedicatedLoadBalancerPort,omitempty"`
+
+	// DisableLoadBalancers enable or disable the Load Balancers (Services)
+	DisableLoadBalancers *bool `json:"disableLoadBalancers,omitempty"`
 }
 
 // AccessList defines the type of restrictions to access the database
@@ -385,7 +390,7 @@ func (p *Postgres) ToSharedSvcLB(lbIP string, lbPort int32, enableStandbyLeaderS
 
 	lb.Spec.Selector = map[string]string{
 		ApplicationLabelName: ApplicationLabelValue,
-		"cluster-name":       p.ToPeripheralResourceName(),
+		ClusterNameLabelName: p.ToPeripheralResourceName(),
 		"team":               p.generateTeamID(),
 	}
 	if p.IsReplicationPrimaryOrStandalone() {
@@ -400,6 +405,9 @@ func (p *Postgres) ToSharedSvcLB(lbIP string, lbPort int32, enableStandbyLeaderS
 			// select the first pod in the statefulset
 			lb.Spec.Selector[StatefulsetPodNameLabelName] = p.ToPeripheralResourceName() + "-0"
 		}
+	}
+	if p.DisableLoadBalancers() {
+		lb.Spec.Selector[ClusterNameLabelName] = defaultSelectorDisableValue
 	}
 
 	if len(lbIP) > 0 {
@@ -479,7 +487,7 @@ func (p *Postgres) ToDedicatedSvcLB(lbIP string, lbPort int32, standbyClustersSo
 
 	lb.Spec.Selector = map[string]string{
 		ApplicationLabelName: ApplicationLabelValue,
-		"cluster-name":       p.ToPeripheralResourceName(),
+		ClusterNameLabelName: p.ToPeripheralResourceName(),
 		"team":               p.generateTeamID(),
 	}
 	if p.IsReplicationPrimaryOrStandalone() {
@@ -487,6 +495,9 @@ func (p *Postgres) ToDedicatedSvcLB(lbIP string, lbPort int32, standbyClustersSo
 	} else {
 		// select the first pod in the statefulset
 		lb.Spec.Selector[StatefulsetPodNameLabelName] = p.ToPeripheralResourceName() + "-0"
+	}
+	if p.DisableLoadBalancers() {
+		lb.Spec.Selector[ClusterNameLabelName] = defaultSelectorDisableValue
 	}
 
 	if len(lbIP) > 0 {
@@ -1067,4 +1078,12 @@ func (p *Postgres) ToStandbyClusterEgressCWNP() (*firewall.ClusterwideNetworkPol
 	}
 
 	return standbyEgressCWNP, nil
+}
+
+func (p *Postgres) DisableLoadBalancers() bool {
+	if p.Spec.DisableLoadBalancers == nil {
+		return false
+	}
+
+	return *p.Spec.DisableLoadBalancers
 }
