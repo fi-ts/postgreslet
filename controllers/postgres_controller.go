@@ -1502,13 +1502,13 @@ func (r *PostgresReconciler) createOrUpdateExporterSidecarServices(log logr.Logg
 	wgesPort, error := strconv.ParseInt(c.Data[walGExporterServicePortKeyName], 10, 32)
 	if error != nil {
 		log.Error(error, "wal-g-exporter-service-port could not be parsed to int32, falling back to default value")
-		pesPort = 9351
+		wgesPort = 9351
 	}
 
 	wgesTargetPort, error := strconv.ParseInt(c.Data[walGExporterServiceTargetPortKeyName], 10, 32)
 	if error != nil {
 		log.Error(error, "wal-g-exporter-service-target-port could not be parsed to int32, falling back to default value")
-		pesTargetPort = pesPort
+		wgesTargetPort = wgesPort
 	}
 
 	labels := map[string]string{
