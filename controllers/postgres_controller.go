@@ -1071,6 +1071,7 @@ func (r *PostgresReconciler) checkAndUpdatePatroniReplicationConfig(log logr.Log
 		return requeueAfterReconcile, nil
 	}
 
+	log.V(debugLogLevel).Info("got spec", "spec", instance.Spec, "isPrimaryOrStandalone", instance.IsReplicationPrimaryOrStandalone(), "patroniconfig", *resp)
 	if instance.IsReplicationPrimaryOrStandalone() {
 		if resp.StandbyCluster != nil {
 			log.V(debugLogLevel).Info("standby_cluster mismatch, requeing", "response", resp)
@@ -1087,10 +1088,12 @@ func (r *PostgresReconciler) checkAndUpdatePatroniReplicationConfig(log logr.Log
 			}
 			if err := r.CtrlClient.Get(ctx, ns, s); err != nil {
 				r.recorder.Eventf(s, "Warning", "Error", "failed to get referenced sync standby: %v", err)
+				log.V(debugLogLevel).Info("failed to get referenced sync standby", "error", err)
 				synchronousStandbyApplicationName = nil
 			} else {
 				synchronousStandbyApplicationName = pointer.String(s.ToPeripheralResourceName())
 			}
+			log.V(debugLogLevel).Info("check appname and nodesadditional", "appname", synchronousStandbyApplicationName, "nodesAdditional", resp.SynchronousNodesAdditional)
 			// compare the actual value with the expected value
 			if synchronousStandbyApplicationName == nil {
 				log.V(debugLogLevel).Info("could not fetch synchronous_nodes_additional, disabling sync replication and requeing", "response", resp)
