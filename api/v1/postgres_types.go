@@ -276,7 +276,7 @@ type PostgresList struct {
 	Items           []Postgres `json:"items"`
 }
 
-// PostgresConnection A remote postgres instance this one is linked to, e.g. for standby purpouses.
+// PostgresConnection A remote postgres instance this one is linked to, e.g. for standby purposes.
 type PostgresConnection struct {
 	// ConnectedPostgresID internal ID of the connected Postgres instance
 	ConnectedPostgresID string `json:"postgresID,omitempty"`

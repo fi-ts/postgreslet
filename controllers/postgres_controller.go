@@ -211,8 +211,8 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 			return ctrl.Result{}, fmt.Errorf("error while checking if the operator is idle: %w", err)
 		}
 		if !deletable {
-			r.recorder.Event(instance, "Warning", "Self-Reconciliation", "operator not yet deletable, requeueing")
-			log.Info("operator not yet deletable, requeueing")
+			r.recorder.Event(instance, "Warning", "Self-Reconciliation", "operator not yet deletable, requeuing")
+			log.Info("operator not yet deletable, requeuing")
 			return ctrl.Result{Requeue: true}, nil
 		}
 		if err := r.OperatorManager.UninstallOperator(ctx, namespace); err != nil {
@@ -265,7 +265,7 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		}
 	}
 
-	// Request certificate, if neccessary
+	// Request certificate, if necessary
 	if err := r.createOrUpdateCertificate(log, ctx, instance); err != nil {
 		r.recorder.Eventf(instance, "Warning", "Error", "failed to create certificate request: %v", err)
 		return ctrl.Result{}, fmt.Errorf("error while creating certificate request: %w", err)
@@ -277,7 +277,7 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, fmt.Errorf("error while creating postgres secrets: %w", err)
 	}
 
-	// check (and update if neccessary) the current patroni replication config.
+	// check (and update if necessary) the current patroni replication config.
 	requeueAfterReconcile, patroniConfigChangeErr := r.checkAndUpdatePatroniReplicationConfig(log, ctx, instance)
 
 	// create standby egress rule first, so the standby can actually connect to the primary
@@ -339,7 +339,7 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	port := instance.Status.Socket.Port
 	if port == 0 {
 		r.recorder.Event(instance, "Warning", "Self-Reconciliation", "socket port not ready")
-		log.Info("socket port not ready, requeueing")
+		log.Info("socket port not ready, requeuing")
 		return requeue, nil
 	}
 
@@ -352,13 +352,13 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	// when an error occurred while updating the patroni config, requeue here
 	// we try again in the next loop, hoping things will settle
 	if patroniConfigChangeErr != nil {
-		log.Info("Requeueing after getting/setting patroni replication config failed")
+		log.Info("Requeuing after getting/setting patroni replication config failed")
 		return ctrl.Result{Requeue: true, RequeueAfter: 10 * time.Second}, patroniConfigChangeErr
 	}
 	// if the config isn't in the expected state yet (we only add values to an existing config, we do not perform the actual switch), we simply requeue.
-	// on the next reconciliation loop, postgres-operator shoud have catched up and the config should hopefully be correct already so we can continue with adding our values.
+	// on the next reconciliation loop, postgres-operator should have caught up and the config should hopefully be correct already so we can continue with adding our values.
 	if requeueAfterReconcile {
-		log.Info("Requeueing after patroni replication hasn't returned the expected state (yet)")
+		log.Info("Requeuing after patroni replication hasn't returned the expected state (yet)")
 		return ctrl.Result{Requeue: true, RequeueAfter: r.ReplicationChangeRequeueDuration}, nil
 	}
 
@@ -1164,7 +1164,7 @@ func (r *PostgresReconciler) updatePatroniReplicationConfigOnAllPods(log logr.Lo
 	}
 
 	if len(pods.Items) == 0 {
-		log.V(debugLogLevel).Info("no spilo pods found at all, requeueing")
+		log.V(debugLogLevel).Info("no spilo pods found at all, requeuing")
 		return errors.New("no spilo pods found at all")
 	} else if len(pods.Items) < int(instance.Spec.NumberOfInstances) {
 		log.V(debugLogLevel).Info("unexpected number of pods (might be ok if it is still creating)")
@@ -1207,7 +1207,7 @@ func (r *PostgresReconciler) httpPatchPatroni(log logr.Logger, ctx context.Conte
 		if instance.Spec.PostgresConnection.SynchronousReplication {
 			if synchronousStandbyApplicationName == nil {
 				// fetch the sync standby to determine the correct application_name of the instance
-				log.V(debugLogLevel).Info("unexpectetly having to fetch the referenced sync standby")
+				log.V(debugLogLevel).Info("unexpectedly having to fetch the referenced sync standby")
 				s := &pg.Postgres{}
 				ns := types.NamespacedName{
 					Name:      instance.Spec.PostgresConnection.ConnectedPostgresID,
