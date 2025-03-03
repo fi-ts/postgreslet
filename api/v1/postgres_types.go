@@ -216,6 +216,9 @@ type PostgresSpec struct {
 
 	// DisableLoadBalancers enable or disable the Load Balancers (Services)
 	DisableLoadBalancers *bool `json:"disableLoadBalancers,omitempty"`
+
+	// StorageClass custom storage class for this database
+	StorageClass *string `json:"storageClass,omitempty"`
 }
 
 // AccessList defines the type of restrictions to access the database
@@ -707,7 +710,11 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 	z.Spec.Resources.ResourceLimits.Memory = pointer.String(p.Spec.Size.Memory)
 	z.Spec.TeamID = p.generateTeamID()
 	z.Spec.Volume.Size = p.Spec.Size.StorageSize
-	z.Spec.Volume.StorageClass = sc
+	if p.Spec.StorageClass != nil {
+		z.Spec.Volume.StorageClass = *p.Spec.StorageClass
+	} else {
+		z.Spec.Volume.StorageClass = sc
+	}
 
 	z.Spec.Patroni.TTL = patroniTTL
 	z.Spec.Patroni.LoopWait = patroniLoopWait
