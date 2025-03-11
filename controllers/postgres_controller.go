@@ -1693,7 +1693,7 @@ func (r *PostgresReconciler) createOrUpdatePatroniPodMonitor(ctx context.Context
 
 	pm.Spec.PodMetricsEndpoints = []coreosv1.PodMetricsEndpoint{
 		{
-			Port: podMonitorPort,
+			Port: pointer.String(podMonitorPort),
 		},
 	}
 	pm.Spec.NamespaceSelector = coreosv1.NamespaceSelector{
