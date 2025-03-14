@@ -19,7 +19,7 @@ CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
 CONTROLLER_TOOLS_VERSION ?= v0.14.0
 
 # Postgres operator variables for YAML download
-POSTGRES_OPERATOR_VERSION ?= v1.11.0
+POSTGRES_OPERATOR_VERSION ?= v1.13.0
 POSTGRES_OPERATOR_URL ?= https://raw.githubusercontent.com/zalando/postgres-operator/$(POSTGRES_OPERATOR_VERSION)/manifests
 POSTGRES_CRD_URL ?= https://raw.githubusercontent.com/zalando/postgres-operator/$(POSTGRES_OPERATOR_VERSION)/charts/postgres-operator/crds/postgresqls.yaml
 
@@ -238,8 +238,11 @@ localkube-teardown:
 	kind delete cluster --name svc
 
 localkube-install-crd-servicemonitor:
-	kubectl apply --kubeconfig ./kubeconfig-svc -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/v0.45.0/example/prometheus-operator-crd/monitoring.coreos.com_servicemonitors.yaml
-	kubectl apply --kubeconfig ./kubeconfig-svc -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/v0.45.0/example/prometheus-operator-crd/monitoring.coreos.com_podmonitors.yaml
+	kubectl apply --kubeconfig ./kubeconfig-svc -f https://raw.githubusercontent.com/prometheus-community/helm-charts/refs/tags/kube-prometheus-stack-65.5.1/charts/kube-prometheus-stack/charts/crds/crds/crd-servicemonitors.yaml
+	kubectl apply --kubeconfig ./kubeconfig-svc -f https://raw.githubusercontent.com/prometheus-community/helm-charts/refs/tags/kube-prometheus-stack-65.5.1/charts/kube-prometheus-stack/charts/crds/crds/crd-podmonitors.yaml
+
+localkube-install-crd-certmanager:
+	kubectl apply --kubeconfig ./kubeconfig-svc -f https://github.com/cert-manager/cert-manager/releases/download/v1.12.4/cert-manager.crds.yaml
 
 localkube-reinstall-postgreslet: localkube-load-image
 	# helm repo add metal-stack https://helm.metal-stack.io # stable repo
