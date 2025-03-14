@@ -368,13 +368,9 @@ func (p *Postgres) ToSharedSvcLB(lbIP string, lbPort int32, enableStandbyLeaderS
 
 	lbsr := []string{}
 	if p.HasSourceRanges() {
-		for _, src := range p.Spec.AccessList.SourceRanges {
-			lbsr = append(lbsr, src)
-		}
+		lbsr = append(lbsr, p.Spec.AccessList.SourceRanges...)
 	}
-	for _, scsr := range standbyClustersSourceRanges {
-		lbsr = append(lbsr, scsr)
-	}
+	lbsr = append(lbsr, standbyClustersSourceRanges...)
 	if len(lbsr) == 0 {
 		// block by default
 		lbsr = append(lbsr, "255.255.255.255/32")
@@ -465,13 +461,9 @@ func (p *Postgres) ToDedicatedSvcLB(lbIP string, lbPort int32, standbyClustersSo
 
 	lbsr := []string{}
 	if p.HasSourceRanges() {
-		for _, src := range p.Spec.AccessList.SourceRanges {
-			lbsr = append(lbsr, src)
-		}
+		lbsr = append(lbsr, p.Spec.AccessList.SourceRanges...)
 	}
-	for _, scsr := range standbyClustersSourceRanges {
-		lbsr = append(lbsr, scsr)
-	}
+	lbsr = append(lbsr, standbyClustersSourceRanges...)
 	if len(lbsr) == 0 {
 		// block by default
 		lbsr = append(lbsr, "255.255.255.255/32")
