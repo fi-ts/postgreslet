@@ -634,13 +634,10 @@ func (r *PostgresReconciler) updatePodEnvironmentSecret(log logr.Logger, ctx con
 	}
 
 	var s *corev1.Secret
-	ns := types.NamespacedName{
-		Name:      operatormanager.PodEnvCMName,
-		Namespace: p.ToPeripheralResourceNamespace(),
-	}
+	ns := p.ToPeripheralResourceNamespace()
 
-	if s, err = r.OperatorManager.CreateOrGetPodEnvironmentSecret(ctx, ns.Namespace); err != nil {
-		return fmt.Errorf("error while accessing the pod environment secret %v: %w", ns.Namespace, err)
+	if s, err = r.OperatorManager.CreateOrGetPodEnvironmentSecret(ctx, ns); err != nil {
+		return fmt.Errorf("error while accessing the pod environment secret %v: %w", ns, err)
 	}
 
 	s.Data = data
