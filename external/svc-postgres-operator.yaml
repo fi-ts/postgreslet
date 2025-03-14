@@ -422,6 +422,11 @@ items:
             readOnlyRootFilesystem: true
             runAsNonRoot: true
             runAsUser: 1000
+            seccompProfile:
+              type: RuntimeDefault
+            capabilities:
+              drop:
+              - ALL
         serviceAccountName: postgres-operator
 - apiVersion: v1
   kind: Service
