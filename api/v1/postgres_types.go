@@ -27,7 +27,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/yaml"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -701,10 +701,10 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 	setSharedBufferSize(z.Spec.PostgresqlParam.Parameters, p.Spec.Size.SharedBuffer)
 
 	z.Spec.Resources = &zalando.Resources{}
-	z.Spec.Resources.ResourceRequests.CPU = pointer.String(p.Spec.Size.CPU)
-	z.Spec.Resources.ResourceRequests.Memory = pointer.String(p.Spec.Size.Memory)
-	z.Spec.Resources.ResourceLimits.CPU = pointer.String(p.Spec.Size.CPU)
-	z.Spec.Resources.ResourceLimits.Memory = pointer.String(p.Spec.Size.Memory)
+	z.Spec.Resources.ResourceRequests.CPU = ptr.To(p.Spec.Size.CPU)
+	z.Spec.Resources.ResourceRequests.Memory = ptr.To(p.Spec.Size.Memory)
+	z.Spec.Resources.ResourceLimits.CPU = ptr.To(p.Spec.Size.CPU)
+	z.Spec.Resources.ResourceLimits.Memory = ptr.To(p.Spec.Size.Memory)
 	z.Spec.TeamID = p.generateTeamID()
 	z.Spec.Volume.Size = p.Spec.Size.StorageSize
 	z.Spec.Volume.StorageClass = sc
@@ -717,7 +717,7 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 
 	// required with image ermajn/postgres-operator:v1.6.0-20-g1cc71663-dirty
 	// see https://github.com/fi-ts/postgreslet/issues/293
-	z.Spec.EnableConnectionPooler = pointer.Bool(false)
+	z.Spec.EnableConnectionPooler = ptr.To(false)
 
 	prefix := alphaNumericRegExp.ReplaceAllString(string(p.Spec.Tenant), "")
 	prefix = strings.ToLower(prefix)
@@ -777,7 +777,7 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 			S3Endpoint:        rbs.S3Endpoint,
 			S3AccessKeyId:     rbs.S3AccessKey,
 			S3SecretAccessKey: rbs.S3SecretKey,
-			S3ForcePathStyle:  pointer.Bool(true),
+			S3ForcePathStyle:  ptr.To(true),
 		}
 	} else {
 		// if we don't set the clone block, remove it completely
