@@ -31,21 +31,21 @@ jobs:
 
     - name: Ensure etcd
       id: Ensure-etcd
-      uses: actions/cache@v2
+      uses: actions/cache@v4
       with:
         path: ~/go/bin/etcd
         key: ${{ runner.os }}-kubebuilder-${{ steps.get-kubebuilder-version.outputs.version }}-etcd
 
     - name: Ensure kube-apiserver
       id: ensure-kube-apiserver
-      uses: actions/cache@v2
+      uses: actions/cache@v4
       with:
         path: ~/go/bin/kube-apiserver
         key: ${{ runner.os }}-kubebuilder-${{ steps.get-kubebuilder-version.outputs.version }}-kube-apiserver
 
     - name: Ensure Kubebuilder Metadata
       id: ensure-kubebuilder-metadata
-      uses: actions/cache@v2
+      uses: actions/cache@v4
       with:
         path: ~/.kubebuilder/${{ steps.get-kubebuilder-version.outputs.version }}
         key: ${{ runner.os }}-kubebuilder-${{ steps.get-kubebuilder-version.outputs.version }}
