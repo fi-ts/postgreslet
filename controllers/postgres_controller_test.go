@@ -8,7 +8,7 @@ package controllers
 
 import (
 	pg "github.com/fi-ts/postgreslet/api/v1"
-	firewall "github.com/metal-stack/firewall-controller/api/v1"
+	firewall "github.com/metal-stack/firewall-controller/v2/api/v1"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"

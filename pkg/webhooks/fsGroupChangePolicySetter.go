@@ -17,7 +17,7 @@ import (
 // FsGroupChangePolicySetter Adds securityContext.fsGroupChangePolicy=OnRootMismatch when the securityContext.fsGroup field is set
 type FsGroupChangePolicySetter struct {
 	SvcClient client.Client
-	Decoder   *admission.Decoder
+	Decoder   admission.Decoder
 	Log       logr.Logger
 }
 

@@ -443,6 +443,11 @@ func (m *OperatorManager) editConfigMap(cm *corev1.ConfigMap, namespace string, 
 
 	cm.Data["enable_patroni_failsafe_mode"] = strconv.FormatBool(options.PatroniFailsafeMode)
 
+	// override teams_api related defaults
+	cm.Data["enable_teams_api"] = strconv.FormatBool(false)
+	cm.Data["postgres_superuser_teams"] = ""
+	cm.Data["teams_api_url"] = ""
+
 }
 
 // ensureCleanMetadata ensures obj has clean metadata
