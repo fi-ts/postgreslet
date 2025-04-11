@@ -24,6 +24,7 @@ import (
 
 	"github.com/go-logr/logr"
 	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
+	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/tools/record"
@@ -68,6 +69,7 @@ const (
 	walGEncryptionSecretNamePostfix                string = "-walg-encryption"
 	walGEncryptionSecretKeyName                    string = "key"
 	podMonitorName                                 string = "patroni"
+	walGExporterName                               string = "wal-g-exporter"
 	podMonitorPort                                 string = "8008"
 	initDBName                                     string = "postgres-initdb"
 	initDBSQLDummy                                 string = `SELECT 'NOOP';`
@@ -334,6 +336,12 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		r.recorder.Eventf(instance, "Warning", "Error", "failed to create Service: %v", err)
 		return ctrl.Result{}, err
 	}
+
+	if err := r.createOrUpdateWalGExporterDeployment(ctx, namespace, instance, globalSidecarsCM); err != nil {
+		r.recorder.Eventf(instance, "Warning", "Error", "failed to deploy wal-g-exporter: %v", err)
+		return ctrl.Result{}, fmt.Errorf("error while deploying wal-g-exporter %v: %w", namespace, err)
+	}
+	// TODO add wal-g-exporter podMonitor (or service + serviceMonitor)
 
 	// Check if socket port is ready
 	port := instance.Status.Socket.Port
@@ -2027,5 +2035,173 @@ func (r *PostgresReconciler) createOrUpdateCertificate(log logr.Logger, ctx cont
 	}
 
 	log.V(debugLogLevel).Info("certificate created or updated")
+	return nil
+}
+
+// createOrUpdateWalGExporterDeployment ensures the deployment for the wal-g-exporter
+func (r *PostgresReconciler) createOrUpdateWalGExporterDeployment(ctx context.Context, namespace string, instance *pg.Postgres, configMap *corev1.ConfigMap) error {
+	log := r.Log.WithValues("namespace", namespace)
+
+	labels := map[string]string{
+		"app": "wal-g-exporter",
+	}
+
+	annotations := map[string]string{}
+
+	matchLabels := labels
+
+	deploy := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        walGExporterName,
+			Namespace:   namespace,
+			Labels:      labels,
+			Annotations: annotations,
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: pointer.Int32(1),
+			Selector: &metav1.LabelSelector{
+				MatchLabels: matchLabels,
+			},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        walGExporterName,
+					Namespace:   namespace,
+					Labels:      labels,
+					Annotations: annotations,
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Command: []string{"wal-g-prometheus-exporter"},
+							Env: []corev1.EnvVar{
+								{
+									Name:  "PGHOST",
+									Value: instance.ToPeripheralResourceName(),
+								},
+								{
+									Name:  "PGPORT",
+									Value: "5432",
+								},
+								{
+									Name:  "PGDATABASE",
+									Value: "postgres",
+								},
+								{
+									Name:  "PGUSER",
+									Value: "monitoring",
+								},
+								{
+									Name: "PGPASSWORD",
+									ValueFrom: &corev1.EnvVarSource{
+										SecretKeyRef: &corev1.SecretKeySelector{
+											Key: "password",
+											LocalObjectReference: corev1.LocalObjectReference{
+												Name: "monitoring." + instance.ToPeripheralResourceName() + ".credentials",
+											},
+										},
+									},
+								},
+								{
+									Name: "AWS_ACCESS_KEY_ID",
+									ValueFrom: &corev1.EnvVarSource{
+										SecretKeyRef: &corev1.SecretKeySelector{
+											Key: "AWS_ACCESS_KEY_ID",
+											LocalObjectReference: corev1.LocalObjectReference{
+												Name: operatormanager.PodEnvSecretName,
+											},
+										},
+									},
+								},
+								{
+									Name: "AWS_SECRET_ACCESS_KEY",
+									ValueFrom: &corev1.EnvVarSource{
+										SecretKeyRef: &corev1.SecretKeySelector{
+											Key: "AWS_SECRET_ACCESS_KEY",
+											LocalObjectReference: corev1.LocalObjectReference{
+												Name: operatormanager.PodEnvSecretName,
+											},
+										},
+									},
+								},
+								{
+									Name: "AWS_ENDPOINT",
+									ValueFrom: &corev1.EnvVarSource{
+										ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+											Key: "AWS_ENDPOINT",
+											LocalObjectReference: corev1.LocalObjectReference{
+												Name: operatormanager.PodEnvCMName,
+											},
+										},
+									},
+								},
+								{
+									Name: "AWS_S3_FORCE_PATH_STYLE",
+									ValueFrom: &corev1.EnvVarSource{
+										ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+											Key: "AWS_S3_FORCE_PATH_STYLE",
+											LocalObjectReference: corev1.LocalObjectReference{
+												Name: operatormanager.PodEnvCMName,
+											},
+										},
+									},
+								},
+								{
+									Name: "WALG_S3_PREFIX",
+									ValueFrom: &corev1.EnvVarSource{
+										ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+											Key: "WALG_S3_PREFIX",
+											LocalObjectReference: corev1.LocalObjectReference{
+												Name: operatormanager.PodEnvCMName,
+											},
+										},
+									},
+								},
+							},
+							// TODO get actual value from helm chart / r.SidecarsConfigMapName
+							Image: "registry.fits.cloud/cloud-services/images/wal-g-exporter:0.3.1",
+							Name:  "wal-g-exporter",
+							SecurityContext: &corev1.SecurityContext{
+								AllowPrivilegeEscalation: pointer.Bool(false),
+								Privileged:               pointer.Bool(false),
+								ReadOnlyRootFilesystem:   pointer.Bool(true),
+								RunAsNonRoot:             pointer.Bool(true),
+								RunAsUser:                pointer.Int64(101),
+								RunAsGroup:               pointer.Int64(101),
+								Capabilities: &corev1.Capabilities{
+									Drop: []corev1.Capability{"ALL"},
+								},
+								SeccompProfile: &corev1.SeccompProfile{
+									Type: corev1.SeccompProfileTypeRuntimeDefault,
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	// try to fetch any existing deployment
+	ns := types.NamespacedName{
+		Namespace: namespace,
+		Name:      walGExporterName,
+	}
+	old := &appsv1.Deployment{}
+	if err := r.SvcClient.Get(ctx, ns, old); err == nil {
+		// Copy the resource version
+		deploy.ObjectMeta.ResourceVersion = old.ObjectMeta.ResourceVersion
+		if err := r.SvcClient.Update(ctx, deploy); err != nil {
+			return fmt.Errorf("error while updating the wal-g-exporter deployment: %w", err)
+		}
+		log.Info("wal-g-exporter deployment updated")
+		return nil
+	}
+
+	// local deployment does not exist, creating it
+	if err := r.SvcClient.Create(ctx, deploy); err != nil {
+		return fmt.Errorf("error while creating the wal-g-exporter deployment: %w", err)
+	}
+	log.Info("wal-g-exporter deployment created")
+
 	return nil
 }
