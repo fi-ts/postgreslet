@@ -165,6 +165,9 @@ spec:
                   memory:
                     description: Memory is in the format as pod.spec.resource.request.memory
                     type: string
+                  memoryfactor:
+                    description: Memoryfactor used to calculate the memory
+                    type: integer
                   sharedBuffer:
                     description: SharedBuffer of the database
                     type: string
