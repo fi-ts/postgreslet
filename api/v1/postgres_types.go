@@ -233,6 +233,8 @@ type Size struct {
 	Memory string `json:"memory,omitempty"`
 	// SharedBuffer of the database
 	SharedBuffer string `json:"sharedBuffer,omitempty"`
+	// Memoryfactor used to calculate the memory
+	MemoryFactor uint8 `json:"memoryfactor,omitempty"`
 
 	// StorageSize the amount of Storage this database will get
 	// +kubebuilder:default="1Gi"
