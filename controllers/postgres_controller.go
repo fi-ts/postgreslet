@@ -112,6 +112,7 @@ type PostgresReconciler struct {
 	TLSClusterIssuer                    string
 	TLSSubDomain                        string
 	EnableWalGExporter                  bool
+	WalGExporterImage                   string
 }
 
 type PatroniStandbyCluster struct {
@@ -337,7 +338,7 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, err
 	}
 
-	if err := r.createOrUpdateWalGExporterDeployment(ctx, namespace, instance); err != nil {
+	if err := r.createOrUpdateWalGExporterDeployment(ctx, namespace, instance, globalSidecarsCM); err != nil {
 		r.recorder.Eventf(instance, "Warning", "Error", "failed to deploy wal-g-exporter: %v", err)
 		return ctrl.Result{}, fmt.Errorf("error while deploying wal-g-exporter %v: %w", namespace, err)
 	}
@@ -2039,7 +2040,7 @@ func (r *PostgresReconciler) createOrUpdateCertificate(log logr.Logger, ctx cont
 }
 
 // createOrUpdateWalGExporterDeployment ensures the deployment for the wal-g-exporter
-func (r *PostgresReconciler) createOrUpdateWalGExporterDeployment(ctx context.Context, namespace string, instance *pg.Postgres) error {
+func (r *PostgresReconciler) createOrUpdateWalGExporterDeployment(ctx context.Context, namespace string, instance *pg.Postgres, sidecarsCM *corev1.ConfigMap) error {
 	log := r.Log.WithValues("namespace", namespace)
 
 	labels := map[string]string{
@@ -2157,8 +2158,7 @@ func (r *PostgresReconciler) createOrUpdateWalGExporterDeployment(ctx context.Co
 									},
 								},
 							},
-							// TODO get actual value from helm chart / r.SidecarsConfigMapName
-							Image: "registry.fits.cloud/cloud-services/images/wal-g-exporter:0.3.1",
+							Image: r.WalGExporterImage,
 							Name:  "wal-g-exporter",
 							SecurityContext: &corev1.SecurityContext{
 								AllowPrivilegeEscalation: pointer.Bool(false),
