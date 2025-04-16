@@ -90,6 +90,7 @@ const (
 	enablePatroniFailsafeModeFlg           = "enable-patroni-failsafe-mode"
 	enableFsGroupChangePolicyWebhookFlg    = "enable-fsgroup-change-policy-webhook"
 	enableWalGExporterFlg                  = "enable-wal-g-exporter"
+	walGExporterImageFlg                   = "wal-g-exporter-image"
 )
 
 var (
@@ -135,6 +136,7 @@ func main() {
 		initDBJobCMName         string
 		tlsClusterIssuer        string
 		tlsSubDomain            string
+		walGExporterImage       string
 
 		enableLeaderElection                bool
 		enableCRDRegistration               bool
@@ -320,6 +322,8 @@ func main() {
 	viper.SetDefault(enableWalGExporterFlg, true)
 	enableWalGExporter = viper.GetBool(enableWalGExporterFlg)
 
+	walGExporterImage = viper.GetString(walGExporterImageFlg)
+
 	ctrl.Log.Info("flag",
 		metricsAddrSvcMgrFlg, metricsAddrSvcMgr,
 		metricsAddrCtrlMgrFlg, metricsAddrCtrlMgr,
@@ -366,6 +370,7 @@ func main() {
 		enablePatroniFailsafeModeFlg, enablePatroniFailsafeMode,
 		enableFsGroupChangePolicyWebhookFlg, enableFsGroupChangePolicyWebhook,
 		enableWalGExporterFlg, enableWalGExporter,
+		walGExporterImageFlg, walGExporterImage,
 	)
 
 	svcClusterConf := ctrl.GetConfigOrDie()
@@ -485,6 +490,7 @@ func main() {
 		TLSClusterIssuer:                    tlsClusterIssuer,
 		TLSSubDomain:                        tlsSubDomain,
 		EnableWalGExporter:                  enableWalGExporter,
+		WalGExporterImage:                   walGExporterImage,
 	}).SetupWithManager(ctrlPlaneClusterMgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Postgres")
 		os.Exit(1)
