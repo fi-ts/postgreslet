@@ -338,9 +338,17 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, err
 	}
 
-	if err := r.createOrUpdateWalGExporterDeployment(ctx, namespace, instance); err != nil {
-		r.recorder.Eventf(instance, "Warning", "Error", "failed to deploy wal-g-exporter: %v", err)
-		return ctrl.Result{}, fmt.Errorf("error while deploying wal-g-exporter %v: %w", namespace, err)
+	if r.EnableWalGExporter {
+		if err := r.createOrUpdateWalGExporterDeployment(ctx, namespace, instance); err != nil {
+			r.recorder.Eventf(instance, "Warning", "Error", "failed to deploy wal-g-exporter: %v", err)
+			return ctrl.Result{}, fmt.Errorf("error while deploying wal-g-exporter %v: %w", namespace, err)
+		}
+	} else {
+		// remove wal-g-exporter when disabled
+		if err := r.deleteWalGExporterDeployment(ctx, namespace); err != nil {
+			r.recorder.Eventf(instance, "Warning", "Error", "failed to delete wal-g-exporter: %v", err)
+			return ctrl.Result{}, fmt.Errorf("error while deleting wal-g-exporter: %w", err)
+		}
 	}
 	// TODO add wal-g-exporter podMonitor (or service + serviceMonitor)
 
@@ -2201,26 +2209,7 @@ func (r *PostgresReconciler) createOrUpdateWalGExporterDeployment(ctx context.Co
 		Name:      walGExporterName,
 	}
 	old := &appsv1.Deployment{}
-	err := r.SvcClient.Get(ctx, ns, old)
-
-	// remove wal-g-exporter when disabled
-	if !r.EnableWalGExporter {
-
-		if err == nil {
-			// found existing deployment, removing it
-			if err := r.SvcClient.Delete(ctx, old); err != nil {
-				return fmt.Errorf("error while deleting the wal-g-exporter deployment: %w", err)
-			}
-			log.Info("wal-g-exporter deployment deleted")
-			return nil
-		}
-
-		// nothing found and nothing to create
-		log.Info("wal-g-exporter deployment disabled")
-		return nil
-	}
-
-	if err == nil {
+	if err := r.SvcClient.Get(ctx, ns, old); err == nil {
 		// Copy the resource version
 		deploy.ObjectMeta.ResourceVersion = old.ObjectMeta.ResourceVersion
 		if err := r.SvcClient.Update(ctx, deploy); err != nil {
@@ -2236,5 +2225,19 @@ func (r *PostgresReconciler) createOrUpdateWalGExporterDeployment(ctx context.Co
 	}
 	log.Info("wal-g-exporter deployment created")
 
+	return nil
+}
+
+// deleteWalGExporterDeployment Deletes our wal-g-exporter Deployment, if it exists.
+func (r *PostgresReconciler) deleteWalGExporterDeployment(ctx context.Context, namespace string) error {
+	d := &appsv1.Deployment{}
+	d.Namespace = namespace
+	d.Name = walGExporterName
+	if err := r.SvcClient.Delete(ctx, d); err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil
+		}
+		return fmt.Errorf("error while deleting the wal-g-exporter deployment: %w", err)
+	}
 	return nil
 }
