@@ -2165,8 +2165,8 @@ func (r *PostgresReconciler) createOrUpdateWalGExporterDeployment(log logr.Logge
 							},
 							Resources: corev1.ResourceRequirements{
 								Limits: corev1.ResourceList{
-									corev1.ResourceLimitsCPU:    resource.MustParse(r.WalGExporterCPULimit),
-									corev1.ResourceLimitsMemory: resource.MustParse(r.WalGExporterMemoryLimit),
+									corev1.ResourceCPU:    resource.MustParse(r.WalGExporterCPULimit),
+									corev1.ResourceMemory: resource.MustParse(r.WalGExporterMemoryLimit),
 								},
 							},
 							SecurityContext: &corev1.SecurityContext{
