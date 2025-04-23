@@ -1516,18 +1516,6 @@ func (r *PostgresReconciler) createOrUpdateExporterSidecarServices(log logr.Logg
 		pesTargetPort = pesPort
 	}
 
-	wgesPort, error := strconv.ParseInt(c.Data[walGExporterServicePortKeyName], 10, 32)
-	if error != nil {
-		log.Error(error, "wal-g-exporter-service-port could not be parsed to int32, falling back to default value")
-		wgesPort = 9351
-	}
-
-	wgesTargetPort, error := strconv.ParseInt(c.Data[walGExporterServiceTargetPortKeyName], 10, 32)
-	if error != nil {
-		log.Error(error, "wal-g-exporter-service-target-port could not be parsed to int32, falling back to default value")
-		wgesTargetPort = wgesPort
-	}
-
 	labels := map[string]string{
 		// pg.ApplicationLabelName: pg.ApplicationLabelValue, // TODO check if we still need that label, IsOperatorDeletable won't work anymore if we set it.
 		"app": "postgres-exporter",
@@ -1553,15 +1541,6 @@ func (r *PostgresReconciler) createOrUpdateExporterSidecarServices(log logr.Logg
 			Protocol:   corev1.ProtocolTCP,
 			TargetPort: intstr.FromInt(int(pesTargetPort)),
 		},
-	}
-	if r.EnableWalGExporter {
-		wgesp := corev1.ServicePort{
-			Name:       walGExporterServicePortName,
-			Port:       int32(wgesPort), //nolint
-			Protocol:   corev1.ProtocolTCP,
-			TargetPort: intstr.FromInt(int(wgesTargetPort)),
-		}
-		pes.Spec.Ports = append(pes.Spec.Ports, wgesp)
 	}
 	selector := map[string]string{
 		pg.ApplicationLabelName: pg.ApplicationLabelValue,
@@ -1637,12 +1616,6 @@ func (r *PostgresReconciler) createOrUpdateExporterSidecarServiceMonitor(log log
 		{
 			Port: postgresExporterServicePortName,
 		},
-	}
-	if r.EnableWalGExporter {
-		wgesme := coreosv1.Endpoint{
-			Port: walGExporterServicePortName,
-		}
-		pesm.Spec.Endpoints = append(pesm.Spec.Endpoints, wgesme)
 	}
 	pesm.Spec.NamespaceSelector = coreosv1.NamespaceSelector{
 		MatchNames: []string{namespace},
@@ -2168,6 +2141,13 @@ func (r *PostgresReconciler) createOrUpdateWalGExporterDeployment(ctx context.Co
 							},
 							Image: r.WalGExporterImage,
 							Name:  "wal-g-exporter",
+							Ports: []corev1.ContainerPort{
+								{
+									Name:          "wal-g-exporter",
+									ContainerPort: 9351,
+									Protocol:      corev1.ProtocolTCP,
+								},
+							},
 							SecurityContext: &corev1.SecurityContext{
 								AllowPrivilegeEscalation: pointer.Bool(false),
 								Privileged:               pointer.Bool(false),
