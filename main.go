@@ -89,8 +89,8 @@ const (
 	tlsSubDomainFlg                        = "tls-sub-domain"
 	enablePatroniFailsafeModeFlg           = "enable-patroni-failsafe-mode"
 	enableFsGroupChangePolicyWebhookFlg    = "enable-fsgroup-change-policy-webhook"
-	enableWalGExporterFlg                  = "enable-wal-g-exporter"
-	walGExporterImageFlg                   = "wal-g-exporter-image"
+	enableWalGExporterFlg                  = "enable-walg-exporter"
+	walGExporterImageFlg                   = "walg-exporter-image"
 )
 
 var (
