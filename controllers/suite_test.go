@@ -29,7 +29,7 @@ import (
 	pg "github.com/fi-ts/postgreslet/api/v1"
 	"github.com/fi-ts/postgreslet/pkg/lbmanager"
 	"github.com/fi-ts/postgreslet/pkg/operatormanager"
-	firewall "github.com/metal-stack/firewall-controller/api/v1"
+	firewall "github.com/metal-stack/firewall-controller/v2/api/v1"
 	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"

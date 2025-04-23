@@ -28,9 +28,9 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/tools/record"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 
-	firewall "github.com/metal-stack/firewall-controller/api/v1"
+	firewall "github.com/metal-stack/firewall-controller/v2/api/v1"
 	coreosv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -656,13 +656,10 @@ func (r *PostgresReconciler) updatePodEnvironmentSecret(log logr.Logger, ctx con
 	}
 
 	var s *corev1.Secret
-	ns := types.NamespacedName{
-		Name:      operatormanager.PodEnvCMName,
-		Namespace: p.ToPeripheralResourceNamespace(),
-	}
+	ns := p.ToPeripheralResourceNamespace()
 
-	if s, err = r.OperatorManager.CreateOrGetPodEnvironmentSecret(ctx, ns.Namespace); err != nil {
-		return fmt.Errorf("error while accessing the pod environment secret %v: %w", ns.Namespace, err)
+	if s, err = r.OperatorManager.CreateOrGetPodEnvironmentSecret(ctx, ns); err != nil {
+		return fmt.Errorf("error while accessing the pod environment secret %v: %w", ns, err)
 	}
 
 	s.Data = data
@@ -1111,7 +1108,7 @@ func (r *PostgresReconciler) checkAndUpdatePatroniReplicationConfig(log logr.Log
 				r.recorder.Eventf(s, "Warning", "Error", "failed to get referenced sync standby: %v", err)
 				synchronousStandbyApplicationName = nil
 			} else {
-				synchronousStandbyApplicationName = pointer.String(s.ToPeripheralResourceName())
+				synchronousStandbyApplicationName = ptr.To(s.ToPeripheralResourceName())
 			}
 			// compare the actual value with the expected value
 			if synchronousStandbyApplicationName == nil {
@@ -1239,7 +1236,7 @@ func (r *PostgresReconciler) httpPatchPatroni(log logr.Logger, ctx context.Conte
 					r.recorder.Eventf(s, "Warning", "Error", "failed to get referenced sync standby: %v", err)
 					synchronousStandbyApplicationName = nil
 				} else {
-					synchronousStandbyApplicationName = pointer.String(s.ToPeripheralResourceName())
+					synchronousStandbyApplicationName = ptr.To(s.ToPeripheralResourceName())
 				}
 			}
 			// enable sync replication
@@ -1688,7 +1685,7 @@ func (r *PostgresReconciler) createOrUpdatePatroniPodMonitor(ctx context.Context
 
 	pm.Spec.PodMetricsEndpoints = []coreosv1.PodMetricsEndpoint{
 		{
-			Port: podMonitorPort,
+			Port: ptr.To(podMonitorPort),
 		},
 	}
 	pm.Spec.NamespaceSelector = coreosv1.NamespaceSelector{
@@ -1915,6 +1912,10 @@ func (r *PostgresReconciler) ensureInitDBJob(log logr.Logger, ctx context.Contex
 	j.Name = ns.Name
 	j.Namespace = ns.Namespace
 
+	var uid int64 = 101
+	var gid int64 = 101
+	var ttl int32 = 180
+
 	var backOffLimit int32 = 99
 	j.Spec = batchv1.JobSpec{
 		Template: corev1.PodTemplateSpec{
@@ -1946,12 +1947,12 @@ func (r *PostgresReconciler) ensureInitDBJob(log logr.Logger, ctx context.Contex
 							},
 						},
 						SecurityContext: &corev1.SecurityContext{
-							AllowPrivilegeEscalation: pointer.Bool(false),
-							Privileged:               pointer.Bool(false),
-							ReadOnlyRootFilesystem:   pointer.Bool(true),
-							RunAsNonRoot:             pointer.Bool(true),
-							RunAsUser:                pointer.Int64(101),
-							RunAsGroup:               pointer.Int64(101),
+							AllowPrivilegeEscalation: ptr.To(false),
+							Privileged:               ptr.To(false),
+							ReadOnlyRootFilesystem:   ptr.To(true),
+							RunAsNonRoot:             ptr.To(true),
+							RunAsUser:                ptr.To(uid),
+							RunAsGroup:               ptr.To(gid),
 							Capabilities: &corev1.Capabilities{
 								Drop: []corev1.Capability{"ALL"},
 							},
@@ -1983,7 +1984,7 @@ func (r *PostgresReconciler) ensureInitDBJob(log logr.Logger, ctx context.Contex
 			},
 		},
 		BackoffLimit:            &backOffLimit,
-		TTLSecondsAfterFinished: pointer.Int32(180),
+		TTLSecondsAfterFinished: ptr.To(ttl),
 	}
 
 	if err := r.SvcClient.Create(ctx, j); err != nil {
