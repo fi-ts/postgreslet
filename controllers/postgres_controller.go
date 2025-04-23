@@ -2050,6 +2050,7 @@ func (r *PostgresReconciler) createOrUpdateWalGExporterDeployment(log logr.Logge
 	matchLabels := labels
 
 	var replicas int32 = 1
+
 	var uid int64 = 65534
 	var gid int64 = 65534
 
