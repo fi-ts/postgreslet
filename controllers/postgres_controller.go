@@ -111,6 +111,8 @@ type PostgresReconciler struct {
 	TLSSubDomain                        string
 	EnableWalGExporter                  bool
 	WalGExporterImage                   string
+	WalGExporterCPULimit                string
+	WalGExporterMemoryLimit             string
 }
 
 type PatroniStandbyCluster struct {
@@ -2161,7 +2163,12 @@ func (r *PostgresReconciler) createOrUpdateWalGExporterDeployment(log logr.Logge
 									Protocol:      corev1.ProtocolTCP,
 								},
 							},
-							// TODO make resource limits configurable
+							Resources: corev1.ResourceRequirements{
+								Limits: corev1.ResourceList{
+									corev1.ResourceLimitsCPU:    resource.MustParse(r.WalGExporterCPULimit),
+									corev1.ResourceLimitsMemory: resource.MustParse(r.WalGExporterMemoryLimit),
+								},
+							},
 							SecurityContext: &corev1.SecurityContext{
 								AllowPrivilegeEscalation: ptr.To(false),
 								Privileged:               ptr.To(false),

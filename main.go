@@ -18,6 +18,7 @@ import (
 	coreosv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
 	appsv1 "k8s.io/api/apps/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
@@ -91,6 +92,8 @@ const (
 	enableFsGroupChangePolicyWebhookFlg    = "enable-fsgroup-change-policy-webhook"
 	enableWalGExporterFlg                  = "enable-walg-exporter"
 	walGExporterImageFlg                   = "walg-exporter-image"
+	walGExporterCPULimitFlg                = "walg-exporter-cpu-limit"
+	walGExporterMemoryLimitFlg             = "walg-exporter-memory-limit"
 )
 
 var (
@@ -137,6 +140,8 @@ func main() {
 		tlsClusterIssuer        string
 		tlsSubDomain            string
 		walGExporterImage       string
+		walGExporterCPULimit    string
+		walGExporterMemoryLimit string
 
 		enableLeaderElection                bool
 		enableCRDRegistration               bool
@@ -322,7 +327,16 @@ func main() {
 	viper.SetDefault(enableWalGExporterFlg, true)
 	enableWalGExporter = viper.GetBool(enableWalGExporterFlg)
 
+	viper.SetDefault(walGExporterImage, "ghcr.io/thedatabaseme/wal-g-exporter:0.3.1")
 	walGExporterImage = viper.GetString(walGExporterImageFlg)
+
+	viper.SetDefault(walGExporterCPULimitFlg, "500m")
+	walGExporterCPULimit = viper.GetString(walGExporterCPULimitFlg)
+	resource.MustParse(walGExporterCPULimit)
+
+	viper.SetDefault(walGExporterMemoryLimit, "500M")
+	walGExporterMemoryLimit = viper.GetString(walGExporterMemoryLimitFlg)
+	resource.MustParse(walGExporterMemoryLimit)
 
 	ctrl.Log.Info("flag",
 		metricsAddrSvcMgrFlg, metricsAddrSvcMgr,
@@ -371,6 +385,8 @@ func main() {
 		enableFsGroupChangePolicyWebhookFlg, enableFsGroupChangePolicyWebhook,
 		enableWalGExporterFlg, enableWalGExporter,
 		walGExporterImageFlg, walGExporterImage,
+		walGExporterCPULimitFlg, walGExporterCPULimit,
+		walGExporterMemoryLimitFlg, walGExporterMemoryLimit,
 	)
 
 	svcClusterConf := ctrl.GetConfigOrDie()
@@ -491,6 +507,8 @@ func main() {
 		TLSSubDomain:                        tlsSubDomain,
 		EnableWalGExporter:                  enableWalGExporter,
 		WalGExporterImage:                   walGExporterImage,
+		WalGExporterCPULimit:                walGExporterCPULimit,
+		WalGExporterMemoryLimit:             walGExporterMemoryLimit,
 	}).SetupWithManager(ctrlPlaneClusterMgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Postgres")
 		os.Exit(1)
