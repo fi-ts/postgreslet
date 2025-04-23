@@ -249,8 +249,14 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		log.V(debugLogLevel).Info("finalizer added")
 	}
 
+	backupConfig, err := r.getBackupConfig(ctx, instance.Namespace, instance.Spec.BackupSecretRef)
+	if err != nil {
+		r.recorder.Eventf(instance, "Warning", "Self-Reconciliation", "failed to fetch backupConfig: %v", err)
+		return ctrl.Result{}, fmt.Errorf("failed to fetch backupConfig: %w", err)
+	}
+
 	// Check if zalando dependencies are installed. If not, install them.
-	if err := r.ensureZalandoDependencies(log, ctx, instance); err != nil {
+	if err := r.ensureZalandoDependencies(log, ctx, instance, backupConfig); err != nil {
 		r.recorder.Eventf(instance, "Warning", "Error", "failed to install operator: %v", err)
 		return ctrl.Result{}, fmt.Errorf("error while ensuring Zalando dependencies: %w", err)
 	}
@@ -306,7 +312,7 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	}
 
 	// Add service monitor for our exporter sidecar
-	err := r.createOrUpdateExporterSidecarServiceMonitor(log, ctx, namespace, instance)
+	err = r.createOrUpdateExporterSidecarServiceMonitor(log, ctx, namespace, instance)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("error while creating sidecars servicemonitor %v: %w", namespace, err)
 	}
@@ -339,7 +345,7 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	}
 
 	if r.EnableWalGExporter {
-		if err := r.createOrUpdateWalGExporterDeployment(log, ctx, namespace, instance); err != nil {
+		if err := r.createOrUpdateWalGExporterDeployment(log, ctx, namespace, instance, backupConfig); err != nil {
 			r.recorder.Eventf(instance, "Warning", "Error", "failed to deploy wal-g-exporter: %v", err)
 			return ctrl.Result{}, fmt.Errorf("error while deploying wal-g-exporter %v: %w", namespace, err)
 		}
@@ -477,7 +483,7 @@ func (r *PostgresReconciler) deleteUserPasswordsSecret(ctx context.Context, inst
 }
 
 // ensureZalandoDependencies makes sure Zalando resources are installed in the service-cluster.
-func (r *PostgresReconciler) ensureZalandoDependencies(log logr.Logger, ctx context.Context, p *pg.Postgres) error {
+func (r *PostgresReconciler) ensureZalandoDependencies(log logr.Logger, ctx context.Context, p *pg.Postgres, b *pg.BackupConfig) error {
 	namespace := p.ToPeripheralResourceNamespace()
 	isInstalled, err := r.OperatorManager.IsOperatorInstalled(ctx, namespace)
 	if err != nil {
@@ -490,7 +496,7 @@ func (r *PostgresReconciler) ensureZalandoDependencies(log logr.Logger, ctx cont
 		}
 	}
 
-	if err := r.updatePodEnvironmentConfigMap(log, ctx, p); err != nil {
+	if err := r.updatePodEnvironmentConfigMap(log, ctx, p, b); err != nil {
 		return fmt.Errorf("error while updating backup config: %w", err)
 	}
 
@@ -501,18 +507,13 @@ func (r *PostgresReconciler) ensureZalandoDependencies(log logr.Logger, ctx cont
 	return nil
 }
 
-func (r *PostgresReconciler) updatePodEnvironmentConfigMap(log logr.Logger, ctx context.Context, p *pg.Postgres) error {
-	if p.Spec.BackupSecretRef == "" {
-		log.Info("No configured backupSecretRef found, skipping configuration of postgres backup")
+func (r *PostgresReconciler) updatePodEnvironmentConfigMap(log logr.Logger, ctx context.Context, p *pg.Postgres, b *pg.BackupConfig) error {
+	if b == nil {
+		log.Info("No backupConfig found, skipping configuration of postgres backup")
 		return nil
 	}
 
-	backupConfig, err := r.getBackupConfig(ctx, p.Namespace, p.Spec.BackupSecretRef)
-	if err != nil {
-		return err
-	}
-
-	s3url, err := url.Parse(backupConfig.S3Endpoint)
+	s3url, err := url.Parse(b.S3Endpoint)
 	if err != nil {
 		return fmt.Errorf("error while parsing the s3 endpoint url in the backup secret: %w", err)
 	}
@@ -523,7 +524,7 @@ func (r *PostgresReconciler) updatePodEnvironmentConfigMap(log logr.Logger, ctx 
 	// use the modified s3 endpoint
 	walES3Endpoint := s3url.String()
 	// region
-	region := backupConfig.S3Region
+	region := b.S3Region
 
 	// set the WALG_UPLOAD_DISK_CONCURRENCY based on the configured cpu limits
 	q, err := resource.ParseQuantity(p.Spec.Size.CPU)
@@ -540,9 +541,9 @@ func (r *PostgresReconciler) updatePodEnvironmentConfigMap(log logr.Logger, ctx 
 	downloadConcurrency := "32"
 
 	// use the rest as provided in the secret
-	bucketName := backupConfig.S3BucketName
-	backupSchedule := backupConfig.Schedule
-	backupNumToRetain := backupConfig.Retention
+	bucketName := b.S3BucketName
+	backupSchedule := b.Schedule
+	backupNumToRetain := b.Retention
 
 	// s3 server side encryption SSE is disabled
 	// we use client side encryption
@@ -2029,7 +2030,12 @@ func (r *PostgresReconciler) createOrUpdateCertificate(log logr.Logger, ctx cont
 }
 
 // createOrUpdateWalGExporterDeployment ensures the deployment for the wal-g-exporter
-func (r *PostgresReconciler) createOrUpdateWalGExporterDeployment(log logr.Logger, ctx context.Context, namespace string, instance *pg.Postgres) error {
+func (r *PostgresReconciler) createOrUpdateWalGExporterDeployment(log logr.Logger, ctx context.Context, namespace string, instance *pg.Postgres, b *pg.BackupConfig) error {
+	if b == nil {
+		log.Info("No backupConfig found, skipping configuration of wa-l-exporter")
+		return nil
+	}
+
 	labels := map[string]string{
 		"app.kubernetes.io/name": walGExporterName,
 		pg.UIDLabelName:          string(instance.UID),
@@ -2099,10 +2105,6 @@ func (r *PostgresReconciler) createOrUpdateWalGExporterDeployment(log logr.Logge
 									},
 								},
 								{
-									Name:  "SCOPE",
-									Value: instance.ToPeripheralResourceName(),
-								},
-								{
 									Name: "AWS_ACCESS_KEY_ID",
 									ValueFrom: &corev1.EnvVarSource{
 										SecretKeyRef: &corev1.SecretKeySelector{
@@ -2147,15 +2149,8 @@ func (r *PostgresReconciler) createOrUpdateWalGExporterDeployment(log logr.Logge
 									},
 								},
 								{
-									Name: "WALG_S3_PREFIX",
-									ValueFrom: &corev1.EnvVarSource{
-										ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
-											Key: "WALG_S3_PREFIX",
-											LocalObjectReference: corev1.LocalObjectReference{
-												Name: operatormanager.PodEnvCMName,
-											},
-										},
-									},
+									Name:  "WALG_S3_PREFIX",
+									Value: "s3://" + b.S3BucketName + "/" + instance.ToPeripheralResourceName(),
 								},
 							},
 							Image: r.WalGExporterImage,
