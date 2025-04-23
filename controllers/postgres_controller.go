@@ -2044,8 +2044,8 @@ func (r *PostgresReconciler) createOrUpdateWalGExporterDeployment(log logr.Logge
 	matchLabels := labels
 
 	var replicas int32 = 1
-	var uid int64 = 101
-	var gid int64 = 101
+	var uid int64 = 65534
+	var gid int64 = 65534
 
 	deploy := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -2097,6 +2097,10 @@ func (r *PostgresReconciler) createOrUpdateWalGExporterDeployment(log logr.Logge
 											},
 										},
 									},
+								},
+								{
+									Name:  "SCOPE",
+									Value: instance.ToPeripheralResourceName(),
 								},
 								{
 									Name: "AWS_ACCESS_KEY_ID",
