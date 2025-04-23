@@ -2041,6 +2041,10 @@ func (r *PostgresReconciler) createOrUpdateWalGExporterDeployment(log logr.Logge
 
 	matchLabels := labels
 
+	var replicas int32 = 1
+	var uid int64 = 101
+	var gid int64 = 101
+
 	deploy := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        walGExporterName,
@@ -2049,7 +2053,7 @@ func (r *PostgresReconciler) createOrUpdateWalGExporterDeployment(log logr.Logge
 			Annotations: annotations,
 		},
 		Spec: appsv1.DeploymentSpec{
-			Replicas: pointer.Int32(1),
+			Replicas: ptr.To(replicas),
 			Selector: &metav1.LabelSelector{
 				MatchLabels: matchLabels,
 			},
@@ -2158,12 +2162,12 @@ func (r *PostgresReconciler) createOrUpdateWalGExporterDeployment(log logr.Logge
 								},
 							},
 							SecurityContext: &corev1.SecurityContext{
-								AllowPrivilegeEscalation: pointer.Bool(false),
-								Privileged:               pointer.Bool(false),
-								ReadOnlyRootFilesystem:   pointer.Bool(true),
-								RunAsNonRoot:             pointer.Bool(true),
-								RunAsUser:                pointer.Int64(101),
-								RunAsGroup:               pointer.Int64(101),
+								AllowPrivilegeEscalation: ptr.To(false),
+								Privileged:               ptr.To(false),
+								ReadOnlyRootFilesystem:   ptr.To(true),
+								RunAsNonRoot:             ptr.To(true),
+								RunAsUser:                ptr.To(uid),
+								RunAsGroup:               ptr.To(gid),
 								Capabilities: &corev1.Capabilities{
 									Drop: []corev1.Capability{"ALL"},
 								},
@@ -2257,7 +2261,7 @@ func (r *PostgresReconciler) createOrUpdateWalGExporterPodMonitor(log logr.Logge
 
 	s.Spec.PodMetricsEndpoints = []coreosv1.PodMetricsEndpoint{
 		{
-			Port: strconv.Itoa(int(walGExporterPort)),
+			Port: ptr.To(strconv.Itoa(int(walGExporterPort))),
 		},
 	}
 	selector := map[string]string{
