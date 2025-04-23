@@ -2161,6 +2161,7 @@ func (r *PostgresReconciler) createOrUpdateWalGExporterDeployment(log logr.Logge
 									Protocol:      corev1.ProtocolTCP,
 								},
 							},
+							// TODO make resource limits configurable
 							SecurityContext: &corev1.SecurityContext{
 								AllowPrivilegeEscalation: ptr.To(false),
 								Privileged:               ptr.To(false),
