@@ -2044,8 +2044,8 @@ func (r *PostgresReconciler) createOrUpdateWalGExporterDeployment(log logr.Logge
 	matchLabels := labels
 
 	var replicas int32 = 1
-	var uid int64 = 65534
-	var gid int64 = 65534
+	var uid int64 = 65534 // nobody
+	var gid int64 = 65534 // nobody
 
 	deploy := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -2102,58 +2102,17 @@ func (r *PostgresReconciler) createOrUpdateWalGExporterDeployment(log logr.Logge
 									Name:  "SCOPE",
 									Value: instance.ToPeripheralResourceName(),
 								},
+							},
+							EnvFrom: []corev1.EnvFromSource{
 								{
-									Name: "AWS_ACCESS_KEY_ID",
-									ValueFrom: &corev1.EnvVarSource{
-										SecretKeyRef: &corev1.SecretKeySelector{
-											Key: "AWS_ACCESS_KEY_ID",
-											LocalObjectReference: corev1.LocalObjectReference{
-												Name: operatormanager.PodEnvSecretName,
-											},
+									ConfigMapRef: &corev1.ConfigMapEnvSource{
+										LocalObjectReference: corev1.LocalObjectReference{
+											Name: operatormanager.PodEnvCMName,
 										},
 									},
-								},
-								{
-									Name: "AWS_SECRET_ACCESS_KEY",
-									ValueFrom: &corev1.EnvVarSource{
-										SecretKeyRef: &corev1.SecretKeySelector{
-											Key: "AWS_SECRET_ACCESS_KEY",
-											LocalObjectReference: corev1.LocalObjectReference{
-												Name: operatormanager.PodEnvSecretName,
-											},
-										},
-									},
-								},
-								{
-									Name: "AWS_ENDPOINT",
-									ValueFrom: &corev1.EnvVarSource{
-										ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
-											Key: "AWS_ENDPOINT",
-											LocalObjectReference: corev1.LocalObjectReference{
-												Name: operatormanager.PodEnvCMName,
-											},
-										},
-									},
-								},
-								{
-									Name: "AWS_S3_FORCE_PATH_STYLE",
-									ValueFrom: &corev1.EnvVarSource{
-										ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
-											Key: "AWS_S3_FORCE_PATH_STYLE",
-											LocalObjectReference: corev1.LocalObjectReference{
-												Name: operatormanager.PodEnvCMName,
-											},
-										},
-									},
-								},
-								{
-									Name: "WALG_S3_PREFIX",
-									ValueFrom: &corev1.EnvVarSource{
-										ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
-											Key: "WALG_S3_PREFIX",
-											LocalObjectReference: corev1.LocalObjectReference{
-												Name: operatormanager.PodEnvCMName,
-											},
+									SecretRef: &corev1.SecretEnvSource{
+										LocalObjectReference: corev1.LocalObjectReference{
+											Name: operatormanager.PodEnvSecretName,
 										},
 									},
 								},
