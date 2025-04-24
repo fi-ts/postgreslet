@@ -208,7 +208,7 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 			log.V(debugLogLevel).Info("finalizer from storage encryption secret removed")
 		}
 
-		deletable, err := r.OperatorManager.IsOperatorDeletable(ctx, namespace)
+		deletable, err := r.OperatorManager.IsOperatorDeletable(ctx, namespace, instance.ToPeripheralResourceName())
 		if err != nil {
 			r.recorder.Eventf(instance, "Warning", "Error", "failed to check if the operator is idle: %v", err)
 			return ctrl.Result{}, fmt.Errorf("error while checking if the operator is idle: %w", err)

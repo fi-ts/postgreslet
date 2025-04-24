@@ -161,7 +161,7 @@ func (m *OperatorManager) InstallOrUpdateOperator(ctx context.Context, namespace
 }
 
 // IsOperatorDeletable returns true when there's no running instance operated by the operator
-func (m *OperatorManager) IsOperatorDeletable(ctx context.Context, namespace string) (bool, error) {
+func (m *OperatorManager) IsOperatorDeletable(ctx context.Context, namespace string, name string) (bool, error) {
 	log := m.log.WithValues("ns", namespace)
 
 	setList := &appsv1.StatefulSetList{}
@@ -173,12 +173,14 @@ func (m *OperatorManager) IsOperatorDeletable(ctx context.Context, namespace str
 		return false, nil
 	}
 
-	services := &corev1.ServiceList{}
-	if err := m.client.List(ctx, services, client.InNamespace(namespace), m.toInstanceMatchingLabels()); client.IgnoreNotFound(err) != nil {
-		return false, fmt.Errorf("error while fetching the list of services operated by the operator: %w", err)
+	// Try fetch service
+	ns := types.NamespacedName{
+		Namespace: namespace,
+		Name:      name,
 	}
-	if len(services.Items) != 0 {
-		log.Info("services still running")
+	err := m.client.Get(ctx, ns, &corev1.Service{})
+	if !errors.IsNotFound(err) {
+		log.Info("service still running")
 		return false, nil
 	}
 
