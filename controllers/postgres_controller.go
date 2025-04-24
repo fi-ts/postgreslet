@@ -2106,52 +2106,24 @@ func (r *PostgresReconciler) createOrUpdateWalGExporterDeployment(log logr.Logge
 									},
 								},
 								{
-									Name: "AWS_ACCESS_KEY_ID",
-									ValueFrom: &corev1.EnvVarSource{
-										SecretKeyRef: &corev1.SecretKeySelector{
-											Key: "AWS_ACCESS_KEY_ID",
-											LocalObjectReference: corev1.LocalObjectReference{
-												Name: operatormanager.PodEnvSecretName,
-											},
-										},
-									},
-								},
-								{
-									Name: "AWS_SECRET_ACCESS_KEY",
-									ValueFrom: &corev1.EnvVarSource{
-										SecretKeyRef: &corev1.SecretKeySelector{
-											Key: "AWS_SECRET_ACCESS_KEY",
-											LocalObjectReference: corev1.LocalObjectReference{
-												Name: operatormanager.PodEnvSecretName,
-											},
-										},
-									},
-								},
-								{
-									Name: "AWS_ENDPOINT",
-									ValueFrom: &corev1.EnvVarSource{
-										ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
-											Key: "AWS_ENDPOINT",
-											LocalObjectReference: corev1.LocalObjectReference{
-												Name: operatormanager.PodEnvCMName,
-											},
-										},
-									},
-								},
-								{
-									Name: "AWS_S3_FORCE_PATH_STYLE",
-									ValueFrom: &corev1.EnvVarSource{
-										ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
-											Key: "AWS_S3_FORCE_PATH_STYLE",
-											LocalObjectReference: corev1.LocalObjectReference{
-												Name: operatormanager.PodEnvCMName,
-											},
-										},
-									},
-								},
-								{
 									Name:  "WALG_S3_PREFIX",
 									Value: "s3://" + b.S3BucketName + "/" + instance.ToPeripheralResourceName(),
+								},
+							},
+							EnvFrom: []corev1.EnvFromSource{
+								{
+									ConfigMapRef: &corev1.ConfigMapEnvSource{
+										LocalObjectReference: corev1.LocalObjectReference{
+											Name: operatormanager.PodEnvCMName,
+										},
+									},
+								},
+								{
+									SecretRef: &corev1.SecretEnvSource{
+										LocalObjectReference: corev1.LocalObjectReference{
+											Name: operatormanager.PodEnvSecretName,
+										},
+									},
 								},
 							},
 							Image: r.WalGExporterImage,
