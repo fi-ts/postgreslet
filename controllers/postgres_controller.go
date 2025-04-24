@@ -2110,6 +2110,8 @@ func (r *PostgresReconciler) createOrUpdateWalGExporterDeployment(log logr.Logge
 											Name: operatormanager.PodEnvCMName,
 										},
 									},
+								},
+								{
 									SecretRef: &corev1.SecretEnvSource{
 										LocalObjectReference: corev1.LocalObjectReference{
 											Name: operatormanager.PodEnvSecretName,
