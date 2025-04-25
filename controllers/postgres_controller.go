@@ -1688,7 +1688,8 @@ func (r *PostgresReconciler) createOrUpdatePatroniPodMonitor(ctx context.Context
 
 	pm.Spec.PodMetricsEndpoints = []coreosv1.PodMetricsEndpoint{
 		{
-			Port: ptr.To(podMonitorPort),
+			Port:       ptr.To(podMonitorPort),
+			TargetPort: ptr.To(intstr.FromString(podMonitorPort)),
 		},
 	}
 	pm.Spec.NamespaceSelector = coreosv1.NamespaceSelector{
@@ -2241,7 +2242,8 @@ func (r *PostgresReconciler) createOrUpdateWalGExporterPodMonitor(log logr.Logge
 
 	s.Spec.PodMetricsEndpoints = []coreosv1.PodMetricsEndpoint{
 		{
-			Port: ptr.To(strconv.Itoa(int(walGExporterPort))),
+			Port:       ptr.To(strconv.Itoa(int(walGExporterPort))),
+			TargetPort: ptr.To(intstr.FromInt(int(walGExporterPort))),
 		},
 	}
 	selector := map[string]string{
