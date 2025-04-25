@@ -68,7 +68,7 @@ const (
 	podMonitorName                                 string = "patroni"
 	walGExporterName                               string = "wal-g-exporter"
 	walGExporterPort                               int32  = 9351
-	podMonitorPort                                 string = "8008"
+	podMonitorPort                                 int32  = 8008
 	initDBName                                     string = "postgres-initdb"
 	initDBSQLDummy                                 string = `SELECT 'NOOP';`
 	debugLogLevel                                  int    = 1
@@ -1688,7 +1688,8 @@ func (r *PostgresReconciler) createOrUpdatePatroniPodMonitor(ctx context.Context
 
 	pm.Spec.PodMetricsEndpoints = []coreosv1.PodMetricsEndpoint{
 		{
-			Port: ptr.To(podMonitorPort),
+			PortNumber: ptr.To(podMonitorPort),
+			TargetPort: ptr.To(intstr.FromInt32(podMonitorPort)),
 		},
 	}
 	pm.Spec.NamespaceSelector = coreosv1.NamespaceSelector{
@@ -2241,7 +2242,7 @@ func (r *PostgresReconciler) createOrUpdateWalGExporterPodMonitor(log logr.Logge
 
 	s.Spec.PodMetricsEndpoints = []coreosv1.PodMetricsEndpoint{
 		{
-			Port: ptr.To(strconv.Itoa(int(walGExporterPort))),
+			Port: ptr.To(walGExporterName),
 		},
 	}
 	selector := map[string]string{
