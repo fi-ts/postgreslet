@@ -68,7 +68,7 @@ const (
 	podMonitorName                                 string = "patroni"
 	walGExporterName                               string = "wal-g-exporter"
 	walGExporterPort                               int32  = 9351
-	podMonitorPort                                 string = "8008"
+	podMonitorPort                                 int32  = 8008
 	initDBName                                     string = "postgres-initdb"
 	initDBSQLDummy                                 string = `SELECT 'NOOP';`
 	debugLogLevel                                  int    = 1
@@ -1688,7 +1688,7 @@ func (r *PostgresReconciler) createOrUpdatePatroniPodMonitor(ctx context.Context
 
 	pm.Spec.PodMetricsEndpoints = []coreosv1.PodMetricsEndpoint{
 		{
-			PortNumber: ptr.To(int32(8008)),
+			PortNumber: ptr.To(podMonitorPort),
 		},
 	}
 	pm.Spec.NamespaceSelector = coreosv1.NamespaceSelector{
