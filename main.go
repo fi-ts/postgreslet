@@ -8,6 +8,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"net"
 	"os"
@@ -171,8 +172,15 @@ func main() {
 		pgParamBlockList map[string]bool
 
 		standbyClusterSourceRanges []string
+
+		showVersion = flag.Bool("version", false, "dump current version and exit")
 	)
 
+	flag.Parse()
+	if *showVersion {
+		fmt.Println(v.V.String())
+		os.Exit(0)
+	}
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 
 	// TODO enable Prefix and update helm chart
