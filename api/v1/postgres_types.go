@@ -103,7 +103,7 @@ const (
 	PostgresConfigAuditorUsername     = "auditor"
 	PostgresConfigMonitoringUsername  = "monitoring"
 
-	ZALANDO_TIMESTAMP_FORMAT = "2006-01-02T15:04:05-07:00"
+	zalando_timestamp_format = "2006-01-02T15:04:05-07:00"
 )
 
 var (
@@ -764,7 +764,7 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 		// make sure there is always a value set. The operator will fall back to CLONE_WITH_BASEBACKUP, which assumes the source db's credentials are existing within the same namespace, which is not the case with the postgreslet.
 		if p.Spec.PostgresRestore.Timestamp == "" {
 			// e.g. 2021-12-07T15:28:00+01:00
-			p.Spec.PostgresRestore.Timestamp = time.Now().Format(ZALANDO_TIMESTAMP_FORMAT)
+			p.Spec.PostgresRestore.Timestamp = time.Now().Format(zalando_timestamp_format)
 		}
 
 		z.Spec.Clone = &zalando.CloneDescription{

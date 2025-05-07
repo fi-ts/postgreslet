@@ -257,7 +257,7 @@ func TestPostgresRestoreTimestamp_ToUnstructuredZalandoPostgresql(t *testing.T) 
 					Description: "description",
 				},
 			},
-			want:    time.Now().Format(ZALANDO_TIMESTAMP_FORMAT), // I know this is not perfect, let's just hope we always finish within the same second...
+			want:    time.Now().Format(zalando_timestamp_format), // I know this is not perfect, let's just hope we always finish within the same second...
 			wantErr: false,
 		},
 		{
@@ -283,7 +283,7 @@ func TestPostgresRestoreTimestamp_ToUnstructuredZalandoPostgresql(t *testing.T) 
 					Description: "description",
 				},
 			},
-			want:    time.Now().Format(ZALANDO_TIMESTAMP_FORMAT), // I know this is not perfect, let's just hope we always finish within the same second...
+			want:    time.Now().Format(zalando_timestamp_format), // I know this is not perfect, let's just hope we always finish within the same second...
 			wantErr: false,
 		},
 		{
