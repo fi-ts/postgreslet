@@ -16,7 +16,7 @@ import (
 
 	"regexp"
 
-	firewall "github.com/metal-stack/firewall-controller/api/v1"
+	firewall "github.com/metal-stack/firewall-controller/v2/api/v1"
 	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
@@ -27,7 +27,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/yaml"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -102,6 +102,8 @@ const (
 	PostgresConfigReplicationUsername = "standby"
 	PostgresConfigAuditorUsername     = "auditor"
 	PostgresConfigMonitoringUsername  = "monitoring"
+
+	zalando_timestamp_format = "2006-01-02T15:04:05-07:00"
 )
 
 var (
@@ -236,6 +238,8 @@ type Size struct {
 	Memory string `json:"memory,omitempty"`
 	// SharedBuffer of the database
 	SharedBuffer string `json:"sharedBuffer,omitempty"`
+	// Memoryfactor used to calculate the memory
+	MemoryFactor uint8 `json:"memoryfactor,omitempty"`
 
 	// StorageSize the amount of Storage this database will get
 	// +kubebuilder:default="1Gi"
@@ -371,13 +375,9 @@ func (p *Postgres) ToSharedSvcLB(lbIP string, lbPort int32, enableStandbyLeaderS
 
 	lbsr := []string{}
 	if p.HasSourceRanges() {
-		for _, src := range p.Spec.AccessList.SourceRanges {
-			lbsr = append(lbsr, src)
-		}
+		lbsr = append(lbsr, p.Spec.AccessList.SourceRanges...)
 	}
-	for _, scsr := range standbyClustersSourceRanges {
-		lbsr = append(lbsr, scsr)
-	}
+	lbsr = append(lbsr, standbyClustersSourceRanges...)
 	if len(lbsr) == 0 {
 		// block by default
 		lbsr = append(lbsr, "255.255.255.255/32")
@@ -468,13 +468,9 @@ func (p *Postgres) ToDedicatedSvcLB(lbIP string, lbPort int32, standbyClustersSo
 
 	lbsr := []string{}
 	if p.HasSourceRanges() {
-		for _, src := range p.Spec.AccessList.SourceRanges {
-			lbsr = append(lbsr, src)
-		}
+		lbsr = append(lbsr, p.Spec.AccessList.SourceRanges...)
 	}
-	for _, scsr := range standbyClustersSourceRanges {
-		lbsr = append(lbsr, scsr)
-	}
+	lbsr = append(lbsr, standbyClustersSourceRanges...)
 	if len(lbsr) == 0 {
 		// block by default
 		lbsr = append(lbsr, "255.255.255.255/32")
@@ -704,10 +700,10 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 	setSharedBufferSize(z.Spec.PostgresqlParam.Parameters, p.Spec.Size.SharedBuffer)
 
 	z.Spec.Resources = &zalando.Resources{}
-	z.Spec.Resources.ResourceRequests.CPU = pointer.String(p.Spec.Size.CPU)
-	z.Spec.Resources.ResourceRequests.Memory = pointer.String(p.Spec.Size.Memory)
-	z.Spec.Resources.ResourceLimits.CPU = pointer.String(p.Spec.Size.CPU)
-	z.Spec.Resources.ResourceLimits.Memory = pointer.String(p.Spec.Size.Memory)
+	z.Spec.Resources.ResourceRequests.CPU = ptr.To(p.Spec.Size.CPU)
+	z.Spec.Resources.ResourceRequests.Memory = ptr.To(p.Spec.Size.Memory)
+	z.Spec.Resources.ResourceLimits.CPU = ptr.To(p.Spec.Size.CPU)
+	z.Spec.Resources.ResourceLimits.Memory = ptr.To(p.Spec.Size.Memory)
 	z.Spec.TeamID = p.generateTeamID()
 	z.Spec.Volume.Size = p.Spec.Size.StorageSize
 	if p.Spec.StorageClass != nil {
@@ -724,7 +720,7 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 
 	// required with image ermajn/postgres-operator:v1.6.0-20-g1cc71663-dirty
 	// see https://github.com/fi-ts/postgreslet/issues/293
-	z.Spec.EnableConnectionPooler = pointer.Bool(false)
+	z.Spec.EnableConnectionPooler = ptr.To(false)
 
 	prefix := alphaNumericRegExp.ReplaceAllString(string(p.Spec.Tenant), "")
 	prefix = strings.ToLower(prefix)
@@ -775,7 +771,7 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 		// make sure there is always a value set. The operator will fall back to CLONE_WITH_BASEBACKUP, which assumes the source db's credentials are existing within the same namespace, which is not the case with the postgreslet.
 		if p.Spec.PostgresRestore.Timestamp == "" {
 			// e.g. 2021-12-07T15:28:00+01:00
-			p.Spec.PostgresRestore.Timestamp = time.Now().Format(time.RFC3339)
+			p.Spec.PostgresRestore.Timestamp = time.Now().Format(zalando_timestamp_format)
 		}
 
 		z.Spec.Clone = &zalando.CloneDescription{
@@ -784,7 +780,7 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 			S3Endpoint:        rbs.S3Endpoint,
 			S3AccessKeyId:     rbs.S3AccessKey,
 			S3SecretAccessKey: rbs.S3SecretKey,
-			S3ForcePathStyle:  pointer.Bool(true),
+			S3ForcePathStyle:  ptr.To(true),
 		}
 	} else {
 		// if we don't set the clone block, remove it completely

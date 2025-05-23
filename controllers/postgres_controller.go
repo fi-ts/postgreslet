@@ -24,12 +24,13 @@ import (
 
 	"github.com/go-logr/logr"
 	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
+	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/tools/record"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 
-	firewall "github.com/metal-stack/firewall-controller/api/v1"
+	firewall "github.com/metal-stack/firewall-controller/v2/api/v1"
 	coreosv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -58,9 +59,6 @@ const (
 	postgresExporterServicePortName                string = "metrics"
 	postgresExporterServicePortKeyName             string = "postgres-exporter-service-port"
 	postgresExporterServiceTargetPortKeyName       string = "postgres-exporter-service-target-port"
-	walGExporterServicePortName                    string = "backup-metrics"
-	walGExporterServicePortKeyName                 string = "wal-g-exporter-service-port"
-	walGExporterServiceTargetPortKeyName           string = "wal-g-exporter-service-target-port"
 	postgresExporterServiceTenantAnnotationName    string = pg.TenantLabelName
 	postgresExporterServiceProjectIDAnnotationName string = pg.ProjectIDLabelName
 	storageEncryptionKeyName                       string = "storage-encryption-key"
@@ -68,7 +66,9 @@ const (
 	walGEncryptionSecretNamePostfix                string = "-walg-encryption"
 	walGEncryptionSecretKeyName                    string = "key"
 	podMonitorName                                 string = "patroni"
-	podMonitorPort                                 string = "8008"
+	walGExporterName                               string = "wal-g-exporter"
+	walGExporterPort                               int32  = 9351
+	podMonitorPort                                 int32  = 8008
 	initDBName                                     string = "postgres-initdb"
 	initDBSQLDummy                                 string = `SELECT 'NOOP';`
 	debugLogLevel                                  int    = 1
@@ -110,6 +110,9 @@ type PostgresReconciler struct {
 	TLSClusterIssuer                    string
 	TLSSubDomain                        string
 	EnableWalGExporter                  bool
+	WalGExporterImage                   string
+	WalGExporterCPULimit                string
+	WalGExporterMemoryLimit             string
 }
 
 type PatroniStandbyCluster struct {
@@ -205,7 +208,7 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 			log.V(debugLogLevel).Info("finalizer from storage encryption secret removed")
 		}
 
-		deletable, err := r.OperatorManager.IsOperatorDeletable(ctx, namespace)
+		deletable, err := r.OperatorManager.IsOperatorDeletable(ctx, namespace, instance.ToPeripheralResourceName())
 		if err != nil {
 			r.recorder.Eventf(instance, "Warning", "Error", "failed to check if the operator is idle: %v", err)
 			return ctrl.Result{}, fmt.Errorf("error while checking if the operator is idle: %w", err)
@@ -246,8 +249,14 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		log.V(debugLogLevel).Info("finalizer added")
 	}
 
+	backupConfig, err := r.getBackupConfig(ctx, instance.Namespace, instance.Spec.BackupSecretRef)
+	if err != nil {
+		r.recorder.Eventf(instance, "Warning", "Self-Reconciliation", "failed to fetch backupConfig: %v", err)
+		return ctrl.Result{}, fmt.Errorf("failed to fetch backupConfig: %w", err)
+	}
+
 	// Check if zalando dependencies are installed. If not, install them.
-	if err := r.ensureZalandoDependencies(log, ctx, instance); err != nil {
+	if err := r.ensureZalandoDependencies(log, ctx, instance, backupConfig); err != nil {
 		r.recorder.Eventf(instance, "Warning", "Error", "failed to install operator: %v", err)
 		return ctrl.Result{}, fmt.Errorf("error while ensuring Zalando dependencies: %w", err)
 	}
@@ -303,7 +312,7 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	}
 
 	// Add service monitor for our exporter sidecar
-	err := r.createOrUpdateExporterSidecarServiceMonitor(log, ctx, namespace, instance)
+	err = r.createOrUpdateExporterSidecarServiceMonitor(log, ctx, namespace, instance)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("error while creating sidecars servicemonitor %v: %w", namespace, err)
 	}
@@ -333,6 +342,27 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	if err := r.LBManager.ReconcileSvcLBs(ctx, instance); err != nil {
 		r.recorder.Eventf(instance, "Warning", "Error", "failed to create Service: %v", err)
 		return ctrl.Result{}, err
+	}
+
+	if r.EnableWalGExporter {
+		if err := r.createOrUpdateWalGExporterDeployment(log, ctx, namespace, instance, backupConfig); err != nil {
+			r.recorder.Eventf(instance, "Warning", "Error", "failed to deploy wal-g-exporter: %v", err)
+			return ctrl.Result{}, fmt.Errorf("error while deploying wal-g-exporter %v: %w", namespace, err)
+		}
+		if err := r.createOrUpdateWalGExporterPodMonitor(log, ctx, namespace, instance); err != nil {
+			r.recorder.Eventf(instance, "Warning", "Error", "failed to deploy wal-g-exporter podMonitor: %v", err)
+			return ctrl.Result{}, fmt.Errorf("error while deploying wal-g-exporter podMonitor %v: %w", namespace, err)
+		}
+	} else {
+		// remove wal-g-exporter when disabled
+		if err := r.deleteWalGExporterDeployment(ctx, namespace); err != nil {
+			r.recorder.Eventf(instance, "Warning", "Error", "failed to delete wal-g-exporter: %v", err)
+			return ctrl.Result{}, fmt.Errorf("error while deleting wal-g-exporter: %w", err)
+		}
+		if err := r.deleteWalGExporterPodMonitor(ctx, namespace); err != nil {
+			r.recorder.Eventf(instance, "Warning", "Error", "failed to delete wal-g-exporter podMonitor: %v", err)
+			return ctrl.Result{}, fmt.Errorf("error while deleting wal-g-exporter podMonitor: %w", err)
+		}
 	}
 
 	// Check if socket port is ready
@@ -453,7 +483,7 @@ func (r *PostgresReconciler) deleteUserPasswordsSecret(ctx context.Context, inst
 }
 
 // ensureZalandoDependencies makes sure Zalando resources are installed in the service-cluster.
-func (r *PostgresReconciler) ensureZalandoDependencies(log logr.Logger, ctx context.Context, p *pg.Postgres) error {
+func (r *PostgresReconciler) ensureZalandoDependencies(log logr.Logger, ctx context.Context, p *pg.Postgres, b *pg.BackupConfig) error {
 	namespace := p.ToPeripheralResourceNamespace()
 	isInstalled, err := r.OperatorManager.IsOperatorInstalled(ctx, namespace)
 	if err != nil {
@@ -466,7 +496,7 @@ func (r *PostgresReconciler) ensureZalandoDependencies(log logr.Logger, ctx cont
 		}
 	}
 
-	if err := r.updatePodEnvironmentConfigMap(log, ctx, p); err != nil {
+	if err := r.updatePodEnvironmentConfigMap(log, ctx, p, b); err != nil {
 		return fmt.Errorf("error while updating backup config: %w", err)
 	}
 
@@ -477,18 +507,13 @@ func (r *PostgresReconciler) ensureZalandoDependencies(log logr.Logger, ctx cont
 	return nil
 }
 
-func (r *PostgresReconciler) updatePodEnvironmentConfigMap(log logr.Logger, ctx context.Context, p *pg.Postgres) error {
-	if p.Spec.BackupSecretRef == "" {
-		log.Info("No configured backupSecretRef found, skipping configuration of postgres backup")
+func (r *PostgresReconciler) updatePodEnvironmentConfigMap(log logr.Logger, ctx context.Context, p *pg.Postgres, b *pg.BackupConfig) error {
+	if b == nil {
+		log.Info("No backupConfig found, skipping configuration of postgres backup")
 		return nil
 	}
 
-	backupConfig, err := r.getBackupConfig(ctx, p.Namespace, p.Spec.BackupSecretRef)
-	if err != nil {
-		return err
-	}
-
-	s3url, err := url.Parse(backupConfig.S3Endpoint)
+	s3url, err := url.Parse(b.S3Endpoint)
 	if err != nil {
 		return fmt.Errorf("error while parsing the s3 endpoint url in the backup secret: %w", err)
 	}
@@ -499,7 +524,7 @@ func (r *PostgresReconciler) updatePodEnvironmentConfigMap(log logr.Logger, ctx 
 	// use the modified s3 endpoint
 	walES3Endpoint := s3url.String()
 	// region
-	region := backupConfig.S3Region
+	region := b.S3Region
 
 	// set the WALG_UPLOAD_DISK_CONCURRENCY based on the configured cpu limits
 	q, err := resource.ParseQuantity(p.Spec.Size.CPU)
@@ -516,9 +541,9 @@ func (r *PostgresReconciler) updatePodEnvironmentConfigMap(log logr.Logger, ctx 
 	downloadConcurrency := "32"
 
 	// use the rest as provided in the secret
-	bucketName := backupConfig.S3BucketName
-	backupSchedule := backupConfig.Schedule
-	backupNumToRetain := backupConfig.Retention
+	bucketName := b.S3BucketName
+	backupSchedule := b.Schedule
+	backupNumToRetain := b.Retention
 
 	// s3 server side encryption SSE is disabled
 	// we use client side encryption
@@ -634,13 +659,10 @@ func (r *PostgresReconciler) updatePodEnvironmentSecret(log logr.Logger, ctx con
 	}
 
 	var s *corev1.Secret
-	ns := types.NamespacedName{
-		Name:      operatormanager.PodEnvCMName,
-		Namespace: p.ToPeripheralResourceNamespace(),
-	}
+	ns := p.ToPeripheralResourceNamespace()
 
-	if s, err = r.OperatorManager.CreateOrGetPodEnvironmentSecret(ctx, ns.Namespace); err != nil {
-		return fmt.Errorf("error while accessing the pod environment secret %v: %w", ns.Namespace, err)
+	if s, err = r.OperatorManager.CreateOrGetPodEnvironmentSecret(ctx, ns); err != nil {
+		return fmt.Errorf("error while accessing the pod environment secret %v: %w", ns, err)
 	}
 
 	s.Data = data
@@ -1089,7 +1111,7 @@ func (r *PostgresReconciler) checkAndUpdatePatroniReplicationConfig(log logr.Log
 				r.recorder.Eventf(s, "Warning", "Error", "failed to get referenced sync standby: %v", err)
 				synchronousStandbyApplicationName = nil
 			} else {
-				synchronousStandbyApplicationName = pointer.String(s.ToPeripheralResourceName())
+				synchronousStandbyApplicationName = ptr.To(s.ToPeripheralResourceName())
 			}
 			// compare the actual value with the expected value
 			if synchronousStandbyApplicationName == nil {
@@ -1217,7 +1239,7 @@ func (r *PostgresReconciler) httpPatchPatroni(log logr.Logger, ctx context.Conte
 					r.recorder.Eventf(s, "Warning", "Error", "failed to get referenced sync standby: %v", err)
 					synchronousStandbyApplicationName = nil
 				} else {
-					synchronousStandbyApplicationName = pointer.String(s.ToPeripheralResourceName())
+					synchronousStandbyApplicationName = ptr.To(s.ToPeripheralResourceName())
 				}
 			}
 			// enable sync replication
@@ -1499,18 +1521,6 @@ func (r *PostgresReconciler) createOrUpdateExporterSidecarServices(log logr.Logg
 		pesTargetPort = pesPort
 	}
 
-	wgesPort, error := strconv.ParseInt(c.Data[walGExporterServicePortKeyName], 10, 32)
-	if error != nil {
-		log.Error(error, "wal-g-exporter-service-port could not be parsed to int32, falling back to default value")
-		wgesPort = 9351
-	}
-
-	wgesTargetPort, error := strconv.ParseInt(c.Data[walGExporterServiceTargetPortKeyName], 10, 32)
-	if error != nil {
-		log.Error(error, "wal-g-exporter-service-target-port could not be parsed to int32, falling back to default value")
-		wgesTargetPort = wgesPort
-	}
-
 	labels := map[string]string{
 		// pg.ApplicationLabelName: pg.ApplicationLabelValue, // TODO check if we still need that label, IsOperatorDeletable won't work anymore if we set it.
 		"app": "postgres-exporter",
@@ -1536,15 +1546,6 @@ func (r *PostgresReconciler) createOrUpdateExporterSidecarServices(log logr.Logg
 			Protocol:   corev1.ProtocolTCP,
 			TargetPort: intstr.FromInt(int(pesTargetPort)),
 		},
-	}
-	if r.EnableWalGExporter {
-		wgesp := corev1.ServicePort{
-			Name:       walGExporterServicePortName,
-			Port:       int32(wgesPort), //nolint
-			Protocol:   corev1.ProtocolTCP,
-			TargetPort: intstr.FromInt(int(wgesTargetPort)),
-		}
-		pes.Spec.Ports = append(pes.Spec.Ports, wgesp)
 	}
 	selector := map[string]string{
 		pg.ApplicationLabelName: pg.ApplicationLabelValue,
@@ -1621,12 +1622,6 @@ func (r *PostgresReconciler) createOrUpdateExporterSidecarServiceMonitor(log log
 			Port: postgresExporterServicePortName,
 		},
 	}
-	if r.EnableWalGExporter {
-		wgesme := coreosv1.Endpoint{
-			Port: walGExporterServicePortName,
-		}
-		pesm.Spec.Endpoints = append(pesm.Spec.Endpoints, wgesme)
-	}
 	pesm.Spec.NamespaceSelector = coreosv1.NamespaceSelector{
 		MatchNames: []string{namespace},
 	}
@@ -1693,7 +1688,8 @@ func (r *PostgresReconciler) createOrUpdatePatroniPodMonitor(ctx context.Context
 
 	pm.Spec.PodMetricsEndpoints = []coreosv1.PodMetricsEndpoint{
 		{
-			Port: podMonitorPort,
+			PortNumber: ptr.To(podMonitorPort),
+			TargetPort: ptr.To(intstr.FromInt32(podMonitorPort)),
 		},
 	}
 	pm.Spec.NamespaceSelector = coreosv1.NamespaceSelector{
@@ -1920,6 +1916,10 @@ func (r *PostgresReconciler) ensureInitDBJob(log logr.Logger, ctx context.Contex
 	j.Name = ns.Name
 	j.Namespace = ns.Namespace
 
+	var uid int64 = 101
+	var gid int64 = 101
+	var ttl int32 = 180
+
 	var backOffLimit int32 = 99
 	j.Spec = batchv1.JobSpec{
 		Template: corev1.PodTemplateSpec{
@@ -1951,12 +1951,12 @@ func (r *PostgresReconciler) ensureInitDBJob(log logr.Logger, ctx context.Contex
 							},
 						},
 						SecurityContext: &corev1.SecurityContext{
-							AllowPrivilegeEscalation: pointer.Bool(false),
-							Privileged:               pointer.Bool(false),
-							ReadOnlyRootFilesystem:   pointer.Bool(true),
-							RunAsNonRoot:             pointer.Bool(true),
-							RunAsUser:                pointer.Int64(101),
-							RunAsGroup:               pointer.Int64(101),
+							AllowPrivilegeEscalation: ptr.To(false),
+							Privileged:               ptr.To(false),
+							ReadOnlyRootFilesystem:   ptr.To(true),
+							RunAsNonRoot:             ptr.To(true),
+							RunAsUser:                ptr.To(uid),
+							RunAsGroup:               ptr.To(gid),
 							Capabilities: &corev1.Capabilities{
 								Drop: []corev1.Capability{"ALL"},
 							},
@@ -1988,7 +1988,7 @@ func (r *PostgresReconciler) ensureInitDBJob(log logr.Logger, ctx context.Contex
 			},
 		},
 		BackoffLimit:            &backOffLimit,
-		TTLSecondsAfterFinished: pointer.Int32(180),
+		TTLSecondsAfterFinished: ptr.To(ttl),
 	}
 
 	if err := r.SvcClient.Create(ctx, j); err != nil {
@@ -2027,5 +2027,265 @@ func (r *PostgresReconciler) createOrUpdateCertificate(log logr.Logger, ctx cont
 	}
 
 	log.V(debugLogLevel).Info("certificate created or updated")
+	return nil
+}
+
+// createOrUpdateWalGExporterDeployment ensures the deployment for the wal-g-exporter
+func (r *PostgresReconciler) createOrUpdateWalGExporterDeployment(log logr.Logger, ctx context.Context, namespace string, instance *pg.Postgres, b *pg.BackupConfig) error {
+	if b == nil {
+		log.Info("No backupConfig found, skipping configuration of wa-l-exporter")
+		return nil
+	}
+
+	labels := map[string]string{
+		"app.kubernetes.io/name": walGExporterName,
+		pg.UIDLabelName:          string(instance.UID),
+		pg.NameLabelName:         instance.Name,
+		pg.TenantLabelName:       instance.Spec.Tenant,
+		pg.ProjectIDLabelName:    instance.Spec.ProjectID,
+		pg.PartitionIDLabelName:  instance.Spec.PartitionID,
+	}
+
+	annotations := map[string]string{}
+
+	matchLabels := labels
+
+	var replicas int32 = 1
+
+	var uid int64 = 65534
+	var gid int64 = 65534
+
+	deploy := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        walGExporterName,
+			Namespace:   namespace,
+			Labels:      labels,
+			Annotations: annotations,
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: ptr.To(replicas),
+			Selector: &metav1.LabelSelector{
+				MatchLabels: matchLabels,
+			},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        walGExporterName,
+					Namespace:   namespace,
+					Labels:      labels,
+					Annotations: annotations,
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Command: []string{"wal-g-prometheus-exporter"},
+							Env: []corev1.EnvVar{
+								{
+									Name:  "PGHOST",
+									Value: instance.ToPeripheralResourceName(),
+								},
+								{
+									Name:  "PGPORT",
+									Value: "5432",
+								},
+								{
+									Name:  "PGDATABASE",
+									Value: "postgres",
+								},
+								{
+									Name:  "PGUSER",
+									Value: "monitoring",
+								},
+								{
+									Name: "PGPASSWORD",
+									ValueFrom: &corev1.EnvVarSource{
+										SecretKeyRef: &corev1.SecretKeySelector{
+											Key: "password",
+											LocalObjectReference: corev1.LocalObjectReference{
+												Name: "monitoring." + instance.ToPeripheralResourceName() + ".credentials",
+											},
+										},
+									},
+								},
+								{
+									Name:  "WALG_S3_PREFIX",
+									Value: "s3://" + b.S3BucketName + "/" + instance.ToPeripheralResourceName(),
+								},
+							},
+							EnvFrom: []corev1.EnvFromSource{
+								{
+									ConfigMapRef: &corev1.ConfigMapEnvSource{
+										LocalObjectReference: corev1.LocalObjectReference{
+											Name: operatormanager.PodEnvCMName,
+										},
+									},
+								},
+								{
+									SecretRef: &corev1.SecretEnvSource{
+										LocalObjectReference: corev1.LocalObjectReference{
+											Name: operatormanager.PodEnvSecretName,
+										},
+									},
+								},
+							},
+							Image: r.WalGExporterImage,
+							Name:  walGExporterName,
+							Ports: []corev1.ContainerPort{
+								{
+									Name:          walGExporterName,
+									ContainerPort: walGExporterPort,
+									Protocol:      corev1.ProtocolTCP,
+								},
+							},
+							Resources: corev1.ResourceRequirements{
+								Limits: corev1.ResourceList{
+									corev1.ResourceCPU:    resource.MustParse(r.WalGExporterCPULimit),
+									corev1.ResourceMemory: resource.MustParse(r.WalGExporterMemoryLimit),
+								},
+							},
+							SecurityContext: &corev1.SecurityContext{
+								AllowPrivilegeEscalation: ptr.To(false),
+								Privileged:               ptr.To(false),
+								ReadOnlyRootFilesystem:   ptr.To(true),
+								RunAsNonRoot:             ptr.To(true),
+								RunAsUser:                ptr.To(uid),
+								RunAsGroup:               ptr.To(gid),
+								Capabilities: &corev1.Capabilities{
+									Drop: []corev1.Capability{"ALL"},
+								},
+								SeccompProfile: &corev1.SeccompProfile{
+									Type: corev1.SeccompProfileTypeRuntimeDefault,
+								},
+							},
+							VolumeMounts: []corev1.VolumeMount{
+								{
+									Name:      "tmp",
+									MountPath: "/tmp",
+								},
+							},
+						},
+					},
+					Volumes: []corev1.Volume{
+						{
+							Name: "tmp",
+							VolumeSource: corev1.VolumeSource{
+								EmptyDir: &corev1.EmptyDirVolumeSource{},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	// try to fetch any existing deployment
+	ns := types.NamespacedName{
+		Namespace: namespace,
+		Name:      walGExporterName,
+	}
+	old := &appsv1.Deployment{}
+	if err := r.SvcClient.Get(ctx, ns, old); err == nil {
+		// Copy the resource version
+		deploy.ObjectMeta.ResourceVersion = old.ObjectMeta.ResourceVersion
+		if err := r.SvcClient.Update(ctx, deploy); err != nil {
+			return fmt.Errorf("error while updating the wal-g-exporter deployment: %w", err)
+		}
+		log.Info("wal-g-exporter deployment updated")
+		return nil
+	}
+
+	// local deployment does not exist, creating it
+	if err := r.SvcClient.Create(ctx, deploy); err != nil {
+		return fmt.Errorf("error while creating the wal-g-exporter deployment: %w", err)
+	}
+	log.Info("wal-g-exporter deployment created")
+
+	return nil
+}
+
+// deleteWalGExporterDeployment Deletes our wal-g-exporter Deployment, if it exists.
+func (r *PostgresReconciler) deleteWalGExporterDeployment(ctx context.Context, namespace string) error {
+	d := &appsv1.Deployment{}
+	d.Namespace = namespace
+	d.Name = walGExporterName
+	if err := r.SvcClient.Delete(ctx, d); err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil
+		}
+		return fmt.Errorf("error while deleting the wal-g-exporter deployment: %w", err)
+	}
+	return nil
+}
+
+// createOrUpdateWalGExporterPodMonitor ensures the necessary services to access the wal-g-exporter exist
+func (r *PostgresReconciler) createOrUpdateWalGExporterPodMonitor(log logr.Logger, ctx context.Context, namespace string, in *pg.Postgres) error {
+	l := map[string]string{
+		"app.kubernetes.io/name": walGExporterName,
+		pg.UIDLabelName:          string(in.UID),
+		pg.NameLabelName:         in.Name,
+		pg.TenantLabelName:       in.Spec.Tenant,
+		pg.ProjectIDLabelName:    in.Spec.ProjectID,
+		pg.PartitionIDLabelName:  in.Spec.PartitionID,
+	}
+	a := map[string]string{
+		postgresExporterServiceTenantAnnotationName:    in.Spec.Tenant,
+		postgresExporterServiceProjectIDAnnotationName: in.Spec.ProjectID,
+	}
+
+	s := &coreosv1.PodMonitor{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        walGExporterName,
+			Namespace:   namespace,
+			Labels:      l,
+			Annotations: a,
+		},
+	}
+
+	s.Spec.PodMetricsEndpoints = []coreosv1.PodMetricsEndpoint{
+		{
+			Port: ptr.To(walGExporterName),
+		},
+	}
+	selector := map[string]string{
+		"app.kubernetes.io/name": walGExporterName,
+	}
+	s.Spec.Selector = metav1.LabelSelector{MatchLabels: selector}
+
+	// try to fetch any existing wal-g-exporter podMonitor
+	ns := types.NamespacedName{
+		Namespace: namespace,
+		Name:      walGExporterName,
+	}
+	old := &coreosv1.PodMonitor{}
+	if err := r.SvcClient.Get(ctx, ns, old); err == nil {
+		// podMonitor exists, overwriting it
+		s.ObjectMeta.ResourceVersion = old.GetObjectMeta().GetResourceVersion()
+		if err := r.SvcClient.Update(ctx, s); err != nil {
+			return fmt.Errorf("error while updating the wal-g-exporter podMonitor: %w", err)
+		}
+		log.V(debugLogLevel).Info("wal-g-exporter podMonitor updated")
+		return nil
+	}
+	// todo: handle errors other than `NotFound`
+
+	// local servicemonitor does not exist, creating it
+	if err := r.SvcClient.Create(ctx, s); err != nil {
+		return fmt.Errorf("error while creating the wal-g-exporter podMonitor: %w", err)
+	}
+	log.V(debugLogLevel).Info("wal-g-exporter podMonitor created")
+
+	return nil
+}
+
+// deleteWalGExporterPodMonitor Deletes our wal-g-exporter PodMonitor, if it exists.
+func (r *PostgresReconciler) deleteWalGExporterPodMonitor(ctx context.Context, namespace string) error {
+	d := &coreosv1.PodMonitor{}
+	d.Namespace = namespace
+	d.Name = walGExporterName
+	if err := r.SvcClient.Delete(ctx, d); err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil
+		}
+		return fmt.Errorf("error while deleting the wal-g-exporter podMonitor: %w", err)
+	}
 	return nil
 }

@@ -8,6 +8,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"net"
 	"os"
@@ -18,6 +19,7 @@ import (
 	coreosv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
 	appsv1 "k8s.io/api/apps/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
@@ -34,7 +36,7 @@ import (
 	"github.com/fi-ts/postgreslet/pkg/lbmanager"
 	"github.com/fi-ts/postgreslet/pkg/operatormanager"
 	"github.com/fi-ts/postgreslet/pkg/webhooks"
-	firewall "github.com/metal-stack/firewall-controller/api/v1"
+	firewall "github.com/metal-stack/firewall-controller/v2/api/v1"
 	"github.com/spf13/viper"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 
@@ -89,7 +91,10 @@ const (
 	tlsSubDomainFlg                        = "tls-sub-domain"
 	enablePatroniFailsafeModeFlg           = "enable-patroni-failsafe-mode"
 	enableFsGroupChangePolicyWebhookFlg    = "enable-fsgroup-change-policy-webhook"
-	enableWalGExporterFlg                  = "enable-wal-g-exporter"
+	enableWalGExporterFlg                  = "enable-walg-exporter"
+	walGExporterImageFlg                   = "walg-exporter-image"
+	walGExporterCPULimitFlg                = "walg-exporter-cpu-limit"
+	walGExporterMemoryLimitFlg             = "walg-exporter-memory-limit"
 )
 
 var (
@@ -135,6 +140,9 @@ func main() {
 		initDBJobCMName         string
 		tlsClusterIssuer        string
 		tlsSubDomain            string
+		walGExporterImage       string
+		walGExporterCPULimit    string
+		walGExporterMemoryLimit string
 
 		enableLeaderElection                bool
 		enableCRDRegistration               bool
@@ -164,8 +172,15 @@ func main() {
 		pgParamBlockList map[string]bool
 
 		standbyClusterSourceRanges []string
+
+		showVersion = flag.Bool("version", false, "dump current version and exit")
 	)
 
+	flag.Parse()
+	if *showVersion {
+		fmt.Println(v.V.String())
+		os.Exit(0)
+	}
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 
 	// TODO enable Prefix and update helm chart
@@ -320,6 +335,17 @@ func main() {
 	viper.SetDefault(enableWalGExporterFlg, true)
 	enableWalGExporter = viper.GetBool(enableWalGExporterFlg)
 
+	viper.SetDefault(walGExporterImage, "ghcr.io/thedatabaseme/wal-g-exporter:0.3.1")
+	walGExporterImage = viper.GetString(walGExporterImageFlg)
+
+	viper.SetDefault(walGExporterCPULimitFlg, "500m")
+	walGExporterCPULimit = viper.GetString(walGExporterCPULimitFlg)
+	resource.MustParse(walGExporterCPULimit)
+
+	viper.SetDefault(walGExporterMemoryLimit, "500M")
+	walGExporterMemoryLimit = viper.GetString(walGExporterMemoryLimitFlg)
+	resource.MustParse(walGExporterMemoryLimit)
+
 	ctrl.Log.Info("flag",
 		metricsAddrSvcMgrFlg, metricsAddrSvcMgr,
 		metricsAddrCtrlMgrFlg, metricsAddrCtrlMgr,
@@ -366,6 +392,9 @@ func main() {
 		enablePatroniFailsafeModeFlg, enablePatroniFailsafeMode,
 		enableFsGroupChangePolicyWebhookFlg, enableFsGroupChangePolicyWebhook,
 		enableWalGExporterFlg, enableWalGExporter,
+		walGExporterImageFlg, walGExporterImage,
+		walGExporterCPULimitFlg, walGExporterCPULimit,
+		walGExporterMemoryLimitFlg, walGExporterMemoryLimit,
 	)
 
 	svcClusterConf := ctrl.GetConfigOrDie()
@@ -485,6 +514,9 @@ func main() {
 		TLSClusterIssuer:                    tlsClusterIssuer,
 		TLSSubDomain:                        tlsSubDomain,
 		EnableWalGExporter:                  enableWalGExporter,
+		WalGExporterImage:                   walGExporterImage,
+		WalGExporterCPULimit:                walGExporterCPULimit,
+		WalGExporterMemoryLimit:             walGExporterMemoryLimit,
 	}).SetupWithManager(ctrlPlaneClusterMgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Postgres")
 		os.Exit(1)
