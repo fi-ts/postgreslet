@@ -441,7 +441,7 @@ func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context
 			return fmt.Errorf("failed to fetch zalando postgresql: %w", err)
 		}
 
-		u, err := instance.ToUnstructuredZalandoPostgresql(nil, sidecarsCM, r.StorageClass, r.PgParamBlockList, restoreBackupConfig, restoreSourceInstance, patroniTTL, patroniLoopWait, patroniRetryTimeout, r.EnableSuperUserForDBO, r.EnableCustomTLSCert)
+		u, err := instance.ToUnstructuredZalandoPostgresql(nil, sidecarsCM, r.StorageClass, r.PgParamBlockList, restoreBackupConfig, restoreSourceInstance, patroniTTL, patroniLoopWait, patroniRetryTimeout, r.EnableSuperUserForDBO, r.EnableCustomTLSCert, r.PostgresImage)
 		if err != nil {
 			return fmt.Errorf("failed to convert to unstructured zalando postgresql: %w", err)
 		}
@@ -457,7 +457,7 @@ func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context
 	// Update zalando postgresql
 	mergeFrom := client.MergeFrom(rawZ.DeepCopy())
 
-	u, err := instance.ToUnstructuredZalandoPostgresql(rawZ, sidecarsCM, r.StorageClass, r.PgParamBlockList, restoreBackupConfig, restoreSourceInstance, patroniTTL, patroniLoopWait, patroniRetryTimeout, r.EnableSuperUserForDBO, r.EnableCustomTLSCert)
+	u, err := instance.ToUnstructuredZalandoPostgresql(rawZ, sidecarsCM, r.StorageClass, r.PgParamBlockList, restoreBackupConfig, restoreSourceInstance, patroniTTL, patroniLoopWait, patroniRetryTimeout, r.EnableSuperUserForDBO, r.EnableCustomTLSCert, r.PostgresImage)
 	if err != nil {
 		return fmt.Errorf("failed to convert to unstructured zalando postgresql: %w", err)
 	}

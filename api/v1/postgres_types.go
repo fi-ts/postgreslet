@@ -668,7 +668,7 @@ func (p *Postgres) ToPeripheralResourceLookupKey() types.NamespacedName {
 	}
 }
 
-func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *corev1.ConfigMap, sc string, pgParamBlockList map[string]bool, rbs *BackupConfig, srcDB *Postgres, patroniTTL, patroniLoopWait, patroniRetryTimeout uint32, dboIsSuperuser bool, enableTlsCert bool) (*unstructured.Unstructured, error) {
+func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *corev1.ConfigMap, sc string, pgParamBlockList map[string]bool, rbs *BackupConfig, srcDB *Postgres, patroniTTL, patroniLoopWait, patroniRetryTimeout uint32, dboIsSuperuser bool, enableTlsCert bool, image string) (*unstructured.Unstructured, error) {
 	if z == nil {
 		z = &zalando.Postgresql{}
 	}
@@ -680,6 +680,9 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 	// TODO once all the custom resources have that new label, move this part to p.ToZalandoPostgresqlMatchingLabels()
 	z.Labels[PartitionIDLabelName] = p.Spec.PartitionID
 
+	if image != "" {
+		z.Spec.DockerImage = image
+	}
 	z.Spec.NumberOfInstances = p.Spec.NumberOfInstances
 	z.Spec.PostgresqlParam.PgVersion = p.Spec.Version
 
