@@ -17,7 +17,6 @@ import (
 
 	pg "github.com/fi-ts/postgreslet/api/v1"
 	"github.com/go-logr/logr"
-	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -185,23 +184,6 @@ func (m *OperatorManager) IsOperatorDeletable(ctx context.Context, namespace str
 	}
 
 	log.Info("operator deletable")
-	return true, nil
-}
-
-// IsOperatorInstalled returns true when the operator is installed
-func (m *OperatorManager) IsOperatorInstalled(ctx context.Context, namespace string) (bool, error) {
-	pods := &corev1.PodList{}
-	opts := []client.ListOption{
-		client.InNamespace(namespace),
-		operatorPodMatchingLabels,
-	}
-	if err := m.client.List(ctx, pods, opts...); err != nil {
-		return false, client.IgnoreNotFound(err)
-	}
-	if len(pods.Items) == 0 {
-		return false, nil
-	}
-	m.log.Info("operator is installed", "ns", namespace)
 	return true, nil
 }
 
@@ -671,30 +653,4 @@ func (m *OperatorManager) toObjectKey(obj runtime.Object, namespace string) (cli
 		Namespace: namespace,
 		Name:      name,
 	}, nil
-}
-
-// UpdateAllManagedOperators Updates the manifests of all postgres operators managed by this postgreslet
-func (m *OperatorManager) UpdateAllManagedOperators(ctx context.Context) error {
-	// fetch postgresql custom resource (running or otherwise)
-	m.log.Info("Fetching all zalando custom resources managed by this postgreslet")
-	matchingLabels := client.MatchingLabels{
-		pg.PartitionIDLabelName: m.options.PartitionID,
-	}
-	zList := &zalando.PostgresqlList{}
-	opts := []client.ListOption{
-		matchingLabels,
-	}
-	if err := m.client.List(ctx, zList, opts...); err != nil {
-		return client.IgnoreNotFound(err)
-	}
-	// update each namespace
-	for _, z := range zList.Items {
-		m.log.Info("Updating postgres operator installation", "ns", z.Namespace)
-		if err := m.InstallOrUpdateOperator(ctx, z.Namespace); err != nil {
-			return err
-		}
-	}
-
-	m.log.Info("Done updating postgres operators in managed namespaces")
-	return nil
 }

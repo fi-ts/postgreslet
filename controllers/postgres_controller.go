@@ -485,15 +485,8 @@ func (r *PostgresReconciler) deleteUserPasswordsSecret(ctx context.Context, inst
 // ensureZalandoDependencies makes sure Zalando resources are installed in the service-cluster.
 func (r *PostgresReconciler) ensureZalandoDependencies(log logr.Logger, ctx context.Context, p *pg.Postgres, b *pg.BackupConfig) error {
 	namespace := p.ToPeripheralResourceNamespace()
-	isInstalled, err := r.OperatorManager.IsOperatorInstalled(ctx, namespace)
-	if err != nil {
-		return fmt.Errorf("error while querying if zalando dependencies are installed: %w", err)
-	}
-
-	if !isInstalled {
-		if err := r.OperatorManager.InstallOrUpdateOperator(ctx, namespace); err != nil {
-			return fmt.Errorf("error while installing zalando dependencies: %w", err)
-		}
+	if err := r.OperatorManager.InstallOrUpdateOperator(ctx, namespace); err != nil {
+		return fmt.Errorf("error while installing zalando dependencies: %w", err)
 	}
 
 	if err := r.updatePodEnvironmentConfigMap(log, ctx, p, b); err != nil {
