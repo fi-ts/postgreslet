@@ -39,9 +39,6 @@ const (
 	// PodEnvSecretName Name of the pod environment secret to create and use
 	PodEnvSecretName string = "postgres-pod-secret" //nolint:gosec
 
-	operatorPodLabelName  string = "name"
-	operatorPodLabelValue string = "postgres-operator"
-
 	// SidecarsCMFluentBitConfKey Name of the key containing the fluent-bit.conf config file
 	SidecarsCMFluentBitConfKey string = "fluent-bit.conf"
 	// SidecarsCMExporterQueriesKey Name of the key containing the queries.yaml config file
@@ -52,9 +49,6 @@ const (
 	spilo_fsgroup     = "103"
 	debugLogLevel int = 1
 )
-
-// operatorPodMatchingLabels is for listing operator pods
-var operatorPodMatchingLabels = client.MatchingLabels{operatorPodLabelName: operatorPodLabelValue}
 
 // Options
 type Options struct {
