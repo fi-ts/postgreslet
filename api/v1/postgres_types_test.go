@@ -229,6 +229,7 @@ func TestPostgresRestoreTimestamp_ToUnstructuredZalandoPostgresql(t *testing.T) 
 		pgParamBlockList map[string]bool
 		rbs              *BackupConfig
 		srcDB            *Postgres
+		image            string
 		want             string
 		wantErr          bool
 	}{
@@ -257,6 +258,7 @@ func TestPostgresRestoreTimestamp_ToUnstructuredZalandoPostgresql(t *testing.T) 
 					Description: "description",
 				},
 			},
+			image:   "image:tag",
 			want:    time.Now().Format(zalando_timestamp_format), // I know this is not perfect, let's just hope we always finish within the same second...
 			wantErr: false,
 		},
@@ -283,6 +285,7 @@ func TestPostgresRestoreTimestamp_ToUnstructuredZalandoPostgresql(t *testing.T) 
 					Description: "description",
 				},
 			},
+			image:   "image:tag",
 			want:    time.Now().Format(zalando_timestamp_format), // I know this is not perfect, let's just hope we always finish within the same second...
 			wantErr: false,
 		},
@@ -311,6 +314,7 @@ func TestPostgresRestoreTimestamp_ToUnstructuredZalandoPostgresql(t *testing.T) 
 					Description: "description",
 				},
 			},
+			image:   "image:tag",
 			want:    "invalid but whatever",
 			wantErr: false,
 		},
@@ -339,8 +343,38 @@ func TestPostgresRestoreTimestamp_ToUnstructuredZalandoPostgresql(t *testing.T) 
 					Description: "description",
 				},
 			},
+			image:   "image:tag",
 			want:    "oranges",
 			wantErr: true,
+		},
+		{
+			name: "no image",
+			spec: PostgresSpec{
+				Size: &Size{
+					CPU:          "1",
+					Memory:       "4Gi",
+					SharedBuffer: "64Mi",
+				},
+				PostgresRestore: &PostgresRestore{
+					Timestamp: "apples",
+				},
+			},
+			c:                nil,
+			sc:               "fake-storage-class",
+			pgParamBlockList: map[string]bool{},
+			rbs:              &BackupConfig{},
+			srcDB: &Postgres{
+				ObjectMeta: v1.ObjectMeta{
+					Name: uuid.NewString(),
+				},
+				Spec: PostgresSpec{
+					Tenant:      "tenant",
+					Description: "description",
+				},
+			},
+			image:   "",
+			want:    time.Now().Format(zalando_timestamp_format), // I know this is not perfect, let's just hope we always finish within the same second...
+			wantErr: false,
 		},
 	}
 	for _, tt := range tests {
@@ -349,7 +383,7 @@ func TestPostgresRestoreTimestamp_ToUnstructuredZalandoPostgresql(t *testing.T) 
 			p := &Postgres{
 				Spec: tt.spec,
 			}
-			got, _ := p.ToUnstructuredZalandoPostgresql(nil, tt.c, tt.sc, tt.pgParamBlockList, tt.rbs, tt.srcDB, 130, 10, 60, false, false)
+			got, _ := p.ToUnstructuredZalandoPostgresql(nil, tt.c, tt.sc, tt.pgParamBlockList, tt.rbs, tt.srcDB, 130, 10, 60, false, false, "dockerImage")
 
 			jsonZ, err := runtime.DefaultUnstructuredConverter.ToUnstructured(got)
 			if err != nil {
@@ -358,7 +392,7 @@ func TestPostgresRestoreTimestamp_ToUnstructuredZalandoPostgresql(t *testing.T) 
 			jsonSpec, _ := jsonZ["spec"].(map[string]interface{})
 			jsonClone, _ := jsonSpec["clone"].(map[string]interface{})
 
-			if !tt.wantErr && tt.want != jsonClone["timestamp"] {
+			if !tt.wantErr && tt.want != jsonClone["timestamp"] && tt.image == jsonSpec["dockerImage"] {
 				t.Errorf("Spec.Clone.Timestamp was %v, but expected %v", jsonClone["timestamp"], tt.want)
 			}
 		})
