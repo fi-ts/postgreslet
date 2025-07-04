@@ -204,6 +204,8 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 
 		if err := r.removeStorageEncryptionSecretFinalizer(log, ctx, instance); err != nil {
 			log.Error(err, "error while remnoving finalizer from storage encryption secret")
+			// this would be blocking if we couldn't remove the finalizer, so we should keep trying!
+			return ctrl.Result{}, err
 		} else {
 			log.V(debugLogLevel).Info("finalizer from storage encryption secret removed")
 		}
@@ -1833,7 +1835,11 @@ func (r *PostgresReconciler) removeStorageEncryptionSecretFinalizer(log logr.Log
 	log.V(debugLogLevel).Info("Fetching storage secret", "name", n)
 	err := r.SvcClient.Get(ctx, types.NamespacedName{Namespace: ns, Name: n}, s)
 	if err != nil {
-		// TODO this would be blocking if we couldn't remove the finalizer!
+		if apierrors.IsNotFound(err) {
+			log.V(debugLogLevel).Info("storage secret not found, nothing to do", "name", n)
+			return nil
+		}
+		// this would be blocking if we couldn't remove the finalizer, so we should keep trying!
 		return fmt.Errorf("error while fetching storage secret from service cluster: %w", err)
 	}
 
