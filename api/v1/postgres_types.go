@@ -90,6 +90,7 @@ const (
 	defaultPostgresParamValueLogMinErrorStatement   = "WARNING"
 	defaultPostgresParamValueLogErrorVerbosity      = "VERBOSE"
 	defaultPostgresParamValueLogLinePrefix          = "%m [%p]: [%l-1] db=%d,user=%u,app=%a,client=%h "
+	defaultPostgresParamValueLogStatement           = "none"
 
 	// PostgresAutoAssignedIPNamePrefix a prefix to add to the generated random name
 	PostgresAutoAssignedIPNamePrefix = "pgaas-autoassign-"
@@ -962,7 +963,7 @@ func enableAuditLogs(parameters map[string]string) {
 	// default values: bg_mon,pg_stat_statements,pgextwlist,pg_auth_mon,set_user,timescaledb,pg_cron,pg_stat_kcache
 	parameters["shared_preload_libraries"] = "pg_stat_statements,pgextwlist,pg_auth_mon,set_user,timescaledb,pg_cron,pg_stat_kcache,pgaudit"
 	parameters["pgaudit.log_catalog"] = "off"
-	parameters["pgaudit.log"] = "ddl"
+	parameters["pgaudit.log"] = "ddl,role"
 	parameters["pgaudit.log_relation"] = "on"
 	parameters["pgaudit.log_parameter"] = "on"
 }
@@ -980,6 +981,7 @@ func setDefaultPostgresParams(parameters map[string]string, version string) {
 	parameters["ssl_prefer_server_ciphers"] = defaultPostgresParamValueSSLPreferServerCiphers
 	parameters["tcp_keepalives_idle"] = defaultPostgresParamValueTCPKeepAlivesIdle
 	parameters["tcp_keepalives_interval"] = defaultPostgresParamValueTCPKeepAlivesInterval
+	parameters["log_statement"] = defaultPostgresParamValueLogStatement
 
 	// set version specific parameters
 	v, err := strconv.Atoi(version)
