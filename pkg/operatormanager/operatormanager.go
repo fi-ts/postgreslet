@@ -59,17 +59,19 @@ var operatorPodMatchingLabels = client.MatchingLabels{operatorPodLabelName: oper
 
 // Options
 type Options struct {
-	PspName                 string
-	OperatorImage           string
-	DockerImage             string
-	EtcdHost                string
-	CRDRegistration         bool
-	MajorVersionUpgradeMode string
-	PostgresletNamespace    string
-	SidecarsConfigMapName   string
-	PodAntiaffinity         bool
-	PartitionID             string
-	PatroniFailsafeMode     bool
+	PspName                                  string
+	OperatorImage                            string
+	DockerImage                              string
+	EtcdHost                                 string
+	CRDRegistration                          bool
+	MajorVersionUpgradeMode                  string
+	PostgresletNamespace                     string
+	SidecarsConfigMapName                    string
+	PodAntiaffinity                          bool
+	PartitionID                              string
+	PatroniFailsafeMode                      bool
+	PodAntiaffinityPreferredDuringScheduling bool
+	PodAntiaffinityTopologyKey               string
 }
 
 // OperatorManager manages the operator
@@ -435,6 +437,10 @@ func (m *OperatorManager) editConfigMap(cm *corev1.ConfigMap, namespace string, 
 	cm.Data["replication_username"] = pg.PostgresConfigReplicationUsername
 
 	cm.Data["enable_pod_antiaffinity"] = strconv.FormatBool(options.PodAntiaffinity)
+	cm.Data["pod_antiaffinity_preferred_during_scheduling"] = strconv.FormatBool(options.PodAntiaffinityPreferredDuringScheduling)
+	if options.PodAntiaffinityTopologyKey != "" {
+		cm.Data["pod_antiaffinity_topology_key"] = options.PodAntiaffinityTopologyKey
+	}
 
 	cm.Data["secret_name_template"] = "{username}.{cluster}.credentials"
 	cm.Data["master_dns_name_format"] = "{cluster}.{team}.{hostedzone}"
