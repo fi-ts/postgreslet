@@ -7,12 +7,16 @@ import (
 
 	"github.com/go-logr/logr"
 	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
+
+	pg "github.com/fi-ts/postgreslet/api/v1"
 )
 
-// +kubebuilder:webhook:path=/mutate-apps-v1-statefulset,mutating=true,failurePolicy=ignore,groups=apps,resources=statefulsets,verbs=create;update,versions=v1,name=fsgroupchangepolicy.postgres.fits.cloud
+// +kubebuilder:webhook:path=/mutate-v1-pod,mutating=true,failurePolicy=ignore,groups=core,resources=pods,verbs=create;update,versions=v1,name=fsgroupchangepolicy.postgres.fits.cloud
 
 // FsGroupChangePolicySetter Adds securityContext.fsGroupChangePolicy=OnRootMismatch when the securityContext.fsGroup field is set
 type FsGroupChangePolicySetter struct {
@@ -38,6 +42,32 @@ func (a *FsGroupChangePolicySetter) Handle(ctx context.Context, req admission.Re
 		pod.Spec.SecurityContext.FSGroupChangePolicy = &p
 		log.V(1).Info("Mutating Pod", "pod", pod)
 	}
+
+	//
+	// TopologySpreadConstraint
+	//
+	var maxSkew int32 = 1
+	var minDomains int32 = 2
+	tsc := v1.TopologySpreadConstraint{
+		MaxSkew:           maxSkew,
+		MinDomains:        ptr.To(minDomains),
+		WhenUnsatisfiable: v1.DoNotSchedule,
+		LabelSelector: &metav1.LabelSelector{
+			MatchLabels: map[string]string{
+				"application":           "spilo",
+				"cluster-name":          pod.ObjectMeta.Labels["cluster-name"],
+				pg.NameLabelName:        pod.ObjectMeta.Labels[pg.NameLabelName],
+				pg.PartitionIDLabelName: pod.ObjectMeta.Labels[pg.PartitionIDLabelName],
+				pg.ProjectIDLabelName:   pod.ObjectMeta.Labels[pg.ProjectIDLabelName],
+				pg.TenantLabelName:      pod.ObjectMeta.Labels[pg.TenantLabelName],
+				pg.UIDLabelName:         pod.ObjectMeta.Labels[pg.UIDLabelName],
+				"team":                  pod.ObjectMeta.Labels["team"],
+			},
+		},
+		TopologyKey: "machine.metal-stack.io/rack",
+	}
+	// add our topology spread constraints
+	pod.Spec.TopologySpreadConstraints = append(pod.Spec.TopologySpreadConstraints, tsc)
 
 	marshaledSts, err := json.Marshal(pod)
 	if err != nil {
