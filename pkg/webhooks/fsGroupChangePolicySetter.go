@@ -8,6 +8,7 @@ import (
 	"github.com/go-logr/logr"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
@@ -43,36 +44,30 @@ func (a *FsGroupChangePolicySetter) Handle(ctx context.Context, req admission.Re
 	}
 
 	//
-	// PodAntiAffinity
+	// TopologySpreadConstraint
 	//
-	ls := &metav1.LabelSelector{
-		MatchLabels: map[string]string{
-			"application":           "spilo",
-			"cluster-name":          pod.ObjectMeta.Labels["cluster-name"],
-			pg.NameLabelName:        pod.ObjectMeta.Labels[pg.NameLabelName],
-			pg.PartitionIDLabelName: pod.ObjectMeta.Labels[pg.PartitionIDLabelName],
-			pg.ProjectIDLabelName:   pod.ObjectMeta.Labels[pg.ProjectIDLabelName],
-			pg.TenantLabelName:      pod.ObjectMeta.Labels[pg.TenantLabelName],
-			pg.UIDLabelName:         pod.ObjectMeta.Labels[pg.UIDLabelName],
-			"team":                  pod.ObjectMeta.Labels["team"],
+	var maxSkew int32 = 1
+	var minDomains int32 = 2
+	tsc := v1.TopologySpreadConstraint{
+		MaxSkew:           maxSkew,
+		MinDomains:        ptr.To(minDomains),
+		WhenUnsatisfiable: v1.DoNotSchedule,
+		LabelSelector: &metav1.LabelSelector{
+			MatchLabels: map[string]string{
+				"application":           "spilo",
+				"cluster-name":          pod.ObjectMeta.Labels["cluster-name"],
+				pg.NameLabelName:        pod.ObjectMeta.Labels[pg.NameLabelName],
+				pg.PartitionIDLabelName: pod.ObjectMeta.Labels[pg.PartitionIDLabelName],
+				pg.ProjectIDLabelName:   pod.ObjectMeta.Labels[pg.ProjectIDLabelName],
+				pg.TenantLabelName:      pod.ObjectMeta.Labels[pg.TenantLabelName],
+				pg.UIDLabelName:         pod.ObjectMeta.Labels[pg.UIDLabelName],
+				"team":                  pod.ObjectMeta.Labels["team"],
+			},
 		},
+		TopologyKey: "machine.metal-stack.io/rack",
 	}
-	wpat := v1.WeightedPodAffinityTerm{
-		PodAffinityTerm: v1.PodAffinityTerm{
-			LabelSelector: ls,
-			TopologyKey:   "machine.metal-stack.io/rack",
-		},
-		Weight: 1,
-	}
-	// initialize if necessary
-	if pod.Spec.Affinity == nil {
-		pod.Spec.Affinity = &v1.Affinity{}
-	}
-	if pod.Spec.Affinity.PodAntiAffinity == nil {
-		pod.Spec.Affinity.PodAntiAffinity = &v1.PodAntiAffinity{}
-	}
-	// add our podantiaffinity
-	pod.Spec.Affinity.PodAntiAffinity.PreferredDuringSchedulingIgnoredDuringExecution = append(pod.Spec.Affinity.PodAntiAffinity.PreferredDuringSchedulingIgnoredDuringExecution, wpat)
+	// add our topology spread constraints
+	pod.Spec.TopologySpreadConstraints = append(pod.Spec.TopologySpreadConstraints, tsc)
 
 	marshaledSts, err := json.Marshal(pod)
 	if err != nil {
