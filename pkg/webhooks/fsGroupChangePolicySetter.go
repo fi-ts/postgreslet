@@ -11,6 +11,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
+
+	pg "github.com/fi-ts/postgreslet/api/v1"
 )
 
 // +kubebuilder:webhook:path=/mutate-v1-pod,mutating=true,failurePolicy=ignore,groups=core,resources=pods,verbs=create;update,versions=v1,name=fsgroupchangepolicy.postgres.fits.cloud
@@ -43,22 +45,27 @@ func (a *FsGroupChangePolicySetter) Handle(ctx context.Context, req admission.Re
 	//
 	// PodAntiAffinity
 	//
+	//pod.ObjectMeta.Labels
+	ls := &metav1.LabelSelector{
+		MatchLabels: map[string]string{
+			pg.UIDLabelName:       pod.ObjectMeta.Labels[pg.UIDLabelName],
+			pg.NameLabelName:      pod.ObjectMeta.Labels[pg.NameLabelName],
+			pg.ProjectIDLabelName: pod.ObjectMeta.Labels[pg.ProjectIDLabelName],
+			pg.TenantLabelName:    pod.ObjectMeta.Labels[pg.TenantLabelName],
+		},
+	}
 	paa := v1.PodAntiAffinity{
 		RequiredDuringSchedulingIgnoredDuringExecution: []v1.PodAffinityTerm{
 			{
-				LabelSelector: &metav1.LabelSelector{
-					MatchLabels: pod.ObjectMeta.Labels,
-				},
-				TopologyKey: "kubernetes.io/hostname",
+				LabelSelector: ls,
+				TopologyKey:   "kubernetes.io/hostname",
 			},
 		},
 		PreferredDuringSchedulingIgnoredDuringExecution: []v1.WeightedPodAffinityTerm{
 			{
 				PodAffinityTerm: v1.PodAffinityTerm{
-					LabelSelector: &metav1.LabelSelector{
-						MatchLabels: pod.ObjectMeta.Labels,
-					},
-					TopologyKey: "machine.metal-stack.io/rack",
+					LabelSelector: ls,
+					TopologyKey:   "machine.metal-stack.io/rack",
 				},
 				Weight: 1,
 			},
