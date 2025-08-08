@@ -57,29 +57,22 @@ func (a *FsGroupChangePolicySetter) Handle(ctx context.Context, req admission.Re
 			"team":                  pod.ObjectMeta.Labels["team"],
 		},
 	}
-	paa := v1.PodAntiAffinity{
-		RequiredDuringSchedulingIgnoredDuringExecution: []v1.PodAffinityTerm{
-			{
-				LabelSelector: ls,
-				TopologyKey:   "kubernetes.io/hostname",
-			},
+	wpat := v1.WeightedPodAffinityTerm{
+		PodAffinityTerm: v1.PodAffinityTerm{
+			LabelSelector: ls,
+			TopologyKey:   "machine.metal-stack.io/rack",
 		},
-		PreferredDuringSchedulingIgnoredDuringExecution: []v1.WeightedPodAffinityTerm{
-			{
-				PodAffinityTerm: v1.PodAffinityTerm{
-					LabelSelector: ls,
-					TopologyKey:   "machine.metal-stack.io/rack",
-				},
-				Weight: 1,
-			},
-		},
+		Weight: 1,
 	}
 	// initialize if necessary
 	if pod.Spec.Affinity == nil {
 		pod.Spec.Affinity = &v1.Affinity{}
 	}
-	// force our podantiaffinity
-	pod.Spec.Affinity.PodAntiAffinity = &paa
+	if pod.Spec.Affinity.PodAntiAffinity == nil {
+		pod.Spec.Affinity.PodAntiAffinity = &v1.PodAntiAffinity{}
+	}
+	// add our podantiaffinity
+	pod.Spec.Affinity.PodAntiAffinity.PreferredDuringSchedulingIgnoredDuringExecution = append(pod.Spec.Affinity.PodAntiAffinity.PreferredDuringSchedulingIgnoredDuringExecution, wpat)
 
 	marshaledSts, err := json.Marshal(pod)
 	if err != nil {
