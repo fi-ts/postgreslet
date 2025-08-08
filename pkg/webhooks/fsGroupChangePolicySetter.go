@@ -45,13 +45,16 @@ func (a *FsGroupChangePolicySetter) Handle(ctx context.Context, req admission.Re
 	//
 	// PodAntiAffinity
 	//
-	//pod.ObjectMeta.Labels
 	ls := &metav1.LabelSelector{
 		MatchLabels: map[string]string{
-			pg.UIDLabelName:       pod.ObjectMeta.Labels[pg.UIDLabelName],
-			pg.NameLabelName:      pod.ObjectMeta.Labels[pg.NameLabelName],
-			pg.ProjectIDLabelName: pod.ObjectMeta.Labels[pg.ProjectIDLabelName],
-			pg.TenantLabelName:    pod.ObjectMeta.Labels[pg.TenantLabelName],
+			"application":           "spilo",
+			"cluster-name":          pod.ObjectMeta.Labels["cluster-name"],
+			pg.NameLabelName:        pod.ObjectMeta.Labels[pg.NameLabelName],
+			pg.PartitionIDLabelName: pod.ObjectMeta.Labels[pg.PartitionIDLabelName],
+			pg.ProjectIDLabelName:   pod.ObjectMeta.Labels[pg.ProjectIDLabelName],
+			pg.TenantLabelName:      pod.ObjectMeta.Labels[pg.TenantLabelName],
+			pg.UIDLabelName:         pod.ObjectMeta.Labels[pg.UIDLabelName],
+			"team":                  pod.ObjectMeta.Labels["team"],
 		},
 	}
 	paa := v1.PodAntiAffinity{
