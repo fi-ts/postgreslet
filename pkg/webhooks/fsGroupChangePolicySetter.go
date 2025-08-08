@@ -7,12 +7,13 @@ import (
 
 	"github.com/go-logr/logr"
 	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
-// +kubebuilder:webhook:path=/mutate-apps-v1-statefulset,mutating=true,failurePolicy=ignore,groups=apps,resources=statefulsets,verbs=create;update,versions=v1,name=fsgroupchangepolicy.postgres.fits.cloud
+// +kubebuilder:webhook:path=/mutate-v1-pod,mutating=true,failurePolicy=ignore,groups=core,resources=pods,verbs=create;update,versions=v1,name=fsgroupchangepolicy.postgres.fits.cloud
 
 // FsGroupChangePolicySetter Adds securityContext.fsGroupChangePolicy=OnRootMismatch when the securityContext.fsGroup field is set
 type FsGroupChangePolicySetter struct {
@@ -38,6 +39,37 @@ func (a *FsGroupChangePolicySetter) Handle(ctx context.Context, req admission.Re
 		pod.Spec.SecurityContext.FSGroupChangePolicy = &p
 		log.V(1).Info("Mutating Pod", "pod", pod)
 	}
+
+	//
+	// PodAntiAffinity
+	//
+	paa := v1.PodAntiAffinity{
+		RequiredDuringSchedulingIgnoredDuringExecution: []v1.PodAffinityTerm{
+			{
+				LabelSelector: &metav1.LabelSelector{
+					MatchLabels: pod.ObjectMeta.Labels,
+				},
+				TopologyKey: "kubernetes.io/hostname",
+			},
+		},
+		PreferredDuringSchedulingIgnoredDuringExecution: []v1.WeightedPodAffinityTerm{
+			{
+				PodAffinityTerm: v1.PodAffinityTerm{
+					LabelSelector: &metav1.LabelSelector{
+						MatchLabels: pod.ObjectMeta.Labels,
+					},
+					TopologyKey: "machine.metal-stack.io/rack",
+				},
+				Weight: 1,
+			},
+		},
+	}
+	// initialize if necessary
+	if pod.Spec.Affinity == nil {
+		pod.Spec.Affinity = &v1.Affinity{}
+	}
+	// force our podantiaffinity
+	pod.Spec.Affinity.PodAntiAffinity = &paa
 
 	marshaledSts, err := json.Marshal(pod)
 	if err != nil {
