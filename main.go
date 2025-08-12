@@ -97,6 +97,10 @@ const (
 	walGExporterMemoryLimitFlg                  = "walg-exporter-memory-limit"
 	podAntiaffinityPreferredDuringSchedulingFlg = "pod-antiaffinity-preferred-during-scheduling"
 	podAntiaffinityTopologyKeyFlg               = "pod-antiaffinity-topology-key"
+	enablePodTopologySpreadConstraintWebhookFlg = "enable-pod-topology-spread-constraint-webhook"
+	podTopologySpreadConstraintTopologyKeyFlg   = "pod-topology-spread-constraint-topology-key"
+	podTopologySpreadConstraintMaxSkewFlg       = "pod-topology-spread-constraint-max-skew"
+	podTopologySpreadConstraintMinDomainsFlg    = "pod-topology-spread-constraint-min-domains"
 )
 
 var (
@@ -119,33 +123,34 @@ func init() {
 func main() {
 
 	var (
-		metricsAddrCtrlMgr         string
-		metricsAddrSvcMgr          string
-		partitionID                string
-		tenant                     string
-		ctrlClusterKubeconfig      string
-		pspName                    string
-		lbIP                       string
-		storageClass               string
-		postgresImage              string
-		etcdHost                   string
-		operatorImage              string
-		majorVersionUpgradeMode    string
-		postgresletNamespace       string
-		sidecarsCMName             string
-		controlPlaneNamespace      string
-		etcdImage                  string
-		etcdBackupSidecarImage     string
-		etcdBackupSecretName       string
-		etcdPSPName                string
-		postgresletFullname        string
-		initDBJobCMName            string
-		tlsClusterIssuer           string
-		tlsSubDomain               string
-		walGExporterImage          string
-		walGExporterCPULimit       string
-		walGExporterMemoryLimit    string
-		podAntiaffinityTopologyKey string
+		metricsAddrCtrlMgr                     string
+		metricsAddrSvcMgr                      string
+		partitionID                            string
+		tenant                                 string
+		ctrlClusterKubeconfig                  string
+		pspName                                string
+		lbIP                                   string
+		storageClass                           string
+		postgresImage                          string
+		etcdHost                               string
+		operatorImage                          string
+		majorVersionUpgradeMode                string
+		postgresletNamespace                   string
+		sidecarsCMName                         string
+		controlPlaneNamespace                  string
+		etcdImage                              string
+		etcdBackupSidecarImage                 string
+		etcdBackupSecretName                   string
+		etcdPSPName                            string
+		postgresletFullname                    string
+		initDBJobCMName                        string
+		tlsClusterIssuer                       string
+		tlsSubDomain                           string
+		walGExporterImage                      string
+		walGExporterCPULimit                   string
+		walGExporterMemoryLimit                string
+		podAntiaffinityTopologyKey             string
+		podTopologySpreadConstraintTopologyKey string
 
 		enableLeaderElection                     bool
 		enableCRDRegistration                    bool
@@ -164,10 +169,13 @@ func main() {
 		enableFsGroupChangePolicyWebhook         bool
 		enableWalGExporter                       bool
 		podAntiaffinityPreferredDuringScheduling bool
+		enablePodTopologySpreadConstraintWebhook bool
 
 		portRangeStart                        int32
 		portRangeSize                         int32
 		replicationChangeRequeueTimeInSeconds int
+		podTopologySpreadConstraintMaxSkew    int32
+		podTopologySpreadConstraintMinDomains int32
 
 		patroniTTL          uint32
 		patroniLoopWait     uint32
@@ -355,6 +363,15 @@ func main() {
 	walGExporterMemoryLimit = viper.GetString(walGExporterMemoryLimitFlg)
 	resource.MustParse(walGExporterMemoryLimit)
 
+	// TODO disable by default
+	viper.SetDefault(enablePodTopologySpreadConstraintWebhookFlg, true)
+	enablePodTopologySpreadConstraintWebhook = viper.GetBool(enablePodTopologySpreadConstraintWebhookFlg)
+	viper.SetDefault(podTopologySpreadConstraintTopologyKeyFlg, "machine.metal-stack.io/rack")
+	podTopologySpreadConstraintTopologyKey = viper.GetString(podTopologySpreadConstraintTopologyKeyFlg)
+	viper.SetDefault(podTopologySpreadConstraintMaxSkewFlg, 1)
+	podTopologySpreadConstraintMaxSkew = viper.GetInt32(podTopologySpreadConstraintMaxSkewFlg)
+	podTopologySpreadConstraintMinDomains = viper.GetInt32(podTopologySpreadConstraintMinDomainsFlg)
+
 	ctrl.Log.Info("flag",
 		metricsAddrSvcMgrFlg, metricsAddrSvcMgr,
 		metricsAddrCtrlMgrFlg, metricsAddrCtrlMgr,
@@ -406,6 +423,10 @@ func main() {
 		walGExporterImageFlg, walGExporterImage,
 		walGExporterCPULimitFlg, walGExporterCPULimit,
 		walGExporterMemoryLimitFlg, walGExporterMemoryLimit,
+		enablePodTopologySpreadConstraintWebhookFlg, enablePodTopologySpreadConstraintWebhook,
+		podTopologySpreadConstraintTopologyKeyFlg, podTopologySpreadConstraintTopologyKey,
+		podTopologySpreadConstraintMaxSkewFlg, podTopologySpreadConstraintMaxSkew,
+		podTopologySpreadConstraintMinDomainsFlg, podTopologySpreadConstraintMinDomains,
 	)
 
 	svcClusterConf := ctrl.GetConfigOrDie()
@@ -554,9 +575,13 @@ func main() {
 			"/mutate-v1-pod",
 			&webhook.Admission{
 				Handler: &webhooks.FsGroupChangePolicySetter{
-					SvcClient: svcClusterMgr.GetClient(),
-					Decoder:   admission.NewDecoder(svcClusterMgr.GetScheme()),
-					Log:       ctrl.Log.WithName("webhooks").WithName("FsGroupChangePolicySetter"),
+					SvcClient:                                svcClusterMgr.GetClient(),
+					Decoder:                                  admission.NewDecoder(svcClusterMgr.GetScheme()),
+					Log:                                      ctrl.Log.WithName("webhooks").WithName("FsGroupChangePolicySetter"),
+					EnablePodTopologySpreadConstraintWebhook: enablePodTopologySpreadConstraintWebhook,
+					PodTopologySpreadConstraintTopologyKey:   podTopologySpreadConstraintTopologyKey,
+					PodTopologySpreadConstraintMaxSkew:       podTopologySpreadConstraintMaxSkew,
+					PodTopologySpreadConstraintMinDomains:    podTopologySpreadConstraintMinDomains,
 				},
 			},
 		)

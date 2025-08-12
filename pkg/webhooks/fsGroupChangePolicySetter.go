@@ -8,7 +8,6 @@ import (
 	"github.com/go-logr/logr"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
@@ -20,9 +19,13 @@ import (
 
 // FsGroupChangePolicySetter Adds securityContext.fsGroupChangePolicy=OnRootMismatch when the securityContext.fsGroup field is set
 type FsGroupChangePolicySetter struct {
-	SvcClient client.Client
-	Decoder   admission.Decoder
-	Log       logr.Logger
+	SvcClient                                client.Client
+	Decoder                                  admission.Decoder
+	Log                                      logr.Logger
+	EnablePodTopologySpreadConstraintWebhook bool
+	PodTopologySpreadConstraintTopologyKey   string
+	PodTopologySpreadConstraintMaxSkew       int32
+	PodTopologySpreadConstraintMinDomains    int32
 }
 
 func (a *FsGroupChangePolicySetter) Handle(ctx context.Context, req admission.Request) admission.Response {
@@ -46,28 +49,34 @@ func (a *FsGroupChangePolicySetter) Handle(ctx context.Context, req admission.Re
 	//
 	// TopologySpreadConstraint
 	//
-	var maxSkew int32 = 1
-	var minDomains int32 = 2
-	tsc := v1.TopologySpreadConstraint{
-		MaxSkew:           maxSkew,
-		MinDomains:        ptr.To(minDomains),
-		WhenUnsatisfiable: v1.DoNotSchedule,
-		LabelSelector: &metav1.LabelSelector{
-			MatchLabels: map[string]string{
-				"application":           "spilo",
-				"cluster-name":          pod.ObjectMeta.Labels["cluster-name"],
-				pg.NameLabelName:        pod.ObjectMeta.Labels[pg.NameLabelName],
-				pg.PartitionIDLabelName: pod.ObjectMeta.Labels[pg.PartitionIDLabelName],
-				pg.ProjectIDLabelName:   pod.ObjectMeta.Labels[pg.ProjectIDLabelName],
-				pg.TenantLabelName:      pod.ObjectMeta.Labels[pg.TenantLabelName],
-				pg.UIDLabelName:         pod.ObjectMeta.Labels[pg.UIDLabelName],
-				"team":                  pod.ObjectMeta.Labels["team"],
+	if a.EnablePodTopologySpreadConstraintWebhook {
+		tsc := v1.TopologySpreadConstraint{
+			MaxSkew:           a.PodTopologySpreadConstraintMaxSkew,
+			WhenUnsatisfiable: v1.ScheduleAnyway,
+			LabelSelector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"application":           "spilo",
+					"cluster-name":          pod.ObjectMeta.Labels["cluster-name"],
+					pg.NameLabelName:        pod.ObjectMeta.Labels[pg.NameLabelName],
+					pg.PartitionIDLabelName: pod.ObjectMeta.Labels[pg.PartitionIDLabelName],
+					pg.ProjectIDLabelName:   pod.ObjectMeta.Labels[pg.ProjectIDLabelName],
+					pg.TenantLabelName:      pod.ObjectMeta.Labels[pg.TenantLabelName],
+					pg.UIDLabelName:         pod.ObjectMeta.Labels[pg.UIDLabelName],
+					"team":                  pod.ObjectMeta.Labels["team"],
+				},
 			},
-		},
-		TopologyKey: "machine.metal-stack.io/rack",
+			TopologyKey: a.PodTopologySpreadConstraintTopologyKey,
+		}
+
+		// if defined, set the minDomains (and corresponding whenUnsatisfied) field as well
+		if a.PodTopologySpreadConstraintMinDomains > 0 {
+			tsc.MinDomains = &a.PodTopologySpreadConstraintMinDomains
+			tsc.WhenUnsatisfiable = v1.DoNotSchedule
+		}
+
+		// add our topology spread constraints
+		pod.Spec.TopologySpreadConstraints = append(pod.Spec.TopologySpreadConstraints, tsc)
 	}
-	// add our topology spread constraints
-	pod.Spec.TopologySpreadConstraints = append(pod.Spec.TopologySpreadConstraints, tsc)
 
 	marshaledSts, err := json.Marshal(pod)
 	if err != nil {
