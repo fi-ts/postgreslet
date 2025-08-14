@@ -43,7 +43,7 @@ func (a *FsGroupChangePolicySetter) Handle(ctx context.Context, req admission.Re
 	if pod.Spec.SecurityContext != nil && pod.Spec.SecurityContext.FSGroup != nil {
 		p := v1.FSGroupChangeOnRootMismatch
 		pod.Spec.SecurityContext.FSGroupChangePolicy = &p
-		log.V(1).Info("Mutating Pod", "pod", pod)
+		log.V(1).Info("Mutating Pod securityContext", "pod", pod)
 	}
 
 	//
@@ -76,6 +76,7 @@ func (a *FsGroupChangePolicySetter) Handle(ctx context.Context, req admission.Re
 
 		// add our topology spread constraints
 		pod.Spec.TopologySpreadConstraints = append(pod.Spec.TopologySpreadConstraints, tsc)
+		log.V(1).Info("Mutating Pod topologySpreadConstraints", "topologySpreadConstraints", pod.Spec.TopologySpreadConstraints)
 	}
 
 	marshaledSts, err := json.Marshal(pod)
