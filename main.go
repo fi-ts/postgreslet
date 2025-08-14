@@ -363,8 +363,7 @@ func main() {
 	walGExporterMemoryLimit = viper.GetString(walGExporterMemoryLimitFlg)
 	resource.MustParse(walGExporterMemoryLimit)
 
-	// TODO disable by default
-	viper.SetDefault(enablePodTopologySpreadConstraintWebhookFlg, true)
+	viper.SetDefault(enablePodTopologySpreadConstraintWebhookFlg, false)
 	enablePodTopologySpreadConstraintWebhook = viper.GetBool(enablePodTopologySpreadConstraintWebhookFlg)
 	viper.SetDefault(podTopologySpreadConstraintTopologyKeyFlg, "machine.metal-stack.io/rack")
 	podTopologySpreadConstraintTopologyKey = viper.GetString(podTopologySpreadConstraintTopologyKeyFlg)
