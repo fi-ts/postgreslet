@@ -7,18 +7,25 @@ import (
 
 	"github.com/go-logr/logr"
 	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
+
+	pg "github.com/fi-ts/postgreslet/api/v1"
 )
 
-// +kubebuilder:webhook:path=/mutate-apps-v1-statefulset,mutating=true,failurePolicy=ignore,groups=apps,resources=statefulsets,verbs=create;update,versions=v1,name=fsgroupchangepolicy.postgres.fits.cloud
+// +kubebuilder:webhook:path=/mutate-v1-pod,mutating=true,failurePolicy=ignore,groups=core,resources=pods,verbs=create;update,versions=v1,name=fsgroupchangepolicy.postgres.fits.cloud
 
 // FsGroupChangePolicySetter Adds securityContext.fsGroupChangePolicy=OnRootMismatch when the securityContext.fsGroup field is set
 type FsGroupChangePolicySetter struct {
-	SvcClient client.Client
-	Decoder   admission.Decoder
-	Log       logr.Logger
+	SvcClient                                client.Client
+	Decoder                                  admission.Decoder
+	Log                                      logr.Logger
+	EnablePodTopologySpreadConstraintWebhook bool
+	PodTopologySpreadConstraintTopologyKey   string
+	PodTopologySpreadConstraintMaxSkew       int32
+	PodTopologySpreadConstraintMinDomains    int32
 }
 
 func (a *FsGroupChangePolicySetter) Handle(ctx context.Context, req admission.Request) admission.Response {
@@ -36,7 +43,40 @@ func (a *FsGroupChangePolicySetter) Handle(ctx context.Context, req admission.Re
 	if pod.Spec.SecurityContext != nil && pod.Spec.SecurityContext.FSGroup != nil {
 		p := v1.FSGroupChangeOnRootMismatch
 		pod.Spec.SecurityContext.FSGroupChangePolicy = &p
-		log.V(1).Info("Mutating Pod", "pod", pod)
+		log.V(1).Info("Mutating Pod securityContext", "pod", pod)
+	}
+
+	//
+	// TopologySpreadConstraint
+	//
+	if a.EnablePodTopologySpreadConstraintWebhook {
+		tsc := v1.TopologySpreadConstraint{
+			MaxSkew:           a.PodTopologySpreadConstraintMaxSkew,
+			WhenUnsatisfiable: v1.ScheduleAnyway,
+			LabelSelector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"application":           "spilo",
+					"cluster-name":          pod.ObjectMeta.Labels["cluster-name"],
+					pg.NameLabelName:        pod.ObjectMeta.Labels[pg.NameLabelName],
+					pg.PartitionIDLabelName: pod.ObjectMeta.Labels[pg.PartitionIDLabelName],
+					pg.ProjectIDLabelName:   pod.ObjectMeta.Labels[pg.ProjectIDLabelName],
+					pg.TenantLabelName:      pod.ObjectMeta.Labels[pg.TenantLabelName],
+					pg.UIDLabelName:         pod.ObjectMeta.Labels[pg.UIDLabelName],
+					"team":                  pod.ObjectMeta.Labels["team"],
+				},
+			},
+			TopologyKey: a.PodTopologySpreadConstraintTopologyKey,
+		}
+
+		// if defined, set the minDomains (and corresponding whenUnsatisfied) field as well
+		if a.PodTopologySpreadConstraintMinDomains > 0 {
+			tsc.MinDomains = &a.PodTopologySpreadConstraintMinDomains
+			tsc.WhenUnsatisfiable = v1.DoNotSchedule
+		}
+
+		// override topology spread constraints
+		pod.Spec.TopologySpreadConstraints = []v1.TopologySpreadConstraint{tsc}
+		log.V(1).Info("Mutating Pod topologySpreadConstraints", "topologySpreadConstraints", pod.Spec.TopologySpreadConstraints)
 	}
 
 	marshaledSts, err := json.Marshal(pod)
