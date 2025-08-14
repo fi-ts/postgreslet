@@ -74,8 +74,8 @@ func (a *FsGroupChangePolicySetter) Handle(ctx context.Context, req admission.Re
 			tsc.WhenUnsatisfiable = v1.DoNotSchedule
 		}
 
-		// add our topology spread constraints
-		pod.Spec.TopologySpreadConstraints = append(pod.Spec.TopologySpreadConstraints, tsc)
+		// override topology spread constraints
+		pod.Spec.TopologySpreadConstraints = []v1.TopologySpreadConstraint{tsc}
 		log.V(1).Info("Mutating Pod topologySpreadConstraints", "topologySpreadConstraints", pod.Spec.TopologySpreadConstraints)
 	}
 
