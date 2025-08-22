@@ -111,6 +111,8 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 			log.Info("unable to fetch the shared LoadBalancer to update postgres status socket")
 			owner.Status.Socket = pg.Socket{}
 		}
+		// reset additional sockets
+		owner.Status.AdditionalSockets = []pg.Socket{}
 
 		if err := r.CtrlClient.Status().Update(ctx, owner); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to update simple postgres status socket: %w", err)
@@ -149,6 +151,7 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 				log.V(debugLogLevel).Info("using dedicated loadbalancer as additional status socket")
 			} else {
 				log.Info("failed to use dedicated loadbalancer as additional status socket")
+				owner.Status.AdditionalSockets = []pg.Socket{}
 			}
 
 		} else {
@@ -164,6 +167,7 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 				log.Info("failed to use dedicated loadbalancer as primary status socket")
 				owner.Status.Socket = pg.Socket{}
 			}
+			owner.Status.AdditionalSockets = []pg.Socket{}
 		}
 
 		// actually perform the status update
