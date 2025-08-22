@@ -569,14 +569,15 @@ func main() {
 	}
 	// +kubebuilder:scaffold:builder
 
-	if enableFsGroupChangePolicyWebhook {
+	if enableFsGroupChangePolicyWebhook || enablePodTopologySpreadConstraintWebhook {
 		svcClusterMgr.GetWebhookServer().Register(
 			"/mutate-v1-pod",
 			&webhook.Admission{
-				Handler: &webhooks.FsGroupChangePolicySetter{
+				Handler: &webhooks.SpiloPodMutator{
 					SvcClient:                                svcClusterMgr.GetClient(),
 					Decoder:                                  admission.NewDecoder(svcClusterMgr.GetScheme()),
-					Log:                                      ctrl.Log.WithName("webhooks").WithName("FsGroupChangePolicySetter"),
+					Log:                                      ctrl.Log.WithName("webhooks").WithName("SpiloPodMutator"),
+					EnableFsGroupChangePolicyWebhook:         enableFsGroupChangePolicyWebhook,
 					EnablePodTopologySpreadConstraintWebhook: enablePodTopologySpreadConstraintWebhook,
 					PodTopologySpreadConstraintTopologyKey:   podTopologySpreadConstraintTopologyKey,
 					PodTopologySpreadConstraintMaxSkew:       podTopologySpreadConstraintMaxSkew,

@@ -17,18 +17,19 @@ import (
 
 // +kubebuilder:webhook:path=/mutate-v1-pod,mutating=true,failurePolicy=ignore,groups=core,resources=pods,verbs=create;update,versions=v1,name=fsgroupchangepolicy.postgres.fits.cloud
 
-// FsGroupChangePolicySetter Adds securityContext.fsGroupChangePolicy=OnRootMismatch when the securityContext.fsGroup field is set
-type FsGroupChangePolicySetter struct {
+// SpiloPodMutator Adds securityContext.fsGroupChangePolicy=OnRootMismatch when the securityContext.fsGroup field is set
+type SpiloPodMutator struct {
 	SvcClient                                client.Client
 	Decoder                                  admission.Decoder
 	Log                                      logr.Logger
+	EnableFsGroupChangePolicyWebhook         bool
 	EnablePodTopologySpreadConstraintWebhook bool
 	PodTopologySpreadConstraintTopologyKey   string
 	PodTopologySpreadConstraintMaxSkew       int32
 	PodTopologySpreadConstraintMinDomains    int32
 }
 
-func (a *FsGroupChangePolicySetter) Handle(ctx context.Context, req admission.Request) admission.Response {
+func (a *SpiloPodMutator) Handle(ctx context.Context, req admission.Request) admission.Response {
 	log := a.Log.WithValues("name", req.Name, "ns", req.Namespace)
 	log.V(1).Info("handling admission request")
 
@@ -39,11 +40,16 @@ func (a *FsGroupChangePolicySetter) Handle(ctx context.Context, req admission.Re
 		return admission.Errored(http.StatusBadRequest, err)
 	}
 
-	// when the fsGroup field is set, also set the fsGroupChangePolicy to OnRootMismatch
-	if pod.Spec.SecurityContext != nil && pod.Spec.SecurityContext.FSGroup != nil {
-		p := v1.FSGroupChangeOnRootMismatch
-		pod.Spec.SecurityContext.FSGroupChangePolicy = &p
-		log.V(1).Info("Mutating Pod securityContext", "pod", pod)
+	//
+	// FSGroupChangePolicy
+	//
+	if a.EnableFsGroupChangePolicyWebhook {
+		// when the fsGroup field is set, also set the fsGroupChangePolicy to OnRootMismatch
+		if pod.Spec.SecurityContext != nil && pod.Spec.SecurityContext.FSGroup != nil {
+			p := v1.FSGroupChangeOnRootMismatch
+			pod.Spec.SecurityContext.FSGroupChangePolicy = &p
+			log.V(1).Info("Mutating Pod securityContext", "pod", pod)
+		}
 	}
 
 	//
