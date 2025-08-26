@@ -85,12 +85,12 @@ func (a *SpiloPodMutator) Handle(ctx context.Context, req admission.Request) adm
 		log.V(1).Info("Mutating Pod topologySpreadConstraints", "topologySpreadConstraints", pod.Spec.TopologySpreadConstraints)
 	}
 
-	marshaledSts, err := json.Marshal(pod)
+	marshaledPod, err := json.Marshal(pod)
 	if err != nil {
 		log.Error(err, "failed to marshal response")
 		return admission.Errored(http.StatusInternalServerError, err)
 	}
 
 	log.V(1).Info("done")
-	return admission.PatchResponseFromRaw(req.Object.Raw, marshaledSts)
+	return admission.PatchResponseFromRaw(req.Object.Raw, marshaledPod)
 }
