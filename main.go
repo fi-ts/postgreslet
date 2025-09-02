@@ -569,23 +569,21 @@ func main() {
 	}
 	// +kubebuilder:scaffold:builder
 
-	if enableFsGroupChangePolicyWebhook || enablePodTopologySpreadConstraintWebhook {
-		svcClusterMgr.GetWebhookServer().Register(
-			"/mutate-v1-pod",
-			&webhook.Admission{
-				Handler: &webhooks.SpiloPodMutator{
-					SvcClient:                                svcClusterMgr.GetClient(),
-					Decoder:                                  admission.NewDecoder(svcClusterMgr.GetScheme()),
-					Log:                                      ctrl.Log.WithName("webhooks").WithName("SpiloPodMutator"),
-					EnableFsGroupChangePolicyWebhook:         enableFsGroupChangePolicyWebhook,
-					EnablePodTopologySpreadConstraintWebhook: enablePodTopologySpreadConstraintWebhook,
-					PodTopologySpreadConstraintTopologyKey:   podTopologySpreadConstraintTopologyKey,
-					PodTopologySpreadConstraintMaxSkew:       podTopologySpreadConstraintMaxSkew,
-					PodTopologySpreadConstraintMinDomains:    podTopologySpreadConstraintMinDomains,
-				},
+	svcClusterMgr.GetWebhookServer().Register(
+		"/mutate-v1-pod",
+		&webhook.Admission{
+			Handler: &webhooks.SpiloPodMutator{
+				SvcClient:                                svcClusterMgr.GetClient(),
+				Decoder:                                  admission.NewDecoder(svcClusterMgr.GetScheme()),
+				Log:                                      ctrl.Log.WithName("webhooks").WithName("SpiloPodMutator"),
+				EnableFsGroupChangePolicyWebhook:         enableFsGroupChangePolicyWebhook,
+				EnablePodTopologySpreadConstraintWebhook: enablePodTopologySpreadConstraintWebhook,
+				PodTopologySpreadConstraintTopologyKey:   podTopologySpreadConstraintTopologyKey,
+				PodTopologySpreadConstraintMaxSkew:       podTopologySpreadConstraintMaxSkew,
+				PodTopologySpreadConstraintMinDomains:    podTopologySpreadConstraintMinDomains,
 			},
-		)
-	}
+		},
+	)
 
 	ctx := context.Background()
 
