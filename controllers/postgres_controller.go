@@ -1138,13 +1138,7 @@ func (r *PostgresReconciler) checkAndUpdatePatroniReplicationConfig(log logr.Log
 			return requeueAfterReconcile, r.httpPatchPatroni(log, ctx, instance, leaderIP, nil)
 		}
 
-		// Force Patroni to add target_session_attrs=read-write by providing a comma separated list (with the same IP...).
-		// This hopefully prevents cascading replicating by preventing the standby leader pod of the standby cluster to
-		// connect to a read-only pod in the primary cluster (which would break our sync replication to the standby cluster).
-		// https://patroni.readthedocs.io/en/latest/standby_cluster.html
-		standbyHosts := strings.Join([]string{instance.Spec.PostgresConnection.ConnectionIP, instance.Spec.PostgresConnection.ConnectionIP}, ",")
-
-		if resp.StandbyCluster.Host != standbyHosts {
+		if resp.StandbyCluster.Host != instance.ToReadWriteHostsList() {
 			log.V(debugLogLevel).Info("host mismatch, updating and requeing", "updating", resp)
 			return requeueAfterReconcile, r.httpPatchPatroni(log, ctx, instance, leaderIP, nil)
 		}
@@ -1260,7 +1254,7 @@ func (r *PostgresReconciler) httpPatchPatroni(log logr.Logger, ctx context.Conte
 		// This hopefully prevents cascading replicating by preventing the standby leader pod of the standby cluster to
 		// connect to a read-only pod in the primary cluster (which would break our sync replication to the standby cluster).
 		// https://patroni.readthedocs.io/en/latest/standby_cluster.html
-		standbyHosts := strings.Join([]string{instance.Spec.PostgresConnection.ConnectionIP, instance.Spec.PostgresConnection.ConnectionIP}, ",")
+		standbyHosts := instance.ToReadWriteHostsList()
 
 		request = PatroniConfig{
 			StandbyCluster: &PatroniStandbyCluster{
