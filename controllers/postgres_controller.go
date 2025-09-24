@@ -1799,7 +1799,11 @@ func (r *PostgresReconciler) ensureStorageEncryptionSecret(log logr.Logger, ctx 
 			Finalizers: []string{storageEncryptionKeyFinalizerName},
 		},
 		StringData: map[string]string{
+			// lighbits storage key name
 			"host-encryption-passphrase": k,
+			// ontap storage key name
+			"luks-passphrase":      k,
+			"luks-passphrase-name": "postgreslet",
 		},
 	}
 
