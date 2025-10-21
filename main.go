@@ -101,6 +101,7 @@ const (
 	podTopologySpreadConstraintTopologyKeyFlg   = "pod-topology-spread-constraint-topology-key"
 	podTopologySpreadConstraintMaxSkewFlg       = "pod-topology-spread-constraint-max-skew"
 	podTopologySpreadConstraintMinDomainsFlg    = "pod-topology-spread-constraint-min-domains"
+	enableSpiloReadinessProbeFlg                = "enable-spilo-readiness-probe"
 )
 
 var (
@@ -170,6 +171,7 @@ func main() {
 		enableWalGExporter                       bool
 		podAntiaffinityPreferredDuringScheduling bool
 		enablePodTopologySpreadConstraintWebhook bool
+		enableSpiloReadinessProbe                bool
 
 		portRangeStart                        int32
 		portRangeSize                         int32
@@ -371,6 +373,9 @@ func main() {
 	podTopologySpreadConstraintMaxSkew = viper.GetInt32(podTopologySpreadConstraintMaxSkewFlg)
 	podTopologySpreadConstraintMinDomains = viper.GetInt32(podTopologySpreadConstraintMinDomainsFlg)
 
+	viper.SetDefault(enableSpiloReadinessProbeFlg, false)
+	enableSpiloReadinessProbe = viper.GetBool(enableSpiloReadinessProbeFlg)
+
 	ctrl.Log.Info("flag",
 		metricsAddrSvcMgrFlg, metricsAddrSvcMgr,
 		metricsAddrCtrlMgrFlg, metricsAddrCtrlMgr,
@@ -426,6 +431,7 @@ func main() {
 		podTopologySpreadConstraintTopologyKeyFlg, podTopologySpreadConstraintTopologyKey,
 		podTopologySpreadConstraintMaxSkewFlg, podTopologySpreadConstraintMaxSkew,
 		podTopologySpreadConstraintMinDomainsFlg, podTopologySpreadConstraintMinDomains,
+		enableSpiloReadinessProbeFlg, enableSpiloReadinessProbe,
 	)
 
 	svcClusterConf := ctrl.GetConfigOrDie()
@@ -499,6 +505,7 @@ func main() {
 		PatroniFailsafeMode:                      enablePatroniFailsafeMode,
 		PodAntiaffinityPreferredDuringScheduling: podAntiaffinityPreferredDuringScheduling,
 		PodAntiaffinityTopologyKey:               podAntiaffinityTopologyKey,
+		EnableReadinessProbe:                     enableSpiloReadinessProbe,
 	}
 	opMgr, err := operatormanager.New(svcClusterConf, "external/svc-postgres-operator.yaml", scheme, ctrl.Log.WithName("OperatorManager"), opMgrOpts)
 	if err != nil {

@@ -72,6 +72,7 @@ type Options struct {
 	PatroniFailsafeMode                      bool
 	PodAntiaffinityPreferredDuringScheduling bool
 	PodAntiaffinityTopologyKey               string
+	EnableReadinessProbe                     bool
 }
 
 // OperatorManager manages the operator
@@ -455,6 +456,11 @@ func (m *OperatorManager) editConfigMap(cm *corev1.ConfigMap, namespace string, 
 	cm.Data["enable_teams_api"] = strconv.FormatBool(false)
 	cm.Data["postgres_superuser_teams"] = ""
 	cm.Data["teams_api_url"] = ""
+
+	if options.EnableReadinessProbe {
+		cm.Data["enable_readiness_probe"] = strconv.FormatBool(true)
+		cm.Data["pod_management_policy"] = "parallel"
+	}
 
 }
 
