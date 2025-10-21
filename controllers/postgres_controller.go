@@ -113,6 +113,7 @@ type PostgresReconciler struct {
 	WalGExporterImage                   string
 	WalGExporterCPULimit                string
 	WalGExporterMemoryLimit             string
+	EnableReplicationSlots              bool
 }
 
 type PatroniStandbyCluster struct {
@@ -120,10 +121,18 @@ type PatroniStandbyCluster struct {
 	Host                 string   `json:"host"`
 	Port                 int      `json:"port"`
 	ApplicationName      string   `json:"application_name"`
+	PrimarySlotName      *string  `json:"primary_slot_name"`
+}
+type PatroniSlotConfig struct {
+	SlotType string `json:"type"`
+}
+type PatroniSlots struct {
+	ClusterB PatroniSlotConfig `json:"cluster_b"`
 }
 type PatroniConfig struct {
 	StandbyCluster             *PatroniStandbyCluster `json:"standby_cluster"`
 	SynchronousNodesAdditional *string                `json:"synchronous_nodes_additional"`
+	Slots                      *PatroniSlots          `json:"slots"`
 }
 
 // Reconcile is the entry point for postgres reconciliation.
@@ -1251,6 +1260,13 @@ func (r *PostgresReconciler) httpPatchPatroni(log logr.Logger, ctx context.Conte
 			// disable sync replication
 			request.SynchronousNodesAdditional = nil
 		}
+
+		// when enabled, configure replication slot on primary side
+		if r.EnableReplicationSlots {
+			request.Slots = &PatroniSlots{ClusterB: PatroniSlotConfig{SlotType: "physical"}}
+		} else {
+			request.Slots = nil
+		}
 	} else {
 		// Force Patroni to add target_session_attrs=read-write by providing a comma separated list (with the same IP...).
 		// This hopefully prevents cascading replicating by preventing the standby leader pod of the standby cluster to
@@ -1266,8 +1282,16 @@ func (r *PostgresReconciler) httpPatchPatroni(log logr.Logger, ctx context.Conte
 				ApplicationName:      instance.ToPeripheralResourceName(),
 			},
 			SynchronousNodesAdditional: nil,
+			Slots:                      nil,
+		}
+
+		if r.EnableReplicationSlots {
+			request.StandbyCluster.PrimarySlotName = ptr.To("cluster_b")
+		} else {
+			request.StandbyCluster.PrimarySlotName = nil
 		}
 	}
+
 	log.V(debugLogLevel).Info("Prepared request", "request", request)
 	jsonReq, err := json.Marshal(request)
 	if err != nil {
