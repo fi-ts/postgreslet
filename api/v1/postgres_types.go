@@ -994,6 +994,7 @@ func setDefaultPostgresParams(parameters map[string]string, version string) {
 	// Postgres 13 and up
 	if v >= 13 {
 		parameters["wal_keep_size"] = defaultPostgresParamValueWalKeepSize
+		parameters["max_slot_wal_keep_size"] = defaultPostgresParamValueWalKeepSize
 	} else {
 		parameters["wal_keep_segments"] = defaultPostgresParamValueWalKeepSegments
 	}
