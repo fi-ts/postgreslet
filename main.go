@@ -101,6 +101,7 @@ const (
 	podTopologySpreadConstraintTopologyKeyFlg   = "pod-topology-spread-constraint-topology-key"
 	podTopologySpreadConstraintMaxSkewFlg       = "pod-topology-spread-constraint-max-skew"
 	podTopologySpreadConstraintMinDomainsFlg    = "pod-topology-spread-constraint-min-domains"
+	enableReplicationSlotsFlg                   = "enable-replication-slots"
 )
 
 var (
@@ -170,6 +171,7 @@ func main() {
 		enableWalGExporter                       bool
 		podAntiaffinityPreferredDuringScheduling bool
 		enablePodTopologySpreadConstraintWebhook bool
+		enableReplicationSlots                   bool
 
 		portRangeStart                        int32
 		portRangeSize                         int32
@@ -371,6 +373,9 @@ func main() {
 	podTopologySpreadConstraintMaxSkew = viper.GetInt32(podTopologySpreadConstraintMaxSkewFlg)
 	podTopologySpreadConstraintMinDomains = viper.GetInt32(podTopologySpreadConstraintMinDomainsFlg)
 
+	viper.SetDefault(enableReplicationSlotsFlg, false)
+	enableReplicationSlots = viper.GetBool(enableReplicationSlotsFlg)
+
 	ctrl.Log.Info("flag",
 		metricsAddrSvcMgrFlg, metricsAddrSvcMgr,
 		metricsAddrCtrlMgrFlg, metricsAddrCtrlMgr,
@@ -426,6 +431,7 @@ func main() {
 		podTopologySpreadConstraintTopologyKeyFlg, podTopologySpreadConstraintTopologyKey,
 		podTopologySpreadConstraintMaxSkewFlg, podTopologySpreadConstraintMaxSkew,
 		podTopologySpreadConstraintMinDomainsFlg, podTopologySpreadConstraintMinDomains,
+		enableReplicationSlotsFlg, enableReplicationSlots,
 	)
 
 	svcClusterConf := ctrl.GetConfigOrDie()
@@ -550,6 +556,7 @@ func main() {
 		WalGExporterImage:                   walGExporterImage,
 		WalGExporterCPULimit:                walGExporterCPULimit,
 		WalGExporterMemoryLimit:             walGExporterMemoryLimit,
+		EnableReplicationSlots:              enableReplicationSlots,
 	}).SetupWithManager(ctrlPlaneClusterMgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Postgres")
 		os.Exit(1)

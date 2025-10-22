@@ -624,6 +624,14 @@ func (p *Postgres) generateDatabaseName() string {
 	return generatedDatabaseName
 }
 
+// ToReadWriteHostsList Force Patroni to add target_session_attrs=read-write by providing a comma separated list (with the same IP...).
+// This hopefully prevents cascading replicating by preventing the standby leader pod of the standby cluster to
+// connect to a read-only pod in the primary cluster (which would break our sync replication to the standby cluster).
+// https://patroni.readthedocs.io/en/latest/standby_cluster.html
+func (p *Postgres) ToReadWriteHostsList() string {
+	return strings.Join([]string{p.Spec.PostgresConnection.ConnectionIP, p.Spec.PostgresConnection.ConnectionIP}, ",")
+}
+
 func (p *Postgres) ToPeripheralResourceNamespace() string {
 	// We only want letters and numbers
 	projectID := alphaNumericRegExp.ReplaceAllString(p.Spec.ProjectID, "")
@@ -789,8 +797,9 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 		z.Spec.StandbyCluster = nil
 	} else {
 		// overwrite connection info
+		standbyHosts := p.ToReadWriteHostsList()
 		z.Spec.StandbyCluster = &zalando.StandbyDescription{
-			StandbyHost: p.Spec.PostgresConnection.ConnectionIP,
+			StandbyHost: standbyHosts,
 			StandbyPort: strconv.FormatInt(int64(p.Spec.PostgresConnection.ConnectionPort), 10),
 			// S3WalPath:              "",
 		}
