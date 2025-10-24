@@ -254,6 +254,7 @@ func main() {
 		pgParamBlockList[blockedParam] = true
 	}
 
+	// be careful changing this value if you also set the pg.PostgresVersionLabelName inherited_label
 	viper.SetDefault(majorVersionUpgradeModeFlg, "manual")
 	majorVersionUpgradeMode = viper.GetString(majorVersionUpgradeModeFlg)
 
