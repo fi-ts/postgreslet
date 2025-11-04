@@ -319,7 +319,7 @@ func main() {
 	viper.SetDefault(enableLBSourceRangesFlg, true)
 	enableLBSourceRanges = viper.GetBool(enableLBSourceRangesFlg)
 
-	viper.SetDefault(enableRandomStorageEncryptionSecretFlg, false)
+	viper.SetDefault(enableRandomStorageEncryptionSecretFlg, true)
 	enableRandomStorageEncryptionSecret = viper.GetBool(enableRandomStorageEncryptionSecretFlg)
 
 	viper.SetDefault(enableWalGEncryptionFlg, false)
