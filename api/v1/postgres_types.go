@@ -62,6 +62,8 @@ const (
 	StandbyMethod = "streaming_host"
 	// PartitionIDLabelName Name of the managed-by label
 	PartitionIDLabelName string = "postgres.database.fits.cloud/partition-id"
+	// PostgresVersionLabelName Name of the version label
+	PostgresVersionLabelName string = "postgres.database.fits.cloud/version"
 
 	ApplicationLabelName             = "application"
 	ApplicationLabelValue            = "spilo"
@@ -679,6 +681,8 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 	// Add the newly introduced label only here, not in  p.ToZalandoPostgresqlMatchingLabels() (so that the selectors using  p.ToZalandoPostgresqlMatchingLabels() will still work until all postgres resources have that new label)
 	// TODO once all the custom resources have that new label, move this part to p.ToZalandoPostgresqlMatchingLabels()
 	z.Labels[PartitionIDLabelName] = p.Spec.PartitionID
+	// Add the additional version label to the custom resource
+	z.Labels[PostgresVersionLabelName] = p.Spec.Version
 
 	if image != "" {
 		z.Spec.DockerImage = image
