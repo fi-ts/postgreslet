@@ -417,7 +417,7 @@ func (m *OperatorManager) editConfigMap(cm *corev1.ConfigMap, namespace string, 
 	// set the reference to our custom pod environment secret
 	cm.Data["pod_environment_secret"] = PodEnvSecretName
 	// set the list of inherited labels that will be passed on to the pods
-	s := []string{pg.TenantLabelName, pg.ProjectIDLabelName, pg.UIDLabelName, pg.NameLabelName, pg.PartitionIDLabelName}
+	s := []string{pg.TenantLabelName, pg.ProjectIDLabelName, pg.UIDLabelName, pg.NameLabelName, pg.PartitionIDLabelName, pg.PostgresVersionLabelName}
 	// TODO maybe use a precompiled string here
 	cm.Data["inherited_labels"] = strings.Join(s, ",")
 

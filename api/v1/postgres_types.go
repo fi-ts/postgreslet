@@ -62,6 +62,8 @@ const (
 	StandbyMethod = "streaming_host"
 	// PartitionIDLabelName Name of the managed-by label
 	PartitionIDLabelName string = "postgres.database.fits.cloud/partition-id"
+	// PostgresVersionLabelName Name of the version label
+	PostgresVersionLabelName string = "postgres.database.fits.cloud/version"
 
 	ApplicationLabelName             = "application"
 	ApplicationLabelValue            = "spilo"
@@ -218,6 +220,9 @@ type PostgresSpec struct {
 
 	// DisableLoadBalancers enable or disable the Load Balancers (Services)
 	DisableLoadBalancers *bool `json:"disableLoadBalancers,omitempty"`
+
+	// StorageClass custom storage class for this database
+	StorageClass *string `json:"storageClass,omitempty"`
 }
 
 // AccessList defines the type of restrictions to access the database
@@ -679,6 +684,8 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 	// Add the newly introduced label only here, not in  p.ToZalandoPostgresqlMatchingLabels() (so that the selectors using  p.ToZalandoPostgresqlMatchingLabels() will still work until all postgres resources have that new label)
 	// TODO once all the custom resources have that new label, move this part to p.ToZalandoPostgresqlMatchingLabels()
 	z.Labels[PartitionIDLabelName] = p.Spec.PartitionID
+	// Add the additional version label to the custom resource
+	z.Labels[PostgresVersionLabelName] = p.Spec.Version
 
 	if image != "" {
 		z.Spec.DockerImage = image
@@ -706,7 +713,11 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 	z.Spec.Resources.ResourceLimits.Memory = ptr.To(p.Spec.Size.Memory)
 	z.Spec.TeamID = p.generateTeamID()
 	z.Spec.Volume.Size = p.Spec.Size.StorageSize
-	z.Spec.Volume.StorageClass = sc
+	if p.Spec.StorageClass != nil {
+		z.Spec.Volume.StorageClass = *p.Spec.StorageClass
+	} else {
+		z.Spec.Volume.StorageClass = sc
+	}
 
 	z.Spec.Patroni.TTL = patroniTTL
 	z.Spec.Patroni.LoopWait = patroniLoopWait
