@@ -113,6 +113,7 @@ type PostgresReconciler struct {
 	WalGExporterImage                   string
 	WalGExporterCPULimit                string
 	WalGExporterMemoryLimit             string
+	EnableStandbyHostAttrs              bool
 }
 
 type PatroniStandbyCluster struct {
@@ -578,6 +579,10 @@ func (r *PostgresReconciler) updatePodEnvironmentConfigMap(log logr.Logger, ctx 
 		data["STANDBY_WALG_UPLOAD_DISK_CONCURRENCY"] = uploadDiskConcurrency
 		data["STANDBY_WALG_UPLOAD_CONCURRENCY"] = uploadConcurrency
 		data["STANDBY_WALG_DOWNLOAD_CONCURRENCY"] = downloadConcurrency
+	}
+
+	if r.EnableStandbyHostAttrs {
+		data["STANDBY_HOST_ATTRS"] = "true"
 	}
 
 	cm := &corev1.ConfigMap{}

@@ -101,6 +101,7 @@ const (
 	podTopologySpreadConstraintTopologyKeyFlg   = "pod-topology-spread-constraint-topology-key"
 	podTopologySpreadConstraintMaxSkewFlg       = "pod-topology-spread-constraint-max-skew"
 	podTopologySpreadConstraintMinDomainsFlg    = "pod-topology-spread-constraint-min-domains"
+	enableStandbyHostAttrsFlg                   = "enable-standby-host-attrs"
 	enableSpiloReadinessProbeFlg                = "enable-spilo-readiness-probe"
 )
 
@@ -171,6 +172,7 @@ func main() {
 		enableWalGExporter                       bool
 		podAntiaffinityPreferredDuringScheduling bool
 		enablePodTopologySpreadConstraintWebhook bool
+		enableStandbyHostAttrs                   bool
 		enableSpiloReadinessProbe                bool
 
 		portRangeStart                        int32
@@ -374,6 +376,9 @@ func main() {
 	podTopologySpreadConstraintMaxSkew = viper.GetInt32(podTopologySpreadConstraintMaxSkewFlg)
 	podTopologySpreadConstraintMinDomains = viper.GetInt32(podTopologySpreadConstraintMinDomainsFlg)
 
+	viper.SetDefault(enableStandbyHostAttrsFlg, false)
+	enableStandbyHostAttrs = viper.GetBool(enableStandbyHostAttrsFlg)
+
 	viper.SetDefault(enableSpiloReadinessProbeFlg, false)
 	enableSpiloReadinessProbe = viper.GetBool(enableSpiloReadinessProbeFlg)
 
@@ -432,6 +437,7 @@ func main() {
 		podTopologySpreadConstraintTopologyKeyFlg, podTopologySpreadConstraintTopologyKey,
 		podTopologySpreadConstraintMaxSkewFlg, podTopologySpreadConstraintMaxSkew,
 		podTopologySpreadConstraintMinDomainsFlg, podTopologySpreadConstraintMinDomains,
+		enableStandbyHostAttrsFlg, enableStandbyHostAttrs,
 		enableSpiloReadinessProbeFlg, enableSpiloReadinessProbe,
 	)
 
@@ -558,6 +564,7 @@ func main() {
 		WalGExporterImage:                   walGExporterImage,
 		WalGExporterCPULimit:                walGExporterCPULimit,
 		WalGExporterMemoryLimit:             walGExporterMemoryLimit,
+		EnableStandbyHostAttrs:              enableStandbyHostAttrs,
 	}).SetupWithManager(ctrlPlaneClusterMgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Postgres")
 		os.Exit(1)
