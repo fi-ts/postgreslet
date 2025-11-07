@@ -102,6 +102,7 @@ const (
 	podTopologySpreadConstraintMaxSkewFlg       = "pod-topology-spread-constraint-max-skew"
 	podTopologySpreadConstraintMinDomainsFlg    = "pod-topology-spread-constraint-min-domains"
 	enableStandbyHostAttrsFlg                   = "enable-standby-host-attrs"
+	enableSpiloReadinessProbeFlg                = "enable-spilo-readiness-probe"
 )
 
 var (
@@ -172,6 +173,7 @@ func main() {
 		podAntiaffinityPreferredDuringScheduling bool
 		enablePodTopologySpreadConstraintWebhook bool
 		enableStandbyHostAttrs                   bool
+		enableSpiloReadinessProbe                bool
 
 		portRangeStart                        int32
 		portRangeSize                         int32
@@ -377,6 +379,9 @@ func main() {
 	viper.SetDefault(enableStandbyHostAttrsFlg, false)
 	enableStandbyHostAttrs = viper.GetBool(enableStandbyHostAttrsFlg)
 
+	viper.SetDefault(enableSpiloReadinessProbeFlg, false)
+	enableSpiloReadinessProbe = viper.GetBool(enableSpiloReadinessProbeFlg)
+
 	ctrl.Log.Info("flag",
 		metricsAddrSvcMgrFlg, metricsAddrSvcMgr,
 		metricsAddrCtrlMgrFlg, metricsAddrCtrlMgr,
@@ -433,6 +438,7 @@ func main() {
 		podTopologySpreadConstraintMaxSkewFlg, podTopologySpreadConstraintMaxSkew,
 		podTopologySpreadConstraintMinDomainsFlg, podTopologySpreadConstraintMinDomains,
 		enableStandbyHostAttrsFlg, enableStandbyHostAttrs,
+		enableSpiloReadinessProbeFlg, enableSpiloReadinessProbe,
 	)
 
 	svcClusterConf := ctrl.GetConfigOrDie()
@@ -506,6 +512,7 @@ func main() {
 		PatroniFailsafeMode:                      enablePatroniFailsafeMode,
 		PodAntiaffinityPreferredDuringScheduling: podAntiaffinityPreferredDuringScheduling,
 		PodAntiaffinityTopologyKey:               podAntiaffinityTopologyKey,
+		EnableReadinessProbe:                     enableSpiloReadinessProbe,
 	}
 	opMgr, err := operatormanager.New(svcClusterConf, "external/svc-postgres-operator.yaml", scheme, ctrl.Log.WithName("OperatorManager"), opMgrOpts)
 	if err != nil {
