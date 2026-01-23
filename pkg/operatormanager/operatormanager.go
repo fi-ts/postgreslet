@@ -73,6 +73,7 @@ type Options struct {
 	PodAntiaffinityPreferredDuringScheduling bool
 	PodAntiaffinityTopologyKey               string
 	EnableReadinessProbe                     bool
+	KubernetesUseConfigMaps                  bool
 }
 
 // OperatorManager manages the operator
@@ -461,6 +462,8 @@ func (m *OperatorManager) editConfigMap(cm *corev1.ConfigMap, namespace string, 
 		cm.Data["enable_readiness_probe"] = strconv.FormatBool(true)
 		cm.Data["pod_management_policy"] = "parallel"
 	}
+
+	cm.Data["kubernetes_use_configmaps"] = strconv.FormatBool(options.KubernetesUseConfigMaps)
 
 }
 
