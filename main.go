@@ -102,6 +102,7 @@ const (
 	podTopologySpreadConstraintMaxSkewFlg       = "pod-topology-spread-constraint-max-skew"
 	podTopologySpreadConstraintMinDomainsFlg    = "pod-topology-spread-constraint-min-domains"
 	enableSpiloReadinessProbeFlg                = "enable-spilo-readiness-probe"
+	enableKubernetesUseConfigMapsFlg            = "enable-kubernetes-use-configmaps"
 )
 
 var (
@@ -172,6 +173,7 @@ func main() {
 		podAntiaffinityPreferredDuringScheduling bool
 		enablePodTopologySpreadConstraintWebhook bool
 		enableSpiloReadinessProbe                bool
+		enableKubernetesUseConfigMaps            bool
 
 		portRangeStart                        int32
 		portRangeSize                         int32
@@ -377,6 +379,9 @@ func main() {
 	viper.SetDefault(enableSpiloReadinessProbeFlg, false)
 	enableSpiloReadinessProbe = viper.GetBool(enableSpiloReadinessProbeFlg)
 
+	viper.SetDefault(enableKubernetesUseConfigMapsFlg, false)
+	enableKubernetesUseConfigMaps = viper.GetBool(enableKubernetesUseConfigMapsFlg)
+
 	ctrl.Log.Info("flag",
 		metricsAddrSvcMgrFlg, metricsAddrSvcMgr,
 		metricsAddrCtrlMgrFlg, metricsAddrCtrlMgr,
@@ -433,6 +438,7 @@ func main() {
 		podTopologySpreadConstraintMaxSkewFlg, podTopologySpreadConstraintMaxSkew,
 		podTopologySpreadConstraintMinDomainsFlg, podTopologySpreadConstraintMinDomains,
 		enableSpiloReadinessProbeFlg, enableSpiloReadinessProbe,
+		enableKubernetesUseConfigMapsFlg, enableKubernetesUseConfigMaps,
 	)
 
 	svcClusterConf := ctrl.GetConfigOrDie()
@@ -507,6 +513,7 @@ func main() {
 		PodAntiaffinityPreferredDuringScheduling: podAntiaffinityPreferredDuringScheduling,
 		PodAntiaffinityTopologyKey:               podAntiaffinityTopologyKey,
 		EnableReadinessProbe:                     enableSpiloReadinessProbe,
+		KubernetesUseConfigMaps:                  enableKubernetesUseConfigMaps,
 	}
 	opMgr, err := operatormanager.New(svcClusterConf, "external/svc-postgres-operator.yaml", scheme, ctrl.Log.WithName("OperatorManager"), opMgrOpts)
 	if err != nil {
