@@ -64,6 +64,8 @@ const (
 	PartitionIDLabelName string = "postgres.database.fits.cloud/partition-id"
 	// PostgresVersionLabelName Name of the version label
 	PostgresVersionLabelName string = "postgres.database.fits.cloud/version"
+	// PostgresDescriptionLabelName Name of the description label
+	PostgresDescriptionLabelName string = "postgres.database.fits.cloud/description"
 
 	ApplicationLabelName             = "application"
 	ApplicationLabelValue            = "spilo"
@@ -686,6 +688,8 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 	z.Labels[PartitionIDLabelName] = p.Spec.PartitionID
 	// Add the additional version label to the custom resource
 	z.Labels[PostgresVersionLabelName] = p.Spec.Version
+	// Add the additional description label to the custom resource
+	z.Labels[PostgresDescriptionLabelName] = p.Spec.Description
 
 	if image != "" {
 		z.Spec.DockerImage = image
