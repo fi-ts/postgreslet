@@ -225,9 +225,11 @@ func (m *LBManager) nextFreeSocket(ctx context.Context) (string, int32, error) {
 		if len(svc.Spec.Ports) > 0 {
 			portsInUse = append(portsInUse, svc.Spec.Ports[0].Port)
 		}
-		if svc.Spec.LoadBalancerIP != "" {
+		// Exclude dedicated IPs (externalTrafficPolicy: Local) and empty IPs
+		if svc.Spec.ExternalTrafficPolicy != corev1.ServiceExternalTrafficPolicyLocal && svc.Spec.LoadBalancerIP != "" {
 			// Technically, we only store the IP of the last Service in this list.
-			// As there should only be one IP per postgreslet and one postgreslet per cluster, this is good enough.
+			// As there should only be one (shared) IP per postgreslet and one postgreslet per cluster, this is good enough.
+			// when in doubt, do configure the lbIP.
 			anyExistingLBIP = svc.Spec.LoadBalancerIP
 		}
 	}
