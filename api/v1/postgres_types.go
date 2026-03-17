@@ -711,7 +711,8 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 	setSharedBufferSize(z.Spec.PostgresqlParam.Parameters, p.Spec.Size.SharedBuffer)
 
 	z.Spec.Resources = &zalando.Resources{}
-	z.Spec.Resources.ResourceRequests.CPU = ptr.To(p.Spec.Size.CPU)
+	cpuReq, err := p.calculateCPURequests(p.Spec.Size.CPU, 66)
+	z.Spec.Resources.ResourceRequests.CPU = ptr.To(cpuReq)
 	z.Spec.Resources.ResourceRequests.Memory = ptr.To(p.Spec.Size.Memory)
 	z.Spec.Resources.ResourceLimits.CPU = ptr.To(p.Spec.Size.CPU)
 	z.Spec.Resources.ResourceLimits.Memory = ptr.To(p.Spec.Size.Memory)
@@ -1102,4 +1103,27 @@ func (p *Postgres) DisableLoadBalancers() bool {
 	}
 
 	return *p.Spec.DisableLoadBalancers
+}
+
+func (p *Postgres) calculateCPURequests(c string, percentage int) (string, error) {
+
+	// enforce a minimum percentage
+	if percentage < 50 {
+		percentage = 50
+	}
+
+	// parse the provided cpu quantity
+	cpu, err := resource.ParseQuantity(c)
+	if err != nil {
+		return "", err
+	}
+
+	// convert the cpu quantity to millis
+	milliValue := cpu.MilliValue()
+
+	// calculate the percentage
+	value := int64((milliValue / int64(100)) * int64(percentage))
+
+	//return the calculated cpu request, making sure it is not higher than the given input value
+	return resource.NewMilliQuantity(min(value, milliValue), resource.BinarySI).String(), nil
 }

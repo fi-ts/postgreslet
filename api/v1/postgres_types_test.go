@@ -398,3 +398,70 @@ func TestPostgresRestoreTimestamp_ToUnstructuredZalandoPostgresql(t *testing.T) 
 		})
 	}
 }
+
+func Test_calculateCPURequests(t *testing.T) {
+
+	tests := []struct {
+		name            string
+		inputValue      string
+		inputPercentage int
+		expectedResult  string
+		expectErr       bool
+	}{
+		{
+			name:            "Normal",
+			inputValue:      "1",
+			inputPercentage: 66,
+			expectedResult:  "660m",
+			expectErr:       false,
+		},
+		{
+			name:            "Millis",
+			inputValue:      "4000m",
+			inputPercentage: 75,
+			expectedResult:  "3",
+			expectErr:       false,
+		},
+		{
+			name:            "MoreThan100",
+			inputValue:      "1",
+			inputPercentage: 150,
+			expectedResult:  "1",
+			expectErr:       false,
+		},
+		{
+			name:            "EmptyValue",
+			inputValue:      "",
+			inputPercentage: 66,
+			expectedResult:  "",
+			expectErr:       true,
+		},
+		{
+			name:            "LowPercentage",
+			inputValue:      "2",
+			inputPercentage: 25,
+			expectedResult:  "1",
+			expectErr:       false,
+		},
+	}
+	for _, tt := range tests {
+		tt := tt // pin!
+		t.Run(tt.name, func(t *testing.T) {
+			p := &Postgres{
+				Spec: PostgresSpec{
+					ProjectID: tt.name,
+				},
+			}
+
+			result, err := p.calculateCPURequests(tt.inputValue, tt.inputPercentage)
+
+			if err != nil && !tt.expectErr {
+				t.Errorf("Unexpected error")
+			}
+
+			if tt.expectedResult != result {
+				t.Errorf("Calculated CPU request was %v, but expected %v", tt.expectedResult, result)
+			}
+		})
+	}
+}
