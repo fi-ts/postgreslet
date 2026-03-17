@@ -675,7 +675,7 @@ func (p *Postgres) ToPeripheralResourceLookupKey() types.NamespacedName {
 	}
 }
 
-func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *corev1.ConfigMap, sc string, pgParamBlockList map[string]bool, rbs *BackupConfig, srcDB *Postgres, patroniTTL, patroniLoopWait, patroniRetryTimeout uint32, dboIsSuperuser bool, enableTlsCert bool, image string) (*unstructured.Unstructured, error) {
+func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *corev1.ConfigMap, sc string, pgParamBlockList map[string]bool, rbs *BackupConfig, srcDB *Postgres, patroniTTL, patroniLoopWait, patroniRetryTimeout uint32, dboIsSuperuser bool, enableTlsCert bool, image string, cpuRequestsPercentage int) (*unstructured.Unstructured, error) {
 	if z == nil {
 		z = &zalando.Postgresql{}
 	}
@@ -711,7 +711,7 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 	setSharedBufferSize(z.Spec.PostgresqlParam.Parameters, p.Spec.Size.SharedBuffer)
 
 	z.Spec.Resources = &zalando.Resources{}
-	cpuReq, err := p.calculateCPURequests(p.Spec.Size.CPU, 66)
+	cpuReq, err := p.calculateCPURequests(p.Spec.Size.CPU, cpuRequestsPercentage)
 	z.Spec.Resources.ResourceRequests.CPU = ptr.To(cpuReq)
 	z.Spec.Resources.ResourceRequests.Memory = ptr.To(p.Spec.Size.Memory)
 	z.Spec.Resources.ResourceLimits.CPU = ptr.To(p.Spec.Size.CPU)
