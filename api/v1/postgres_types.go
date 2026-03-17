@@ -712,6 +712,9 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 
 	z.Spec.Resources = &zalando.Resources{}
 	cpuReq, err := p.calculateCPURequests(p.Spec.Size.CPU, cpuRequestsPercentage)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert to unstructured zalando postgresql: %w", err)
+	}
 	z.Spec.Resources.ResourceRequests.CPU = ptr.To(cpuReq)
 	z.Spec.Resources.ResourceRequests.Memory = ptr.To(p.Spec.Size.Memory)
 	z.Spec.Resources.ResourceLimits.CPU = ptr.To(p.Spec.Size.CPU)
