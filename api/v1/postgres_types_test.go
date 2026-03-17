@@ -438,9 +438,9 @@ func Test_calculateCPURequests(t *testing.T) {
 		},
 		{
 			name:            "LowPercentage",
-			inputValue:      "2",
-			inputPercentage: 25,
-			expectedResult:  "1",
+			inputValue:      "3",
+			inputPercentage: 15,
+			expectedResult:  "990m",
 			expectErr:       false,
 		},
 	}
