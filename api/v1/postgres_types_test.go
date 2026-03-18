@@ -436,6 +436,13 @@ func Test_calculateCPURequests(t *testing.T) {
 			expectedResult:  "",
 			expectErr:       true,
 		},
+		{
+			name:            "Same",
+			inputValue:      "1",
+			inputPercentage: 100,
+			expectedResult:  "1",
+			expectErr:       false,
+		},
 	}
 	for _, tt := range tests {
 		tt := tt // pin!
