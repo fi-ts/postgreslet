@@ -1109,12 +1109,6 @@ func (p *Postgres) DisableLoadBalancers() bool {
 }
 
 func (p *Postgres) calculateCPURequests(c string, percentage int) (string, error) {
-
-	// enforce a minimum percentage
-	if percentage < 33 {
-		percentage = 33
-	}
-
 	// parse the provided cpu quantity
 	cpu, err := resource.ParseQuantity(c)
 	if err != nil {
