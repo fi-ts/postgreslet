@@ -385,7 +385,7 @@ func main() {
 	enableKubernetesUseConfigMaps = viper.GetBool(enableKubernetesUseConfigMapsFlg)
 
 	// user defined value
-	viper.SetDefault(spiloCpuRequestsPercentageFlag, 66)
+	viper.SetDefault(spiloCpuRequestsPercentageFlag, 50)
 	spiloCpuRequestsPercentage = viper.GetInt(spiloCpuRequestsPercentageFlag)
 
 	ctrl.Log.Info("flag",
