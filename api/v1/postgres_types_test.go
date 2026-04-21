@@ -465,3 +465,50 @@ func Test_calculateCPURequests(t *testing.T) {
 		})
 	}
 }
+
+func Test_sanitizeLabelValue(t *testing.T) {
+	tests := []struct {
+		name string // description of this test case
+		v    string
+		want string
+	}{
+		{
+			name: "valid label value",
+			v:    "valid-name",
+			want: "valid-name",
+		},
+		{
+			name: "replace invalid chars in body",
+			v:    "a label with / inside",
+			want: "a_label_with_inside",
+		},
+		{
+			name: "replace invalid chars at start",
+			v:    "__a label with / inside and illegal start",
+			want: "a_label_with_inside_and_illegal_start",
+		},
+		{
+			name: "replace invalid chars at start and end",
+			v:    "__a label with / inside and illegal start and end /?,",
+			want: "a_label_with_inside_and_illegal_start_and_end",
+		},
+		{
+			name: "trim too a maximum of 63 chars",
+			v:    "0123456789012345678901234567890123456789012345678901234567890123456789",
+			want: "012345678901234567890123456789012345678901234567890123456789012",
+		},
+		{
+			name: "replace and trim too a maximum of 63 chars",
+			v:    "ää , 0123456789012345678901234567890123456789012345678901234567890123456789 /,ö",
+			want: "012345678901234567890123456789012345678901234567890123456789012",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := sanitizeLabelValue(tt.v)
+			if got != tt.want {
+				t.Errorf("sanitizeLabelValue() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

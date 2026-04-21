@@ -26,6 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -115,6 +116,8 @@ var (
 		APIVersion: "acid.zalan.do/v1",
 		Kind:       "postgresql",
 	}
+	invalidLabelValueChars = regexp.MustCompile(`[^a-zA-Z0-9._-]`)
+	multipleUnderscores    = regexp.MustCompile(`_+`)
 )
 
 // BackupConfig defines all properties to configure backup of a database.
@@ -688,8 +691,9 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 	z.Labels[PartitionIDLabelName] = p.Spec.PartitionID
 	// Add the additional version label to the custom resource
 	z.Labels[PostgresVersionLabelName] = p.Spec.Version
-	// Add the additional description label to the custom resource
-	z.Labels[PostgresDescriptionLabelName] = p.Spec.Description
+	// Add the additional description label to the custom resource. As the description
+	// is a value which is entered by the end-user, we have to sanitize the value
+	z.Labels[PostgresDescriptionLabelName] = sanitizeLabelValue(p.Spec.Description)
 
 	if image != "" {
 		z.Spec.DockerImage = image
@@ -1123,4 +1127,33 @@ func (p *Postgres) calculateCPURequests(c string, percentage int) (string, error
 
 	//return the calculated cpu request, making sure it is not higher than the given input value
 	return resource.NewMilliQuantity(min(value, milliValue), resource.BinarySI).String(), nil
+}
+
+// sanitize a string so it can be used as a label value. if the string is valid, it
+// will be returned unmodified. otherwise all illegal character will be replace with "_"
+// where multiple "_" will be shrinked to a single one. the string must also start and end
+// with a alphanumeric character. last but not least, a label value must not be longer than 63
+// characters.
+func sanitizeLabelValue(v string) string {
+	errs := validation.IsValidLabelValue(v)
+	if len(errs) == 0 {
+		return v
+	}
+	// replace all invalid chars
+	v = invalidLabelValueChars.ReplaceAllString(v, "_")
+
+	// replace multiple underscores with one single _
+	v = multipleUnderscores.ReplaceAllString(v, "_")
+
+	// trim invalid chars from start and end
+	v = strings.Trim(v, "._-")
+
+	// trim
+	if len(v) > 63 {
+		v = v[:63]
+		// trim again
+		v = strings.TrimRight(v, "._-")
+	}
+
+	return v
 }
