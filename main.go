@@ -104,6 +104,7 @@ const (
 	enableSpiloReadinessProbeFlg                = "enable-spilo-readiness-probe"
 	enableKubernetesUseConfigMapsFlg            = "enable-kubernetes-use-configmaps"
 	spiloCpuRequestsPercentageFlag              = "spilo-cpu-requests-percentage"
+	spiloMemoryRequestsPercentageFlag           = "spilo-memory-requests-percentage"
 )
 
 var (
@@ -182,6 +183,7 @@ func main() {
 		podTopologySpreadConstraintMaxSkew    int32
 		podTopologySpreadConstraintMinDomains int32
 		spiloCpuRequestsPercentage            int
+		spiloMemoryRequestsPercentage         int
 
 		patroniTTL          uint32
 		patroniLoopWait     uint32
@@ -385,8 +387,11 @@ func main() {
 	enableKubernetesUseConfigMaps = viper.GetBool(enableKubernetesUseConfigMapsFlg)
 
 	// user defined value
-	viper.SetDefault(spiloCpuRequestsPercentageFlag, 50)
+	viper.SetDefault(spiloCpuRequestsPercentageFlag, 25)
 	spiloCpuRequestsPercentage = viper.GetInt(spiloCpuRequestsPercentageFlag)
+
+	viper.SetDefault(spiloMemoryRequestsPercentageFlag, 90)
+	spiloMemoryRequestsPercentage = viper.GetInt(spiloMemoryRequestsPercentageFlag)
 
 	ctrl.Log.Info("flag",
 		metricsAddrSvcMgrFlg, metricsAddrSvcMgr,
@@ -446,6 +451,7 @@ func main() {
 		enableSpiloReadinessProbeFlg, enableSpiloReadinessProbe,
 		enableKubernetesUseConfigMapsFlg, enableKubernetesUseConfigMaps,
 		spiloCpuRequestsPercentageFlag, spiloCpuRequestsPercentage,
+		spiloMemoryRequestsPercentageFlag, spiloMemoryRequestsPercentage,
 	)
 
 	svcClusterConf := ctrl.GetConfigOrDie()
@@ -573,6 +579,7 @@ func main() {
 		WalGExporterCPULimit:                walGExporterCPULimit,
 		WalGExporterMemoryLimit:             walGExporterMemoryLimit,
 		SpiloCpuRequestsPercentage:          spiloCpuRequestsPercentage,
+		SpiloMemoryRequestsPercentage:       spiloMemoryRequestsPercentage,
 	}).SetupWithManager(ctrlPlaneClusterMgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Postgres")
 		os.Exit(1)
