@@ -383,7 +383,7 @@ func TestPostgresRestoreTimestamp_ToUnstructuredZalandoPostgresql(t *testing.T) 
 			p := &Postgres{
 				Spec: tt.spec,
 			}
-			got, _ := p.ToUnstructuredZalandoPostgresql(nil, tt.c, tt.sc, tt.pgParamBlockList, tt.rbs, tt.srcDB, 130, 10, 60, false, false, "dockerImage", 66)
+			got, _ := p.ToUnstructuredZalandoPostgresql(nil, tt.c, tt.sc, tt.pgParamBlockList, tt.rbs, tt.srcDB, 130, 10, 60, false, false, "dockerImage", 66, 90)
 
 			jsonZ, err := runtime.DefaultUnstructuredConverter.ToUnstructured(got)
 			if err != nil {
@@ -461,6 +461,73 @@ func Test_calculateCPURequests(t *testing.T) {
 
 			if tt.expectedResult != result {
 				t.Errorf("Calculated CPU request was %v, but expected %v", tt.expectedResult, result)
+			}
+		})
+	}
+}
+
+func Test_calculateMemoryRequests(t *testing.T) {
+
+	tests := []struct {
+		name            string
+		inputValue      string
+		inputPercentage int
+		expectedResult  string
+		expectErr       bool
+	}{
+		{
+			name:            "Normal",
+			inputValue:      "1Gi",
+			inputPercentage: 90,
+			expectedResult:  "966367641",
+			expectErr:       false,
+		},
+		{
+			name:            "Mi",
+			inputValue:      "512Mi",
+			inputPercentage: 50,
+			expectedResult:  "256Mi",
+			expectErr:       false,
+		},
+		{
+			name:            "MoreThan100",
+			inputValue:      "1Gi",
+			inputPercentage: 150,
+			expectedResult:  "1Gi",
+			expectErr:       false,
+		},
+		{
+			name:            "EmptyValue",
+			inputValue:      "",
+			inputPercentage: 90,
+			expectedResult:  "",
+			expectErr:       true,
+		},
+		{
+			name:            "Same",
+			inputValue:      "1Gi",
+			inputPercentage: 100,
+			expectedResult:  "1Gi",
+			expectErr:       false,
+		},
+	}
+	for _, tt := range tests {
+		tt := tt // pin!
+		t.Run(tt.name, func(t *testing.T) {
+			p := &Postgres{
+				Spec: PostgresSpec{
+					ProjectID: tt.name,
+				},
+			}
+
+			result, err := p.calculateMemoryRequests(tt.inputValue, tt.inputPercentage)
+
+			if err != nil && !tt.expectErr {
+				t.Errorf("Unexpected error")
+			}
+
+			if tt.expectedResult != result {
+				t.Errorf("Calculated memory request was %v, but expected %v", result, tt.expectedResult)
 			}
 		})
 	}

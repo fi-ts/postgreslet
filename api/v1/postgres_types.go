@@ -678,7 +678,7 @@ func (p *Postgres) ToPeripheralResourceLookupKey() types.NamespacedName {
 	}
 }
 
-func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *corev1.ConfigMap, sc string, pgParamBlockList map[string]bool, rbs *BackupConfig, srcDB *Postgres, patroniTTL, patroniLoopWait, patroniRetryTimeout uint32, dboIsSuperuser bool, enableTlsCert bool, image string, cpuRequestsPercentage int) (*unstructured.Unstructured, error) {
+func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *corev1.ConfigMap, sc string, pgParamBlockList map[string]bool, rbs *BackupConfig, srcDB *Postgres, patroniTTL, patroniLoopWait, patroniRetryTimeout uint32, dboIsSuperuser bool, enableTlsCert bool, image string, cpuRequestsPercentage int, memoryRequestsPercentage int) (*unstructured.Unstructured, error) {
 	if z == nil {
 		z = &zalando.Postgresql{}
 	}
@@ -719,8 +719,12 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert to unstructured zalando postgresql: %w", err)
 	}
+	memReq, err := p.calculateMemoryRequests(p.Spec.Size.Memory, memoryRequestsPercentage)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert to unstructured zalando postgresql: %w", err)
+	}
 	z.Spec.Resources.ResourceRequests.CPU = ptr.To(cpuReq)
-	z.Spec.Resources.ResourceRequests.Memory = ptr.To(p.Spec.Size.Memory)
+	z.Spec.Resources.ResourceRequests.Memory = ptr.To(memReq)
 	z.Spec.Resources.ResourceLimits.CPU = ptr.To(p.Spec.Size.CPU)
 	z.Spec.Resources.ResourceLimits.Memory = ptr.To(p.Spec.Size.Memory)
 	z.Spec.TeamID = p.generateTeamID()
@@ -1127,6 +1131,19 @@ func (p *Postgres) calculateCPURequests(c string, percentage int) (string, error
 
 	//return the calculated cpu request, making sure it is not higher than the given input value
 	return resource.NewMilliQuantity(min(value, milliValue), resource.BinarySI).String(), nil
+}
+
+func (p *Postgres) calculateMemoryRequests(m string, percentage int) (string, error) {
+	mem, err := resource.ParseQuantity(m)
+	if err != nil {
+		return "", err
+	}
+
+	bytes := mem.Value()
+	value := (bytes * int64(percentage)) / int64(100)
+
+	// make sure the request is not higher than the given input value
+	return resource.NewQuantity(min(value, bytes), resource.BinarySI).String(), nil
 }
 
 // sanitize a string so it can be used as a label value. if the string is valid, it
