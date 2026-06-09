@@ -543,7 +543,8 @@ func operatorConfigHash(namespace string, options Options) string {
 // ConfigMap data. encoding/json sorts map keys, so the same data always
 // yields the same hash regardless of map iteration order.
 func configMapDataHash(data map[string]string) string {
-	b, _ := json.Marshal(data)
+	// a map[string]string is always json-marshalable
+	b, _ := json.Marshal(data) //nolint:errchkjson
 	sum := sha256.Sum256(b)
 	return hex.EncodeToString(sum[:])
 }
