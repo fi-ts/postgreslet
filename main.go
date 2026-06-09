@@ -104,6 +104,7 @@ const (
 	enableSpiloReadinessProbeFlg                = "enable-spilo-readiness-probe"
 	enableKubernetesUseConfigMapsFlg            = "enable-kubernetes-use-configmaps"
 	spiloCpuRequestsPercentageFlag              = "spilo-cpu-requests-percentage"
+	operatorWithConfigHashFlg                   = "operator-with-config-hash"
 )
 
 var (
@@ -175,6 +176,7 @@ func main() {
 		enablePodTopologySpreadConstraintWebhook bool
 		enableSpiloReadinessProbe                bool
 		enableKubernetesUseConfigMaps            bool
+		operatorWithConfigHash                   bool
 
 		portRangeStart                        int32
 		portRangeSize                         int32
@@ -388,6 +390,9 @@ func main() {
 	viper.SetDefault(spiloCpuRequestsPercentageFlag, 50)
 	spiloCpuRequestsPercentage = viper.GetInt(spiloCpuRequestsPercentageFlag)
 
+	viper.SetDefault(operatorWithConfigHashFlg, true)
+	operatorWithConfigHash = viper.GetBool(operatorWithConfigHashFlg)
+
 	ctrl.Log.Info("flag",
 		metricsAddrSvcMgrFlg, metricsAddrSvcMgr,
 		metricsAddrCtrlMgrFlg, metricsAddrCtrlMgr,
@@ -446,6 +451,7 @@ func main() {
 		enableSpiloReadinessProbeFlg, enableSpiloReadinessProbe,
 		enableKubernetesUseConfigMapsFlg, enableKubernetesUseConfigMaps,
 		spiloCpuRequestsPercentageFlag, spiloCpuRequestsPercentage,
+		operatorWithConfigHashFlg, operatorWithConfigHash,
 	)
 
 	svcClusterConf := ctrl.GetConfigOrDie()
@@ -521,6 +527,7 @@ func main() {
 		PodAntiaffinityTopologyKey:               podAntiaffinityTopologyKey,
 		EnableReadinessProbe:                     enableSpiloReadinessProbe,
 		KubernetesUseConfigMaps:                  enableKubernetesUseConfigMaps,
+		OperatorWithConfigHash:                   operatorWithConfigHash,
 	}
 	opMgr, err := operatormanager.New(svcClusterConf, "external/svc-postgres-operator.yaml", scheme, ctrl.Log.WithName("OperatorManager"), opMgrOpts)
 	if err != nil {
