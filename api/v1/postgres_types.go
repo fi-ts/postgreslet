@@ -831,9 +831,9 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 		z.Spec.TLS = nil
 	}
 
-	if enableTsc {
-		// FIXME: add TopologySpreadConstraint to z.Spec
-	}
+	// FIXME: add TopologySpreadConstraint to z.Spec
+	// if enableTsc {
+	// }
 
 	jsonZ, err := runtime.DefaultUnstructuredConverter.ToUnstructured(z)
 	if err != nil {
