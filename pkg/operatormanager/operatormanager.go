@@ -370,7 +370,7 @@ func (m *OperatorManager) createNewClientObject(ctx context.Context, obj client.
 		err = m.client.Get(ctx, key, &got)
 		if err == nil {
 			// Copy the ResourceVersion
-			v.ObjectMeta.ResourceVersion = got.ObjectMeta.ResourceVersion
+			v.ResourceVersion = got.ResourceVersion
 			// Copy the ClusterIP
 			v.Spec.ClusterIP = got.Spec.ClusterIP
 		}
@@ -505,14 +505,14 @@ func (m *OperatorManager) createOrUpdateNamespace(ctx context.Context, namespace
 		// Create the namespace.
 		nsObj := &corev1.Namespace{}
 		nsObj.Name = namespace
-		nsObj.ObjectMeta.Labels = labels
+		nsObj.Labels = labels
 		if err := m.client.Create(ctx, nsObj); err != nil {
 			return fmt.Errorf("error while creating namespace %v: %w", namespace, err)
 		}
 		log.Info("namespace created")
 	} else {
 		// update namespace
-		ns.ObjectMeta.Labels = labels
+		ns.Labels = labels
 		if err := m.client.Update(ctx, &ns); err != nil {
 			return fmt.Errorf("error while updating namespace: %w", err)
 		}

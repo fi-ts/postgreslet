@@ -133,7 +133,7 @@ type PatroniConfig struct {
 // +kubebuilder:rbac:groups=acid.zalan.do,resources=postgresqls,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=acid.zalan.do,resources=postgresqls/status,verbs=get;list;watch
 func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	log := r.Log.WithValues("pgID", req.NamespacedName.Name)
+	log := r.Log.WithValues("pgID", req.Name)
 
 	instance := &pg.Postgres{}
 	if err := r.CtrlClient.Get(ctx, req.NamespacedName, instance); err != nil {
@@ -175,12 +175,12 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		}
 		log.V(debugLogLevel).Info("corresponding CRD ClusterwideNetworkPolicy deleted")
 
-		if err := r.LBManager.DeleteSharedSvcLB(ctx, instance); err != nil {
+		if err := r.DeleteSharedSvcLB(ctx, instance); err != nil {
 			r.recorder.Eventf(instance, "Warning", "Error", "failed to delete Service with shared ip: %v", err)
 			return ctrl.Result{}, err
 		}
 
-		if err := r.LBManager.DeleteDedicatedSvcLB(ctx, instance); err != nil {
+		if err := r.DeleteDedicatedSvcLB(ctx, instance); err != nil {
 			r.recorder.Eventf(instance, "Warning", "Error", "failed to delete Service with dedicated ip: %v", err)
 			return ctrl.Result{}, err
 		}
@@ -211,7 +211,7 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 			log.V(debugLogLevel).Info("finalizer from storage encryption secret removed")
 		}
 
-		deletable, err := r.OperatorManager.IsOperatorDeletable(ctx, namespace, instance.ToPeripheralResourceName())
+		deletable, err := r.IsOperatorDeletable(ctx, namespace, instance.ToPeripheralResourceName())
 		if err != nil {
 			r.recorder.Eventf(instance, "Warning", "Error", "failed to check if the operator is idle: %v", err)
 			return ctrl.Result{}, fmt.Errorf("error while checking if the operator is idle: %w", err)
@@ -221,7 +221,7 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 			log.Info("operator not yet deletable, requeuing")
 			return ctrl.Result{Requeue: true}, nil
 		}
-		if err := r.OperatorManager.UninstallOperator(ctx, namespace); err != nil {
+		if err := r.UninstallOperator(ctx, namespace); err != nil {
 			r.recorder.Eventf(instance, "Warning", "Error", "failed to uninstall operator: %v", err)
 			return ctrl.Result{}, fmt.Errorf("error while uninstalling operator: %w", err)
 		}
@@ -342,7 +342,7 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, fmt.Errorf("failed to create or update initdb job: %w", err)
 	}
 
-	if err := r.LBManager.ReconcileSvcLBs(ctx, instance); err != nil {
+	if err := r.ReconcileSvcLBs(ctx, instance); err != nil {
 		r.recorder.Eventf(instance, "Warning", "Error", "failed to create Service: %v", err)
 		return ctrl.Result{}, err
 	}
@@ -488,13 +488,13 @@ func (r *PostgresReconciler) deleteUserPasswordsSecret(ctx context.Context, inst
 // ensureZalandoDependencies makes sure Zalando resources are installed in the service-cluster.
 func (r *PostgresReconciler) ensureZalandoDependencies(log logr.Logger, ctx context.Context, p *pg.Postgres, b *pg.BackupConfig) error {
 	namespace := p.ToPeripheralResourceNamespace()
-	isInstalled, err := r.OperatorManager.IsOperatorInstalled(ctx, namespace)
+	isInstalled, err := r.IsOperatorInstalled(ctx, namespace)
 	if err != nil {
 		return fmt.Errorf("error while querying if zalando dependencies are installed: %w", err)
 	}
 
 	if !isInstalled {
-		if err := r.OperatorManager.InstallOrUpdateOperator(ctx, namespace); err != nil {
+		if err := r.InstallOrUpdateOperator(ctx, namespace); err != nil {
 			return fmt.Errorf("error while installing zalando dependencies: %w", err)
 		}
 	}
@@ -589,10 +589,10 @@ func (r *PostgresReconciler) updatePodEnvironmentConfigMap(log logr.Logger, ctx 
 	if err := r.SvcClient.Get(ctx, ns, cm); err != nil {
 		// when updating from v0.7.0 straight to v0.10.0, we neither have that ConfigMap (as we use a Secret in version
 		// v0.7.0) nor do we create it (the new labels aren't there yet, so the selector does not match and
-		// operatormanager.OperatorManager.UpdateAllManagedOperators does not call InstallOrUpdateOperator)
+		// operatormanager.UpdateAllManagedOperators does not call InstallOrUpdateOperator)
 		// we previously aborted here (before the postgresql resource was updated with the new labels), meaning we would
 		// simply restart the loop without solving the problem.
-		if cm, err = r.OperatorManager.CreatePodEnvironmentConfigMap(ctx, ns.Namespace); err != nil {
+		if cm, err = r.CreatePodEnvironmentConfigMap(ctx, ns.Namespace); err != nil {
 			return fmt.Errorf("error while creating the missing Pod Environment ConfigMap %v: %w", ns.Namespace, err)
 		}
 		log.Info("missing Pod Environment ConfigMap created!")
@@ -664,7 +664,7 @@ func (r *PostgresReconciler) updatePodEnvironmentSecret(log logr.Logger, ctx con
 	var s *corev1.Secret
 	ns := p.ToPeripheralResourceNamespace()
 
-	if s, err = r.OperatorManager.CreateOrGetPodEnvironmentSecret(ctx, ns); err != nil {
+	if s, err = r.CreateOrGetPodEnvironmentSecret(ctx, ns); err != nil {
 		return fmt.Errorf("error while accessing the pod environment secret %v: %w", ns, err)
 	}
 
@@ -967,7 +967,7 @@ func (r *PostgresReconciler) ensureStandbySecrets(log logr.Logger, ctx context.C
 	log.Info("not all expected local secrets found, continuing to create them")
 
 	remoteSecretNamespacedName := types.NamespacedName{
-		Namespace: instance.ObjectMeta.Namespace,
+		Namespace: instance.Namespace,
 		Name:      instance.Spec.PostgresConnection.ConnectionSecretName,
 	}
 	return r.copySecrets(log, ctx, remoteSecretNamespacedName, instance, false)
@@ -1006,7 +1006,7 @@ func (r *PostgresReconciler) ensureCloneSecrets(log logr.Logger, ctx context.Con
 
 	remoteSecretName := strings.Replace(instance.ToUserPasswordsSecretName(), instance.Name, instance.Spec.PostgresRestore.SourcePostgresID, 1) // TODO this is hacky-wacky...
 	remoteSecretNamespacedName := types.NamespacedName{
-		Namespace: instance.ObjectMeta.Namespace,
+		Namespace: instance.Namespace,
 		Name:      remoteSecretName,
 	}
 	return r.copySecrets(log, ctx, remoteSecretNamespacedName, instance, true)
@@ -1565,7 +1565,7 @@ func (r *PostgresReconciler) createOrUpdateExporterSidecarServices(log logr.Logg
 	if err := r.SvcClient.Get(ctx, ns, old); err == nil {
 		// service exists, overwriting it (but using the same clusterip)
 		pes.Spec.ClusterIP = old.Spec.ClusterIP
-		pes.ObjectMeta.ResourceVersion = old.GetObjectMeta().GetResourceVersion()
+		pes.ResourceVersion = old.GetObjectMeta().GetResourceVersion()
 		if err := r.SvcClient.Update(ctx, pes); err != nil {
 			return fmt.Errorf("error while updating the postgres-exporter service: %w", err)
 		}
@@ -1648,7 +1648,7 @@ func (r *PostgresReconciler) createOrUpdateExporterSidecarServiceMonitor(log log
 	old := &coreosv1.ServiceMonitor{}
 	if err := r.SvcClient.Get(ctx, ns, old); err == nil {
 		// Copy the resource version
-		pesm.ObjectMeta.ResourceVersion = old.ObjectMeta.ResourceVersion
+		pesm.ResourceVersion = old.ResourceVersion
 		if err := r.SvcClient.Update(ctx, pesm); err != nil {
 			return fmt.Errorf("error while updating the postgres-exporter servicemonitor: %w", err)
 		}
@@ -1713,7 +1713,7 @@ func (r *PostgresReconciler) createOrUpdatePatroniPodMonitor(ctx context.Context
 	old := &coreosv1.PodMonitor{}
 	if err := r.SvcClient.Get(ctx, ns, old); err == nil {
 		// Copy the resource version
-		pm.ObjectMeta.ResourceVersion = old.ObjectMeta.ResourceVersion
+		pm.ResourceVersion = old.ResourceVersion
 		if err := r.SvcClient.Update(ctx, pm); err != nil {
 			return fmt.Errorf("error while updating the podmonitor: %w", err)
 		}
@@ -1819,7 +1819,7 @@ func (r *PostgresReconciler) ensureStorageEncryptionSecret(log logr.Logger, ctx 
 
 func (r *PostgresReconciler) generateRandomString() (string, error) {
 	const chars string = "!\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"
-	var size *big.Int = big.NewInt(int64(len(chars)))
+	size := big.NewInt(int64(len(chars)))
 	b := make([]byte, 64)
 	for i := range b {
 		x, err := rand.Int(rand.Reader, size)
@@ -1849,7 +1849,7 @@ func (r *PostgresReconciler) removeStorageEncryptionSecretFinalizer(log logr.Log
 	}
 
 	// Remove finalizer
-	s.ObjectMeta.Finalizers = removeElem(s.ObjectMeta.Finalizers, storageEncryptionKeyFinalizerName)
+	s.Finalizers = removeElem(s.Finalizers, storageEncryptionKeyFinalizerName)
 	if err := r.SvcClient.Update(ctx, s); err != nil {
 		return fmt.Errorf("error while removing finalizer from storage secret in service cluster: %w", err)
 	}
@@ -2196,7 +2196,7 @@ func (r *PostgresReconciler) createOrUpdateWalGExporterDeployment(log logr.Logge
 	old := &appsv1.Deployment{}
 	if err := r.SvcClient.Get(ctx, ns, old); err == nil {
 		// Copy the resource version
-		deploy.ObjectMeta.ResourceVersion = old.ObjectMeta.ResourceVersion
+		deploy.ResourceVersion = old.ResourceVersion
 		if err := r.SvcClient.Update(ctx, deploy); err != nil {
 			return fmt.Errorf("error while updating the wal-g-exporter deployment: %w", err)
 		}
@@ -2269,7 +2269,7 @@ func (r *PostgresReconciler) createOrUpdateWalGExporterPodMonitor(log logr.Logge
 	old := &coreosv1.PodMonitor{}
 	if err := r.SvcClient.Get(ctx, ns, old); err == nil {
 		// podMonitor exists, overwriting it
-		s.ObjectMeta.ResourceVersion = old.GetObjectMeta().GetResourceVersion()
+		s.ResourceVersion = old.GetObjectMeta().GetResourceVersion()
 		if err := r.SvcClient.Update(ctx, s); err != nil {
 			return fmt.Errorf("error while updating the wal-g-exporter podMonitor: %w", err)
 		}

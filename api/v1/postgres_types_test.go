@@ -133,7 +133,7 @@ func TestPostgres_generateTeamID(t *testing.T) {
 	for _, tt := range tests {
 		tt := tt // pin!
 		t.Run(tt.name, func(t *testing.T) {
-			var dnsRegExp *regexp.Regexp = regexp.MustCompile("^[a-z]([-a-z0-9]*[a-z0-9])?$")
+			dnsRegExp := regexp.MustCompile("^[a-z]([-a-z0-9]*[a-z0-9])?$")
 			p := &Postgres{
 				Spec: PostgresSpec{
 					ProjectID: tt.projectID,
@@ -196,7 +196,7 @@ func TestPostgres_ToPeripheralResourceName(t *testing.T) {
 	for _, tt := range tests {
 		tt := tt // pin!
 		t.Run(tt.name, func(t *testing.T) {
-			var dnsRegExp *regexp.Regexp = regexp.MustCompile("^[a-z]([-a-z0-9]*[a-z0-9])?$")
+			dnsRegExp := regexp.MustCompile("^[a-z]([-a-z0-9]*[a-z0-9])?$")
 			p := &Postgres{
 				ObjectMeta: v1.ObjectMeta{
 					Name: tt.postgresName,

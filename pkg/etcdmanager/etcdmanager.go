@@ -170,15 +170,15 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 
 	case *corev1.ServiceAccount:
 		m.log.Info("handling ServiceAccount")
-		v.ObjectMeta.Name = saName
+		v.Name = saName
 
 		// Use the updated name to get the resource
-		key.Name = v.ObjectMeta.Name
+		key.Name = v.Name
 		err = m.client.Get(ctx, key, &corev1.ServiceAccount{})
 
 	case *rbacv1.Role:
 		m.log.Info("handling Role")
-		v.ObjectMeta.Name = roleName
+		v.Name = roleName
 
 		m.log.Info("Updating psp")
 		for i := range v.Rules {
@@ -198,12 +198,12 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 		}
 
 		// Use the updated name to get the resource
-		key.Name = v.ObjectMeta.Name
+		key.Name = v.Name
 		err = m.client.Get(ctx, key, &rbacv1.Role{})
 
 	case *rbacv1.RoleBinding:
 		m.log.Info("handling RoleBinding")
-		v.ObjectMeta.Name = rbName
+		v.Name = rbName
 
 		m.log.Info("Updating roleRef")
 		v.RoleRef.Name = roleName
@@ -217,12 +217,12 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 		}
 
 		// Use the updated name to get the resource
-		key.Name = v.ObjectMeta.Name
+		key.Name = v.Name
 		err = m.client.Get(ctx, key, &rbacv1.RoleBinding{})
 
 	case *corev1.ConfigMap:
 		m.log.Info("handling ConfigMap")
-		v.ObjectMeta.Name = cmName
+		v.Name = cmName
 
 		var configYaml strings.Builder
 		configYaml.WriteString("db: etcd\n")
@@ -236,12 +236,12 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 		v.Data["config.yaml"] = configYaml.String()
 
 		// Use the updated name to get the resource
-		key.Name = v.ObjectMeta.Name
+		key.Name = v.Name
 		err = m.client.Get(ctx, key, &corev1.ConfigMap{})
 
 	case *appsv1.StatefulSet:
 		m.log.Info("handling StatefulSet")
-		v.ObjectMeta.Name = stsName
+		v.Name = stsName
 
 		m.log.Info("Updating containers")
 		for i := range v.Spec.Template.Spec.Containers {
@@ -312,10 +312,10 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 
 		m.log.Info("Updating labels")
 		// Add partition ID label
-		v.Spec.Template.ObjectMeta.Labels[pg.PartitionIDLabelName] = m.options.PartitionID
-		v.Spec.Template.ObjectMeta.Labels[pg.ManagedByLabelName] = m.options.PostgresletFullname
-		v.Spec.Template.ObjectMeta.Labels[etcdComponentLabelName] = etcdComponentLabelValue
-		v.Spec.Template.ObjectMeta.Labels[pg.NameLabelName] = stsName
+		v.Spec.Template.Labels[pg.PartitionIDLabelName] = m.options.PartitionID
+		v.Spec.Template.Labels[pg.ManagedByLabelName] = m.options.PostgresletFullname
+		v.Spec.Template.Labels[etcdComponentLabelName] = etcdComponentLabelValue
+		v.Spec.Template.Labels[pg.NameLabelName] = stsName
 
 		m.log.Info("Updating selector")
 		// spec.selector.matchLabels
@@ -334,29 +334,29 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 
 		got := appsv1.StatefulSet{}
 		// Use the updated name to get the resource
-		key.Name = v.ObjectMeta.Name
+		key.Name = v.Name
 		err = m.client.Get(ctx, key, &got)
 		if err == nil {
 			// Copy the ResourceVersion
 			m.log.Info("Copying existing resource version")
-			v.ObjectMeta.ResourceVersion = got.ObjectMeta.ResourceVersion
+			v.ResourceVersion = got.ResourceVersion
 		}
 
 	case *corev1.Service:
 		m.log.Info("handling Service")
-		switch v.ObjectMeta.Name {
+		switch v.Name {
 		case "backup-restore-sidecar-svc":
-			v.ObjectMeta.Name = svcSidecarName
+			v.Name = svcSidecarName
 		case "etcd-psql-headless":
-			v.ObjectMeta.Name = svcHeadlessName
+			v.Name = svcHeadlessName
 		case "etcd-psql":
-			v.ObjectMeta.Name = svcName
+			v.Name = svcName
 		default:
 			return fmt.Errorf("unknown service name: %v", v.ObjectMeta.Name)
 		}
 
 		m.log.Info("Updating labels")
-		v.ObjectMeta.Labels[pg.NameLabelName] = v.ObjectMeta.Name
+		v.Labels[pg.NameLabelName] = v.Name
 
 		m.log.Info("Updating selector")
 		v.Spec.Selector[pg.PartitionIDLabelName] = m.options.PartitionID
@@ -364,11 +364,11 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 		v.Spec.Selector[pg.NameLabelName] = stsName
 
 		got := corev1.Service{}
-		key.Name = v.ObjectMeta.Name
+		key.Name = v.Name
 		err = m.client.Get(ctx, key, &got)
 		if err == nil {
 			// Copy the ResourceVersion
-			v.ObjectMeta.ResourceVersion = got.ObjectMeta.ResourceVersion
+			v.ResourceVersion = got.ResourceVersion
 			// Copy the ClusterIP
 			v.Spec.ClusterIP = got.Spec.ClusterIP
 		}
@@ -475,7 +475,7 @@ func (m *EtcdManager) createOrUpdateServiceMonitor(ctx context.Context, targetNa
 	old := &coreosv1.ServiceMonitor{}
 	if err := m.client.Get(ctx, nsn, old); err == nil {
 		// Copy the resource version
-		sm.ObjectMeta.ResourceVersion = old.ObjectMeta.ResourceVersion
+		sm.ResourceVersion = old.ResourceVersion
 		if err := m.client.Update(ctx, sm); err != nil {
 			return fmt.Errorf("error while updating the servicemonitor: %w", err)
 		}
