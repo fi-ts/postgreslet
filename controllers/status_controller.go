@@ -51,6 +51,7 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 			return ctrl.Result{}, err
 		}
 		log.Info("status changed to Deleted")
+
 		return ctrl.Result{}, nil
 	}
 
@@ -87,8 +88,10 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		log.V(debugLogLevel).Info("Updating owner", "owner", owner.UID)
 		if err := r.CtrlClient.Status().Update(ctx, owner); err != nil {
 			log.Error(err, "failed to update owner object")
+
 			return err
 		}
+
 		return nil
 	})
 
@@ -184,6 +187,7 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	if len(secrets.Items) == 0 {
 		log.Info("no local secrets found yet, requeuing", "status", owner.Status)
+
 		return ctrl.Result{Requeue: true, RequeueAfter: 2 * time.Second}, nil
 	}
 
@@ -230,6 +234,7 @@ func (r *StatusReconciler) createOrUpdateSecret(ctx context.Context, in *pg.Post
 	// todo: update to CreateOrPatch()
 	result, err := controllerutil.CreateOrUpdate(ctx, r.CtrlClient, fetched, func() error {
 		fetched.Data = secret.Data
+
 		return nil
 	})
 	if err != nil {
@@ -247,5 +252,6 @@ func deriveOwnerName(instance *zalando.Postgresql) (string, error) {
 	if !ok {
 		return "", fmt.Errorf("could not derive owner reference")
 	}
+
 	return value, nil
 }

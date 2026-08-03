@@ -82,6 +82,7 @@ func New(confRest *rest.Config, fileName string, scheme *runtime.Scheme, log log
 	}
 
 	log.Info("new `EtcdManager` created")
+
 	return &EtcdManager{
 		metadataAccessor: meta.NewAccessor(),
 		client:           client,
@@ -121,6 +122,7 @@ func (m *EtcdManager) InstallOrUpdateEtcd() error {
 	}
 
 	m.log.Info("etcd installed")
+
 	return nil
 }
 
@@ -182,7 +184,6 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 
 		m.log.Info("Updating psp")
 		for i := range v.Rules {
-			i := i
 
 			if !slices.Contains(v.Rules[i].APIGroups, "extensions") {
 				continue
@@ -245,7 +246,6 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 
 		m.log.Info("Updating containers")
 		for i := range v.Spec.Template.Spec.Containers {
-			i := i
 
 			// Patch EtcdImage
 			if m.options.EtcdImage != "" {
@@ -256,8 +256,7 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 			m.log.Info("Updating envs")
 			// Patch Env
 			for j, env := range v.Spec.Template.Spec.Containers[i].Env {
-				j := j
-				env := env
+
 				switch env.Name {
 				case "BACKUP_RESTORE_SIDECAR_S3_BUCKET_NAME":
 					if env.ValueFrom != nil && env.ValueFrom.SecretKeyRef != nil {
@@ -293,7 +292,6 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 		if m.options.EtcdBackupSidecarImage != "" {
 			m.log.Info("Updating initContainers")
 			for i := range v.Spec.Template.Spec.InitContainers {
-				i := i
 
 				m.log.Info("Updating etcd backup sidecar image")
 				v.Spec.Template.Spec.InitContainers[i].Image = m.options.EtcdBackupSidecarImage
@@ -302,7 +300,6 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 
 		m.log.Info("Updating configMap volume")
 		for i := range v.Spec.Template.Spec.Volumes {
-			i := i
 
 			if v.Spec.Template.Spec.Volumes[i].Name != "backup-restore-sidecar-config" {
 				continue
@@ -425,6 +422,7 @@ func (m *EtcdManager) toObjectKey(obj runtime.Object, namespace string) (client.
 	if err != nil {
 		return client.ObjectKey{}, fmt.Errorf("error while extracting the name of the k8s resource: %w", err)
 	}
+
 	return client.ObjectKey{
 		Namespace: namespace,
 		Name:      name,
@@ -480,6 +478,7 @@ func (m *EtcdManager) createOrUpdateServiceMonitor(ctx context.Context, targetNa
 			return fmt.Errorf("error while updating the servicemonitor: %w", err)
 		}
 		m.log.Info("servicemonitor updated")
+
 		return nil
 	}
 

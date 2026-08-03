@@ -72,7 +72,6 @@ func Test_setSharedBufferSize(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt // pin!
 		t.Run(tt.name, func(t *testing.T) {
 			parameters := map[string]string{}
 
@@ -131,7 +130,6 @@ func TestPostgres_generateTeamID(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt // pin!
 		t.Run(tt.name, func(t *testing.T) {
 			dnsRegExp := regexp.MustCompile("^[a-z]([-a-z0-9]*[a-z0-9])?$")
 			p := &Postgres{
@@ -194,7 +192,6 @@ func TestPostgres_ToPeripheralResourceName(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt // pin!
 		t.Run(tt.name, func(t *testing.T) {
 			dnsRegExp := regexp.MustCompile("^[a-z]([-a-z0-9]*[a-z0-9])?$")
 			p := &Postgres{
@@ -210,7 +207,7 @@ func TestPostgres_ToPeripheralResourceName(t *testing.T) {
 			if !dnsRegExp.MatchString(got) {
 				t.Errorf("Postgres.ToPeripheralResourceName() got %v, not a valid DNS name", got)
 			}
-			//This resource name will be used as part of the name of other resources, hence we need to limit it's length,
+			// This resource name will be used as part of the name of other resources, hence we need to limit it's length,
 			// e.g. "postgres.bce25ade7552494c-33d21de46d284ea6bec0.credentials"
 			maxLen := 37
 			if len(got) > maxLen {
@@ -378,7 +375,6 @@ func TestPostgresRestoreTimestamp_ToUnstructuredZalandoPostgresql(t *testing.T) 
 		},
 	}
 	for _, tt := range tests {
-		tt := tt // pin!
 		t.Run(tt.name, func(t *testing.T) {
 			p := &Postgres{
 				Spec: tt.spec,
@@ -445,7 +441,6 @@ func Test_calculateCPURequests(t *testing.T) {
 		},
 	}
 	for _, tt := range tests {
-		tt := tt // pin!
 		t.Run(tt.name, func(t *testing.T) {
 			p := &Postgres{
 				Spec: PostgresSpec{
