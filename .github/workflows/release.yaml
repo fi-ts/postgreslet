@@ -26,9 +26,9 @@ jobs:
         go-version-file: 'go.mod'
   
     - name: Lint
-      uses: golangci/golangci-lint-action@v4
+      uses: golangci/golangci-lint-action@v9
       with:
-        args: -p bugs -p unused --timeout=5m
+        args: --timeout=5m
 
     - name: Build and push Docker image
       run: |
