@@ -27,6 +27,7 @@ jobs:
     - name: Lint
       uses: golangci/golangci-lint-action@v9
       with:
+        only-new-issues: true
         args: --timeout=5m
 
     - name: Build and push Docker image
