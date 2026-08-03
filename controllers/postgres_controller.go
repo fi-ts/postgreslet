@@ -114,6 +114,7 @@ type PostgresReconciler struct {
 	WalGExporterCPULimit                string
 	WalGExporterMemoryLimit             string
 	SpiloCpuRequestsPercentage          int
+	PodTopologySpreadConstraintOpts     *PodTopologySpreadConstraintsOpts
 }
 
 type PatroniStandbyCluster struct {
@@ -125,6 +126,12 @@ type PatroniStandbyCluster struct {
 type PatroniConfig struct {
 	StandbyCluster             *PatroniStandbyCluster `json:"standby_cluster"`
 	SynchronousNodesAdditional *string                `json:"synchronous_nodes_additional"`
+}
+
+type PodTopologySpreadConstraintsOpts struct {
+	Enable              bool
+	MaxSkew, MinDomains int32
+	Key                 string
 }
 
 // Reconcile is the entry point for postgres reconciliation.
@@ -332,7 +339,8 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		return ctrl.Result{}, fmt.Errorf("error while creating storage secret: %w", err)
 	}
 
-	if err := r.createOrUpdateZalandoPostgresql(ctx, instance, log, globalSidecarsCM, r.PatroniTTL, r.PatroniLoopWait, r.PatroniRetryTimeout); err != nil {
+	if err := r.createOrUpdateZalandoPostgresql(ctx, instance, log, globalSidecarsCM, r.PatroniTTL,
+		r.PatroniLoopWait, r.PatroniRetryTimeout, r.PodTopologySpreadConstraintOpts); err != nil {
 		r.recorder.Eventf(instance, "Warning", "Error", "failed to create Zalando resource: %v", err)
 		return ctrl.Result{}, fmt.Errorf("failed to create or update zalando postgresql: %w", err)
 	}
@@ -409,7 +417,9 @@ func (r *PostgresReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context, instance *pg.Postgres, log logr.Logger, sidecarsCM *corev1.ConfigMap, patroniTTL, patroniLoopWait, patroniRetryTimeout uint32) error {
+func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context, instance *pg.Postgres,
+	log logr.Logger, sidecarsCM *corev1.ConfigMap, patroniTTL, patroniLoopWait, patroniRetryTimeout uint32,
+	tsc *PodTopologySpreadConstraintsOpts) error {
 	var restoreBackupConfig *pg.BackupConfig
 	var restoreSourceInstance *pg.Postgres
 	if instance.Spec.PostgresRestore != nil {
@@ -444,7 +454,10 @@ func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context
 			return fmt.Errorf("failed to fetch zalando postgresql: %w", err)
 		}
 
-		u, err := instance.ToUnstructuredZalandoPostgresql(nil, sidecarsCM, r.StorageClass, r.PgParamBlockList, restoreBackupConfig, restoreSourceInstance, patroniTTL, patroniLoopWait, patroniRetryTimeout, r.EnableSuperUserForDBO, r.EnableCustomTLSCert, r.PostgresImage, r.SpiloCpuRequestsPercentage)
+		u, err := instance.ToUnstructuredZalandoPostgresql(nil, sidecarsCM, r.StorageClass, r.PgParamBlockList,
+			restoreBackupConfig, restoreSourceInstance, patroniTTL, patroniLoopWait, patroniRetryTimeout,
+			r.EnableSuperUserForDBO, r.EnableCustomTLSCert, r.PostgresImage, r.SpiloCpuRequestsPercentage,
+			tsc.Enable, tsc.Key, tsc.MaxSkew, tsc.MinDomains)
 		if err != nil {
 			return fmt.Errorf("failed to convert to unstructured zalando postgresql: %w", err)
 		}

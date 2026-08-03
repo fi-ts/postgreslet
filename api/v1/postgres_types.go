@@ -678,7 +678,11 @@ func (p *Postgres) ToPeripheralResourceLookupKey() types.NamespacedName {
 	}
 }
 
-func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *corev1.ConfigMap, sc string, pgParamBlockList map[string]bool, rbs *BackupConfig, srcDB *Postgres, patroniTTL, patroniLoopWait, patroniRetryTimeout uint32, dboIsSuperuser bool, enableTlsCert bool, image string, cpuRequestsPercentage int) (*unstructured.Unstructured, error) {
+func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *corev1.ConfigMap, sc string,
+	pgParamBlockList map[string]bool, rbs *BackupConfig, srcDB *Postgres,
+	patroniTTL, patroniLoopWait, patroniRetryTimeout uint32, dboIsSuperuser bool,
+	enableTlsCert bool, image string, cpuRequestsPercentage int,
+	enableTsc bool, tscKey string, tscMaxSkew, tscMinDomains int32) (*unstructured.Unstructured, error) {
 	if z == nil {
 		z = &zalando.Postgresql{}
 	}
@@ -825,6 +829,10 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 		}
 	} else {
 		z.Spec.TLS = nil
+	}
+
+	if enableTsc {
+		// FIXME: add TopologySpreadConstraint to z.Spec
 	}
 
 	jsonZ, err := runtime.DefaultUnstructuredConverter.ToUnstructured(z)

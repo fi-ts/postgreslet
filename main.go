@@ -98,6 +98,7 @@ const (
 	podAntiaffinityPreferredDuringSchedulingFlg = "pod-antiaffinity-preferred-during-scheduling"
 	podAntiaffinityTopologyKeyFlg               = "pod-antiaffinity-topology-key"
 	enablePodTopologySpreadConstraintWebhookFlg = "enable-pod-topology-spread-constraint-webhook"
+	enablePodTopologySpreadConstraintFlg        = "enable-pod-topology-spread-constraint"
 	podTopologySpreadConstraintTopologyKeyFlg   = "pod-topology-spread-constraint-topology-key"
 	podTopologySpreadConstraintMaxSkewFlg       = "pod-topology-spread-constraint-max-skew"
 	podTopologySpreadConstraintMinDomainsFlg    = "pod-topology-spread-constraint-min-domains"
@@ -173,6 +174,7 @@ func main() {
 		enableWalGExporter                       bool
 		podAntiaffinityPreferredDuringScheduling bool
 		enablePodTopologySpreadConstraintWebhook bool
+		enablePodTopologySpreadConstraint        bool
 		enableSpiloReadinessProbe                bool
 		enableKubernetesUseConfigMaps            bool
 
@@ -371,7 +373,22 @@ func main() {
 	resource.MustParse(walGExporterMemoryLimit)
 
 	viper.SetDefault(enablePodTopologySpreadConstraintWebhookFlg, false)
+	viper.SetDefault(enablePodTopologySpreadConstraintFlg, false)
+	enablePodTopologySpreadConstraint = viper.GetBool(enablePodTopologySpreadConstraintFlg)
 	enablePodTopologySpreadConstraintWebhook = viper.GetBool(enablePodTopologySpreadConstraintWebhookFlg)
+
+	if strings.Contains(operatorImage, `:v2`) {
+		// we are backwards compatible to pre-v2.0.0 operator deployments
+		// TODO: depcrecate this check in the future
+		if enablePodTopologySpreadConstraintWebhook && !enablePodTopologySpreadConstraint {
+			// enabling the webhook flag will do
+			enablePodTopologySpreadConstraint = true
+		}
+	} else {
+		// not supported on older operator versions
+		enablePodTopologySpreadConstraint = false
+	}
+
 	viper.SetDefault(podTopologySpreadConstraintTopologyKeyFlg, "machine.metal-stack.io/rack")
 	podTopologySpreadConstraintTopologyKey = viper.GetString(podTopologySpreadConstraintTopologyKeyFlg)
 	viper.SetDefault(podTopologySpreadConstraintMaxSkewFlg, 1)
@@ -440,6 +457,7 @@ func main() {
 		walGExporterCPULimitFlg, walGExporterCPULimit,
 		walGExporterMemoryLimitFlg, walGExporterMemoryLimit,
 		enablePodTopologySpreadConstraintWebhookFlg, enablePodTopologySpreadConstraintWebhook,
+		enablePodTopologySpreadConstraintFlg, enablePodTopologySpreadConstraint,
 		podTopologySpreadConstraintTopologyKeyFlg, podTopologySpreadConstraintTopologyKey,
 		podTopologySpreadConstraintMaxSkewFlg, podTopologySpreadConstraintMaxSkew,
 		podTopologySpreadConstraintMinDomainsFlg, podTopologySpreadConstraintMinDomains,
@@ -539,40 +557,44 @@ func main() {
 		EnableForceSharedIP:         enableForceSharedIP,
 	}
 	if err = (&controllers.PostgresReconciler{
-		CtrlClient:                          ctrlPlaneClusterMgr.GetClient(),
-		SvcClient:                           svcClusterMgr.GetClient(),
-		Log:                                 ctrl.Log.WithName("controllers").WithName("Postgres"),
-		Scheme:                              ctrlPlaneClusterMgr.GetScheme(),
-		PartitionID:                         partitionID,
-		Tenant:                              tenant,
-		StorageClass:                        storageClass,
-		OperatorManager:                     opMgr,
-		LBManager:                           lbmanager.New(svcClusterMgr.GetClient(), lbMgrOpts),
-		PgParamBlockList:                    pgParamBlockList,
-		StandbyClustersSourceRanges:         standbyClusterSourceRanges,
-		PostgresletNamespace:                postgresletNamespace,
-		SidecarsConfigMapName:               sidecarsCMName,
-		EnableNetPol:                        enableNetPol,
-		EtcdHost:                            etcdHost,
-		PatroniTTL:                          patroniTTL,
-		PatroniLoopWait:                     patroniLoopWait,
-		PatroniRetryTimeout:                 patroniRetryTimeout,
-		ReplicationChangeRequeueDuration:    replicationChangeRequeueDuration,
-		EnableRandomStorageEncryptionSecret: enableRandomStorageEncryptionSecret,
-		EnableWalGEncryption:                enableWalGEncryption,
-		PostgresletFullname:                 postgresletFullname,
-		PostgresImage:                       postgresImage,
-		InitDBJobConfigMapName:              initDBJobCMName,
-		EnableBootstrapStandbyFromS3:        enableBootstrapStandbyFromS3,
-		EnableSuperUserForDBO:               enableSuperUserForDBO,
-		EnableCustomTLSCert:                 enableCustomTLSCert,
-		TLSClusterIssuer:                    tlsClusterIssuer,
-		TLSSubDomain:                        tlsSubDomain,
-		EnableWalGExporter:                  enableWalGExporter,
-		WalGExporterImage:                   walGExporterImage,
-		WalGExporterCPULimit:                walGExporterCPULimit,
-		WalGExporterMemoryLimit:             walGExporterMemoryLimit,
-		SpiloCpuRequestsPercentage:          spiloCpuRequestsPercentage,
+		CtrlClient:                             ctrlPlaneClusterMgr.GetClient(),
+		SvcClient:                              svcClusterMgr.GetClient(),
+		Log:                                    ctrl.Log.WithName("controllers").WithName("Postgres"),
+		Scheme:                                 ctrlPlaneClusterMgr.GetScheme(),
+		PartitionID:                            partitionID,
+		Tenant:                                 tenant,
+		StorageClass:                           storageClass,
+		OperatorManager:                        opMgr,
+		LBManager:                              lbmanager.New(svcClusterMgr.GetClient(), lbMgrOpts),
+		PgParamBlockList:                       pgParamBlockList,
+		StandbyClustersSourceRanges:            standbyClusterSourceRanges,
+		PostgresletNamespace:                   postgresletNamespace,
+		SidecarsConfigMapName:                  sidecarsCMName,
+		EnableNetPol:                           enableNetPol,
+		EtcdHost:                               etcdHost,
+		PatroniTTL:                             patroniTTL,
+		PatroniLoopWait:                        patroniLoopWait,
+		PatroniRetryTimeout:                    patroniRetryTimeout,
+		ReplicationChangeRequeueDuration:       replicationChangeRequeueDuration,
+		EnableRandomStorageEncryptionSecret:    enableRandomStorageEncryptionSecret,
+		EnableWalGEncryption:                   enableWalGEncryption,
+		PostgresletFullname:                    postgresletFullname,
+		PostgresImage:                          postgresImage,
+		InitDBJobConfigMapName:                 initDBJobCMName,
+		EnableBootstrapStandbyFromS3:           enableBootstrapStandbyFromS3,
+		EnableSuperUserForDBO:                  enableSuperUserForDBO,
+		EnableCustomTLSCert:                    enableCustomTLSCert,
+		TLSClusterIssuer:                       tlsClusterIssuer,
+		TLSSubDomain:                           tlsSubDomain,
+		EnableWalGExporter:                     enableWalGExporter,
+		WalGExporterImage:                      walGExporterImage,
+		WalGExporterCPULimit:                   walGExporterCPULimit,
+		WalGExporterMemoryLimit:                walGExporterMemoryLimit,
+		SpiloCpuRequestsPercentage:             spiloCpuRequestsPercentage,
+		EnablePodTopologySpreadConstraint:      enablePodTopologySpreadConstraint,
+		PodTopologySpreadConstraintTopologyKey: podTopologySpreadConstraintTopologyKey,
+		PodTopologySpreadConstraintMaxSkew:     podTopologySpreadConstraintMaxSkew,
+		PodTopologySpreadConstraintMinDomains:  podTopologySpreadConstraintMinDomains,
 	}).SetupWithManager(ctrlPlaneClusterMgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Postgres")
 		os.Exit(1)
