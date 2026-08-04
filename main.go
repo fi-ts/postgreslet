@@ -378,10 +378,13 @@ func main() {
 	enablePodTopologySpreadConstraintWebhook = viper.GetBool(enablePodTopologySpreadConstraintWebhookFlg)
 
 	if strings.Contains(operatorImage, `:v2`) {
-		// we are backwards compatible to pre-v2.0.0 operator deployments
+		//  we   are  backwards  compatible  to   pre-v2.0.0  operator
+		// deployments,  but switch flags to  be sure to have  the TSC
+		// added via the CR and  not the webhook.
+		//
 		// TODO: depcrecate this check in the future
 		if enablePodTopologySpreadConstraintWebhook && !enablePodTopologySpreadConstraint {
-			// enabling the webhook flag will do
+			enablePodTopologySpreadConstraintWebhook = false
 			enablePodTopologySpreadConstraint = true
 		}
 	} else {
