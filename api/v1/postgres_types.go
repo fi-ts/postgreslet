@@ -28,7 +28,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/apimachinery/pkg/util/yaml"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -678,97 +677,103 @@ func (p *Postgres) ToPeripheralResourceLookupKey() types.NamespacedName {
 	}
 }
 
-func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *corev1.ConfigMap, sc string,
+func (p *Postgres) ToUnstructuredZalandoPostgresql(zalandoPgCr *zalando.Postgresql, confMap *corev1.ConfigMap, storageClass string,
 	pgParamBlockList map[string]bool, rbs *BackupConfig, srcDB *Postgres,
 	patroniTTL, patroniLoopWait, patroniRetryTimeout uint32, dboIsSuperuser bool,
-	enableTlsCert bool, image string, cpuRequestsPercentage int,
+	enableTLSCert bool, image string, cpuRequestsPercentage int,
 	enableTsc bool, tscKey string, tscMaxSkew, tscMinDomains int32) (*unstructured.Unstructured, error) {
-	if z == nil {
-		z = &zalando.Postgresql{}
+	if zalandoPgCr == nil {
+		zalandoPgCr = &zalando.Postgresql{}
 	}
-	z.TypeMeta = ZalandoPostgresqlTypeMeta
-	z.Namespace = p.ToPeripheralResourceNamespace()
-	z.Name = p.ToPeripheralResourceName()
-	z.Labels = p.ToZalandoPostgresqlMatchingLabels()
-	// Add the newly introduced label only here, not in  p.ToZalandoPostgresqlMatchingLabels() (so that the selectors using  p.ToZalandoPostgresqlMatchingLabels() will still work until all postgres resources have that new label)
-	// TODO once all the custom resources have that new label, move this part to p.ToZalandoPostgresqlMatchingLabels()
-	z.Labels[PartitionIDLabelName] = p.Spec.PartitionID
+	zalandoPgCr.TypeMeta = ZalandoPostgresqlTypeMeta
+	zalandoPgCr.Namespace = p.ToPeripheralResourceNamespace()
+	zalandoPgCr.Name = p.ToPeripheralResourceName()
+	zalandoPgCr.Labels = p.ToZalandoPostgresqlMatchingLabels()
+	//   Add  the   newly   introduced  label   only   here,  not   in
+	//  p.ToZalandoPostgresqlMatchingLabels() (so  that the  selectors
+	//  using  p.ToZalandoPostgresqlMatchingLabels() will  still  work
+	// until all postgres resources have that new label) TODO once all
+	// the  custom resources have  that new  label, move this  part to
+	// p.ToZalandoPostgresqlMatchingLabels()
+	zalandoPgCr.Labels[PartitionIDLabelName] = p.Spec.PartitionID
 	// Add the additional version label to the custom resource
-	z.Labels[PostgresVersionLabelName] = p.Spec.Version
+	zalandoPgCr.Labels[PostgresVersionLabelName] = p.Spec.Version
 	// Add the additional description label to the custom resource. As the description
 	// is a value which is entered by the end-user, we have to sanitize the value
-	z.Labels[PostgresDescriptionLabelName] = sanitizeLabelValue(p.Spec.Description)
+	zalandoPgCr.Labels[PostgresDescriptionLabelName] = sanitizeLabelValue(p.Spec.Description)
 
 	if image != "" {
-		z.Spec.DockerImage = image
+		zalandoPgCr.Spec.DockerImage = image
 	}
-	z.Spec.NumberOfInstances = p.Spec.NumberOfInstances
-	z.Spec.PostgresqlParam.PgVersion = p.Spec.Version
+	zalandoPgCr.Spec.NumberOfInstances = p.Spec.NumberOfInstances
+	zalandoPgCr.Spec.PgVersion = p.Spec.Version
 
 	// initialize the parameters
-	z.Spec.PostgresqlParam.Parameters = map[string]string{}
+	zalandoPgCr.Spec.Parameters = map[string]string{}
 	// enable default audit logs (if not configured otherwise)
 	if p.Spec.AuditLogs == nil || *p.Spec.AuditLogs {
-		enableAuditLogs(z.Spec.PostgresqlParam.Parameters)
+		enableAuditLogs(zalandoPgCr.Spec.Parameters)
 	}
 	// set some default postgres parameters
-	setDefaultPostgresParams(z.Spec.PostgresqlParam.Parameters, p.Spec.Version)
+	setDefaultPostgresParams(zalandoPgCr.Spec.Parameters, p.Spec.Version)
 	// now set the given generic parameters (and potentially allow overwriting of default postgres params or audit log params)
-	setPostgresParams(z.Spec.PostgresqlParam.Parameters, p.Spec.PostgresParams, pgParamBlockList)
+	setPostgresParams(zalandoPgCr.Spec.Parameters, p.Spec.PostgresParams, pgParamBlockList)
 	// finally, overwrite the (special to us) shared buffer parameter
-	setSharedBufferSize(z.Spec.PostgresqlParam.Parameters, p.Spec.Size.SharedBuffer)
+	setSharedBufferSize(zalandoPgCr.Spec.Parameters, p.Spec.Size.SharedBuffer)
 
-	z.Spec.Resources = &zalando.Resources{}
+	zalandoPgCr.Spec.Resources = &zalando.Resources{}
 	cpuReq, err := p.calculateCPURequests(p.Spec.Size.CPU, cpuRequestsPercentage)
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert to unstructured zalando postgresql: %w", err)
 	}
-	z.Spec.Resources.ResourceRequests.CPU = ptr.To(cpuReq)
-	z.Spec.Resources.ResourceRequests.Memory = ptr.To(p.Spec.Size.Memory)
-	z.Spec.Resources.ResourceLimits.CPU = ptr.To(p.Spec.Size.CPU)
-	z.Spec.Resources.ResourceLimits.Memory = ptr.To(p.Spec.Size.Memory)
-	z.Spec.TeamID = p.generateTeamID()
-	z.Spec.Volume.Size = p.Spec.Size.StorageSize
+
+	zalandoPgCr.Spec.ResourceRequests.CPU = new(cpuReq)
+	zalandoPgCr.Spec.ResourceRequests.Memory = new(p.Spec.Size.Memory)
+	zalandoPgCr.Spec.ResourceLimits.CPU = new(p.Spec.Size.CPU)
+	zalandoPgCr.Spec.ResourceLimits.Memory = new(p.Spec.Size.Memory)
+	zalandoPgCr.Spec.TeamID = p.generateTeamID()
+	zalandoPgCr.Spec.Size = p.Spec.Size.StorageSize
+
 	if p.Spec.StorageClass != nil {
-		z.Spec.Volume.StorageClass = *p.Spec.StorageClass
+		zalandoPgCr.Spec.StorageClass = *p.Spec.StorageClass
 	} else {
-		z.Spec.Volume.StorageClass = sc
+		zalandoPgCr.Spec.StorageClass = storageClass
 	}
 
-	z.Spec.Patroni.TTL = patroniTTL
-	z.Spec.Patroni.LoopWait = patroniLoopWait
-	z.Spec.Patroni.RetryTimeout = patroniRetryTimeout
-	z.Spec.Patroni.SynchronousMode = true
-	z.Spec.Patroni.SynchronousModeStrict = false
+	zalandoPgCr.Spec.TTL = patroniTTL
+	zalandoPgCr.Spec.LoopWait = patroniLoopWait
+	zalandoPgCr.Spec.RetryTimeout = patroniRetryTimeout
+	zalandoPgCr.Spec.SynchronousMode = true
+	zalandoPgCr.Spec.SynchronousModeStrict = false
 
 	// required with image ermajn/postgres-operator:v1.6.0-20-g1cc71663-dirty
 	// see https://github.com/fi-ts/postgreslet/issues/293
-	z.Spec.EnableConnectionPooler = ptr.To(false)
+	zalandoPgCr.Spec.EnableConnectionPooler = new(false)
 
 	prefix := alphaNumericRegExp.ReplaceAllString(string(p.Spec.Tenant), "")
 	prefix = strings.ToLower(prefix)
 	databaseName := prefix + "db01"
-	prepDbName := prefix + "prepdb01"
+	prepDBName := prefix + "prepdb01"
 	ownerName := prefix + "dbo"
 
 	// Create database owner
-	z.Spec.Users = make(map[string]zalando.UserFlags)
-	z.Spec.Users[ownerName] = zalando.UserFlags{"createdb", "createrole"}
+	zalandoPgCr.Spec.Users = make(map[string]zalando.UserFlags)
+	zalandoPgCr.Spec.Users[ownerName] = zalando.UserFlags{"createdb", "createrole"}
 	if dboIsSuperuser {
-		z.Spec.Users[ownerName] = zalando.UserFlags{"createdb", "createrole", "superuser"}
+		zalandoPgCr.Spec.Users[ownerName] = zalando.UserFlags{"createdb", "createrole", "superuser"}
 	}
 	// Add auditor user
-	z.Spec.Users[PostgresConfigAuditorUsername] = zalando.UserFlags{"nologin"}
+	zalandoPgCr.Spec.Users[PostgresConfigAuditorUsername] = zalando.UserFlags{"nologin"}
 	// Add monitoring user
-	z.Spec.Users[PostgresConfigMonitoringUsername] = zalando.UserFlags{"login"}
+	zalandoPgCr.Spec.Users[PostgresConfigMonitoringUsername] = zalando.UserFlags{"login"}
 
 	// Create default database
-	z.Spec.Databases = make(map[string]string)
-	z.Spec.Databases[databaseName] = ownerName
+	zalandoPgCr.Spec.Databases = make(map[string]string)
+	zalandoPgCr.Spec.Databases[databaseName] = ownerName
 
 	// Create prepared database
-	z.Spec.PreparedDatabases = make(map[string]zalando.PreparedDatabase)
-	z.Spec.PreparedDatabases[prepDbName] = zalando.PreparedDatabase{
+	zalandoPgCr.Spec.PreparedDatabases = make(map[string]zalando.PreparedDatabase)
+	zalandoPgCr.Spec.PreparedDatabases[prepDBName] = zalando.PreparedDatabase{
 		DefaultUsers: true,
 		Extensions: map[string]string{
 			"pg_partman": "public",
@@ -781,54 +786,57 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 	}
 
 	// skip if the configmap does not exist
-	if c != nil {
-		z.Spec.AdditionalVolumes = p.buildAdditionalVolumes(c)
-		z.Spec.Sidecars = p.buildSidecars(c)
+	if confMap != nil {
+		zalandoPgCr.Spec.AdditionalVolumes = p.buildAdditionalVolumes(confMap)
+		zalandoPgCr.Spec.Sidecars = p.buildSidecars(confMap)
 	}
 
 	if p.HasSourceRanges() {
-		z.Spec.AllowedSourceRanges = p.Spec.AccessList.SourceRanges
+		zalandoPgCr.Spec.AllowedSourceRanges = p.Spec.AccessList.SourceRanges
 	}
 
 	if p.Spec.PostgresRestore != nil && rbs != nil && srcDB != nil {
-		// make sure there is always a value set. The operator will fall back to CLONE_WITH_BASEBACKUP, which assumes the source db's credentials are existing within the same namespace, which is not the case with the postgreslet.
+		// make  sure there is always  a value set. The  operator will
+		//  fall  back  to CLONE_WITH_BASEBACKUP,  which  assumes  the
+		//  source  db's  credentials  are existing  within  the  same
+		// namespace, which is not the case with the postgreslet.
 		if p.Spec.PostgresRestore.Timestamp == "" {
 			// e.g. 2021-12-07T15:28:00+01:00
 			p.Spec.PostgresRestore.Timestamp = time.Now().Format(zalando_timestamp_format)
 		}
 
-		z.Spec.Clone = &zalando.CloneDescription{
+		zalandoPgCr.Spec.Clone = &zalando.CloneDescription{
 			ClusterName:       srcDB.ToPeripheralResourceName(),
 			EndTimestamp:      p.Spec.PostgresRestore.Timestamp,
 			S3Endpoint:        rbs.S3Endpoint,
 			S3AccessKeyId:     rbs.S3AccessKey,
 			S3SecretAccessKey: rbs.S3SecretKey,
-			S3ForcePathStyle:  ptr.To(true),
+			S3ForcePathStyle:  new(true),
 		}
 	} else {
 		// if we don't set the clone block, remove it completely
-		z.Spec.Clone = nil
+		zalandoPgCr.Spec.Clone = nil
 	}
 
 	// Enable replication (using unstructured json)
 	if p.IsReplicationPrimaryOrStandalone() {
 		// delete field
-		z.Spec.StandbyCluster = nil
+		zalandoPgCr.Spec.StandbyCluster = nil
 	} else {
 		// overwrite connection info
-		z.Spec.StandbyCluster = &zalando.StandbyDescription{
+		zalandoPgCr.Spec.StandbyCluster = &zalando.StandbyDescription{
 			StandbyHost: p.Spec.PostgresConnection.ConnectionIP,
 			StandbyPort: strconv.FormatInt(int64(p.Spec.PostgresConnection.ConnectionPort), 10),
 			// S3WalPath:              "",
 		}
 	}
 
-	if enableTlsCert {
-		z.Spec.TLS = &zalando.TLSDescription{
+	if enableTLSCert {
+		zalandoPgCr.Spec.TLS = &zalando.TLSDescription{
 			SecretName: p.ToTLSSecretName(),
 		}
 	} else {
-		z.Spec.TLS = nil
+		zalandoPgCr.Spec.TLS = nil
 	}
 
 	if enableTsc {
@@ -838,7 +846,7 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 			LabelSelector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
 					"application":        "spilo",
-					"cluster-name":       z.Name,
+					"cluster-name":       zalandoPgCr.Name,
 					NameLabelName:        p.ToPeripheralResourceName(),
 					PartitionIDLabelName: p.Spec.PartitionID,
 					ProjectIDLabelName:   p.Spec.ProjectID,
@@ -857,10 +865,10 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 		}
 
 		// override topology spread constraints
-		z.Spec.TopologySpreadConstraints = []corev1.TopologySpreadConstraint{tsc}
+		zalandoPgCr.Spec.TopologySpreadConstraints = []corev1.TopologySpreadConstraint{tsc}
 	}
 
-	jsonZ, err := runtime.DefaultUnstructuredConverter.ToUnstructured(z)
+	jsonZ, err := runtime.DefaultUnstructuredConverter.ToUnstructured(zalandoPgCr)
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert to unstructured zalando postgresql: %w", err)
 	}
