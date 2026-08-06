@@ -847,7 +847,7 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(zalandoPgCr *zalando.Postgres
 				MatchLabels: map[string]string{
 					"application":        "spilo",
 					"cluster-name":       zalandoPgCr.Name,
-					NameLabelName:        p.ToPeripheralResourceName(),
+					NameLabelName:        p.Name,
 					PartitionIDLabelName: p.Spec.PartitionID,
 					ProjectIDLabelName:   p.Spec.ProjectID,
 					TenantLabelName:      p.Spec.Tenant,
