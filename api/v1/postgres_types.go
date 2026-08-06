@@ -273,6 +273,8 @@ type PostgresStatus struct {
 	AdditionalSockets []Socket `json:"additionalSockets,omitempty"`
 
 	ChildName string `json:"childName,omitempty"`
+
+	ServiceClusterName string `json:"serviceClusterName,omitempty"`
 }
 
 // Socket represents load-balancer socket of Postgres

@@ -36,6 +36,7 @@ type StatusReconciler struct {
 	PartitionID           string
 	ControlPlaneNamespace string
 	EnableForceSharedIP   bool
+	ServiceClusterName    string
 }
 
 // Reconcile updates the status of the remote Postgres object based on the status of the local zalando object.
@@ -83,6 +84,7 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		owner.Status.Description = instance.Status.PostgresClusterStatus
 		// update the reference to the zalando instance in the remote object
 		owner.Status.ChildName = instance.ObjectMeta.Name
+		owner.Status.ServiceClusterName = r.ServiceClusterName
 
 		log.V(debugLogLevel).Info("Updating owner", "owner", owner.UID)
 		if err := r.CtrlClient.Status().Update(ctx, owner); err != nil {

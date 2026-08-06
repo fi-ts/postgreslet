@@ -104,6 +104,7 @@ const (
 	enableSpiloReadinessProbeFlg                = "enable-spilo-readiness-probe"
 	enableKubernetesUseConfigMapsFlg            = "enable-kubernetes-use-configmaps"
 	spiloCpuRequestsPercentageFlag              = "spilo-cpu-requests-percentage"
+	serviceClusterNameFlag                      = "service-cluster-name"
 )
 
 var (
@@ -182,6 +183,7 @@ func main() {
 		podTopologySpreadConstraintMaxSkew    int32
 		podTopologySpreadConstraintMinDomains int32
 		spiloCpuRequestsPercentage            int
+		serviceClusterName                    string
 
 		patroniTTL          uint32
 		patroniLoopWait     uint32
@@ -388,6 +390,8 @@ func main() {
 	viper.SetDefault(spiloCpuRequestsPercentageFlag, 50)
 	spiloCpuRequestsPercentage = viper.GetInt(spiloCpuRequestsPercentageFlag)
 
+	serviceClusterName = viper.GetString(serviceClusterNameFlag)
+
 	ctrl.Log.Info("flag",
 		metricsAddrSvcMgrFlg, metricsAddrSvcMgr,
 		metricsAddrCtrlMgrFlg, metricsAddrCtrlMgr,
@@ -446,6 +450,7 @@ func main() {
 		enableSpiloReadinessProbeFlg, enableSpiloReadinessProbe,
 		enableKubernetesUseConfigMapsFlg, enableKubernetesUseConfigMaps,
 		spiloCpuRequestsPercentageFlag, spiloCpuRequestsPercentage,
+		serviceClusterNameFlag, serviceClusterName,
 	)
 
 	svcClusterConf := ctrl.GetConfigOrDie()
@@ -586,6 +591,7 @@ func main() {
 		PartitionID:           partitionID,
 		ControlPlaneNamespace: controlPlaneNamespace,
 		EnableForceSharedIP:   enableForceSharedIP,
+		ServiceClusterName:    serviceClusterName,
 	}).SetupWithManager(svcClusterMgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Status")
 		os.Exit(1)
