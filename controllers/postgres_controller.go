@@ -114,7 +114,7 @@ type PostgresReconciler struct {
 	WalGExporterCPULimit                string
 	WalGExporterMemoryLimit             string
 	SpiloCpuRequestsPercentage          int
-	PodTopologySpreadConstraintOpts     *PodTopologySpreadConstraintsOpts
+	PodTopologySpreadConstraintOpts     *pg.PodTopologySpreadConstraintsOpts
 }
 
 type PatroniStandbyCluster struct {
@@ -126,12 +126,6 @@ type PatroniStandbyCluster struct {
 type PatroniConfig struct {
 	StandbyCluster             *PatroniStandbyCluster `json:"standby_cluster"`
 	SynchronousNodesAdditional *string                `json:"synchronous_nodes_additional"`
-}
-
-type PodTopologySpreadConstraintsOpts struct {
-	Enable              bool
-	MaxSkew, MinDomains int32
-	Key                 string
 }
 
 // Reconcile is the entry point for postgres reconciliation.
@@ -419,7 +413,7 @@ func (r *PostgresReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context, instance *pg.Postgres,
 	log logr.Logger, sidecarsCM *corev1.ConfigMap, patroniTTL, patroniLoopWait, patroniRetryTimeout uint32,
-	tsc *PodTopologySpreadConstraintsOpts) error {
+	tsc *pg.PodTopologySpreadConstraintsOpts) error {
 	var restoreBackupConfig *pg.BackupConfig
 	var restoreSourceInstance *pg.Postgres
 	if instance.Spec.PostgresRestore != nil {
@@ -456,8 +450,7 @@ func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context
 
 		u, err := instance.ToUnstructuredZalandoPostgresql(nil, sidecarsCM, r.StorageClass, r.PgParamBlockList,
 			restoreBackupConfig, restoreSourceInstance, patroniTTL, patroniLoopWait, patroniRetryTimeout,
-			r.EnableSuperUserForDBO, r.EnableCustomTLSCert, r.PostgresImage, r.SpiloCpuRequestsPercentage,
-			tsc.Enable, tsc.Key, tsc.MaxSkew, tsc.MinDomains)
+			r.EnableSuperUserForDBO, r.EnableCustomTLSCert, r.PostgresImage, r.SpiloCpuRequestsPercentage, tsc)
 		if err != nil {
 			return fmt.Errorf("failed to convert to unstructured zalando postgresql: %w", err)
 		}
@@ -475,8 +468,7 @@ func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context
 
 	u, err := instance.ToUnstructuredZalandoPostgresql(rawZ, sidecarsCM, r.StorageClass, r.PgParamBlockList,
 		restoreBackupConfig, restoreSourceInstance, patroniTTL, patroniLoopWait, patroniRetryTimeout,
-		r.EnableSuperUserForDBO, r.EnableCustomTLSCert, r.PostgresImage, r.SpiloCpuRequestsPercentage,
-		tsc.Enable, tsc.Key, tsc.MaxSkew, tsc.MinDomains)
+		r.EnableSuperUserForDBO, r.EnableCustomTLSCert, r.PostgresImage, r.SpiloCpuRequestsPercentage, tsc)
 	if err != nil {
 		return fmt.Errorf("failed to convert to unstructured zalando postgresql: %w", err)
 	}

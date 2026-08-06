@@ -594,7 +594,7 @@ func main() {
 		WalGExporterCPULimit:                walGExporterCPULimit,
 		WalGExporterMemoryLimit:             walGExporterMemoryLimit,
 		SpiloCpuRequestsPercentage:          spiloCpuRequestsPercentage,
-		PodTopologySpreadConstraintOpts: &controllers.PodTopologySpreadConstraintsOpts{
+		PodTopologySpreadConstraintOpts: &databasev1.PodTopologySpreadConstraintsOpts{
 			Enable:     enablePodTopologySpreadConstraint,
 			Key:        podTopologySpreadConstraintTopologyKey,
 			MaxSkew:    podTopologySpreadConstraintMaxSkew,
