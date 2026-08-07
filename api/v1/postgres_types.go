@@ -305,13 +305,6 @@ type PostgresConnection struct {
 	ReplicationPrimary bool `json:"localSideIsPrimary,omitempty"`
 }
 
-// PodTopologySpreadConstraintsOpts stores the TopologySpreadConstraints config
-type PodTopologySpreadConstraintsOpts struct {
-	Enable              bool
-	MaxSkew, MinDomains int32
-	Key                 string
-}
-
 var SvcLoadBalancerLabel = map[string]string{
 	ManagedByLabelName: ManagedByLabelValue,
 }
@@ -684,7 +677,7 @@ func (p *Postgres) ToPeripheralResourceLookupKey() types.NamespacedName {
 	}
 }
 
-func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *corev1.ConfigMap, sc string, pgParamBlockList map[string]bool, rbs *BackupConfig, srcDB *Postgres, patroniTTL, patroniLoopWait, patroniRetryTimeout uint32, dboIsSuperuser bool, enableTLSCert bool, image string, cpuRequestsPercentage int, topologySpreadConstraints *PodTopologySpreadConstraintsOpts) (*unstructured.Unstructured, error) {
+func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *corev1.ConfigMap, sc string, pgParamBlockList map[string]bool, rbs *BackupConfig, srcDB *Postgres, patroniTTL, patroniLoopWait, patroniRetryTimeout uint32, dboIsSuperuser bool, enableTLSCert bool, image string, cpuRequestsPercentage int, tscEnable bool, tscKey string, tscMaxSkew, tscMinDomains int32) (*unstructured.Unstructured, error) {
 	if z == nil {
 		z = &zalando.Postgresql{}
 	}
@@ -842,9 +835,9 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 		z.Spec.TLS = nil
 	}
 
-	if topologySpreadConstraints.Enable {
+	if tscEnable {
 		tsc := corev1.TopologySpreadConstraint{
-			MaxSkew:           topologySpreadConstraints.MaxSkew,
+			MaxSkew:           tscMaxSkew,
 			WhenUnsatisfiable: corev1.ScheduleAnyway,
 			LabelSelector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
@@ -858,12 +851,12 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 					"team":               p.generateTeamID(),
 				},
 			},
-			TopologyKey: topologySpreadConstraints.Key,
+			TopologyKey: tscKey,
 		}
 
 		// if defined, set the minDomains (and corresponding whenUnsatisfied) field as well
-		if topologySpreadConstraints.MinDomains > 0 {
-			tsc.MinDomains = &topologySpreadConstraints.MinDomains
+		if tscMinDomains > 0 {
+			tsc.MinDomains = &tscMinDomains
 			tsc.WhenUnsatisfiable = corev1.DoNotSchedule
 		}
 

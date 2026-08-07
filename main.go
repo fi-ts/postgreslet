@@ -594,12 +594,10 @@ func main() {
 		WalGExporterCPULimit:                walGExporterCPULimit,
 		WalGExporterMemoryLimit:             walGExporterMemoryLimit,
 		SpiloCpuRequestsPercentage:          spiloCpuRequestsPercentage,
-		PodTopologySpreadConstraintOpts: &databasev1.PodTopologySpreadConstraintsOpts{
-			Enable:     enablePodTopologySpreadConstraint,
-			Key:        podTopologySpreadConstraintTopologyKey,
-			MaxSkew:    podTopologySpreadConstraintMaxSkew,
-			MinDomains: podTopologySpreadConstraintMinDomains,
-		},
+		EnableTopologySpreadConstraints:     enablePodTopologySpreadConstraint,
+		TscKey:                              podTopologySpreadConstraintTopologyKey,
+		TscMaxSkew:                          podTopologySpreadConstraintMaxSkew,
+		TscMinDomains:                       podTopologySpreadConstraintMinDomains,
 	}).SetupWithManager(ctrlPlaneClusterMgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Postgres")
 		os.Exit(1)

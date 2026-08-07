@@ -713,11 +713,3 @@ func (m *OperatorManager) UpdateAllManagedOperators(ctx context.Context) error {
 	m.log.Info("Done updating postgres operators in managed namespaces")
 	return nil
 }
-
-// IsV2 returns true if the operator  version is above v2.0.0. This is
-// required during the transision from  1.15.1 to v2.0.2, during which
-// we  have to  decide where  to apply  TopologySpreadConstraints (via
-// webhook on the pods or via zalando CR)
-func (m *OperatorManager) IsV2(ctx context.Context) bool {
-	return strings.Contains(m.options.OperatorImage, `:v2`)
-}
