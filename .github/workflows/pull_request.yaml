@@ -22,8 +22,7 @@ jobs:
     - name: Lint
       uses: golangci/golangci-lint-action@v9
       with:
-        only-new-issues: true
-        args: --timeout=5m
+        args: -p bugs -p unused --timeout=5m
 
     - name: Get Kubebuilder Version
       id: get-kubebuilder-version
