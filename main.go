@@ -373,23 +373,14 @@ func main() {
 	resource.MustParse(walGExporterMemoryLimit)
 
 	viper.SetDefault(enablePodTopologySpreadConstraintWebhookFlg, false)
-	viper.SetDefault(enablePodTopologySpreadConstraintFlg, false)
-	enablePodTopologySpreadConstraint = viper.GetBool(enablePodTopologySpreadConstraintFlg)
 	enablePodTopologySpreadConstraintWebhook = viper.GetBool(enablePodTopologySpreadConstraintWebhookFlg)
 
-	if strings.Contains(operatorImage, `:v2`) {
-		//  we   are  backwards  compatible  to   pre-v2.0.0  operator
-		// deployments,  but switch flags to  be sure to have  the TSC
-		// added via the CR and  not the webhook.
-		//
-		// TODO: depcrecate this check in the future
-		if enablePodTopologySpreadConstraintWebhook && !enablePodTopologySpreadConstraint {
-			enablePodTopologySpreadConstraintWebhook = false
-			enablePodTopologySpreadConstraint = true
-		}
-	} else {
-		// not supported on older operator versions
-		enablePodTopologySpreadConstraint = false
+	viper.SetDefault(enablePodTopologySpreadConstraintFlg, false)
+	enablePodTopologySpreadConstraint = viper.GetBool(enablePodTopologySpreadConstraintFlg)
+
+	if !strings.Contains(operatorImage, `:v2`) && enablePodTopologySpreadConstraint {
+		setupLog.Error(nil, fmt.Sprintf("Flag %s not supported with postgres operator v2, use %s instead, exiting.", enablePodTopologySpreadConstraintFlg, enablePodTopologySpreadConstraintWebhookFlg))
+		os.Exit(1)
 	}
 
 	viper.SetDefault(podTopologySpreadConstraintTopologyKeyFlg, "machine.metal-stack.io/rack")
