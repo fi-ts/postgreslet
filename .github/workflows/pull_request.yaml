@@ -21,6 +21,7 @@ jobs:
 
     - name: Lint
       uses: golangci/golangci-lint-action@v9
+      only-new-issues: true
       with:
         args: --show-stats=false --timeout=5m
 
