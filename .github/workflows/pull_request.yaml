@@ -20,9 +20,9 @@ jobs:
         go-version-file: 'go.mod'
 
     - name: Lint
-      uses: golangci/golangci-lint-action@v6
+      uses: golangci/golangci-lint-action@v9
       with:
-        args: -p bugs -p unused --timeout=5m
+        args: --show-stats=false --timeout=5m
 
     - name: Get Kubebuilder Version
       id: get-kubebuilder-version
