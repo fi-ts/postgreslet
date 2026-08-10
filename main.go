@@ -379,7 +379,7 @@ func main() {
 	enablePodTopologySpreadConstraint = viper.GetBool(enablePodTopologySpreadConstraintFlg)
 
 	if !strings.Contains(operatorImage, `:v2`) && enablePodTopologySpreadConstraint {
-		setupLog.Error(nil, fmt.Sprintf("Flag %s not supported with postgres operator v2, use %s instead, exiting.", enablePodTopologySpreadConstraintFlg, enablePodTopologySpreadConstraintWebhookFlg))
+		setupLog.Error(nil, fmt.Sprintf("Flag %s not supported with postgres operator v1, use %s instead, exiting.", enablePodTopologySpreadConstraintFlg, enablePodTopologySpreadConstraintWebhookFlg))
 		os.Exit(1)
 	}
 
