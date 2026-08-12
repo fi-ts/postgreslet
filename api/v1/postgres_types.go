@@ -160,6 +160,7 @@ type BackupConfig struct {
 // +kubebuilder:printcolumn:name="IP",type=string,JSONPath=`.status.socket.ip`
 // +kubebuilder:printcolumn:name="Port",type=integer,JSONPath=`.status.socket.port`
 // +kubebuilder:printcolumn:name="Status",type=string,JSONPath=`.status.description`
+// +kubebuilder:selectablefield:JSONPath=".spec.restore.postgresID"
 
 // Postgres is the Schema for the postgres API
 type Postgres struct {
