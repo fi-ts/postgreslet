@@ -463,8 +463,15 @@ func (m *OperatorManager) editConfigMap(cm *corev1.ConfigMap, namespace string, 
 		cm.Data["pod_management_policy"] = "parallel"
 	}
 
-	cm.Data["kubernetes_use_configmaps"] = strconv.FormatBool(options.KubernetesUseConfigMaps)
-
+	// if not explicitly set,  use the operator builtin default value,
+	// which is false with v1 and true with v2. also, endpoints (which
+	// are being  used  in  v1, when  set  to  false, are  depcrecated
+	// anyway).
+	if options.KubernetesUseConfigMaps {
+		cm.Data["kubernetes_use_configmaps"] = strconv.FormatBool(options.KubernetesUseConfigMaps)
+	} else {
+		m.log.Info("Deprecation notice: ignoring kubernetes_use_configmaps=false, endpoints are deprecated.")
+	}
 }
 
 // ensureCleanMetadata ensures obj has clean metadata
