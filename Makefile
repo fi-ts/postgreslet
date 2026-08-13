@@ -141,6 +141,11 @@ svc-postgres-operator-yaml:
 	-f $(POSTGRES_OPERATOR_URL)/postgres-operator.yaml \
 	-f $(POSTGRES_OPERATOR_URL)/api-service.yaml \
 	--dry-run=client -o yaml > external/svc-postgres-operator.yaml
+	
+	@# deep-merge every external/patches/*.yaml into the list item matching its kind and name
+	@for p in external/patches/*.yaml; do echo "patching with $$p"; PATCH=$$p yq -i \
+		'load(strenv(PATCH)) as $$p | (.items[] | select(.kind == $$p.kind and .metadata.name == $$p.metadata.name)) *=d $$p' \
+		external/svc-postgres-operator.yaml; done
 
 # crd-postgresql-yaml:
 # 	kubectl apply -f $(POSTGRES_CRD_URL) --dry-run=client -o yaml > external/crd-postgresql.yaml
