@@ -8,9 +8,13 @@ package operatormanager
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
+	"encoding/json"
 	errs "errors"
 	"fmt"
+	"maps"
 	"os"
 	"strconv"
 	"strings"
@@ -52,6 +56,13 @@ const (
 
 	spilo_fsgroup     = "103"
 	debugLogLevel int = 1
+
+	// operatorConfigHashAnnotationName is the annotation on the operator
+	// Deployment's pod template that carries a hash of the operator
+	// ConfigMap's data. Changing the ConfigMap changes the hash, which causes
+	// the Deployment manifest to differ and triggers a Kubernetes
+	// rollout/restart of the operator pods.
+	operatorConfigHashAnnotationName = "postgres.database.fits.cloud/config-hash"
 )
 
 // operatorPodMatchingLabels is for listing operator pods
@@ -74,17 +85,19 @@ type Options struct {
 	PodAntiaffinityTopologyKey               string
 	EnableReadinessProbe                     bool
 	KubernetesUseConfigMaps                  bool
+	OperatorWithConfigHash                   bool
 }
 
 // OperatorManager manages the operator
 type OperatorManager struct {
-	client           client.Client
-	decoder          runtime.Decoder
-	list             *corev1.List
-	log              logr.Logger
-	metadataAccessor meta.MetadataAccessor
-	scheme           *runtime.Scheme
-	options          Options
+	client                   client.Client
+	decoder                  runtime.Decoder
+	list                     *corev1.List
+	log                      logr.Logger
+	metadataAccessor         meta.MetadataAccessor
+	scheme                   *runtime.Scheme
+	options                  Options
+	lastAppliedConfigMapData map[string]string
 }
 
 // New creates a new `OperatorManager`
@@ -145,6 +158,11 @@ func (m *OperatorManager) InstallOrUpdateOperator(ctx context.Context, namespace
 	}
 
 	// Decode each YAML to `client.Object`, add the namespace to it and install it.
+	// lastAppliedConfigMapData captures the fully merged operator ConfigMap
+	// (i.e. upstream defaults from the YAML plus our overrides) so the
+	// Deployment's config-hash annotation can be computed over the entire data
+	// set. Reset it for each call so we never reuse a stale value.
+	m.lastAppliedConfigMapData = nil
 	for _, item := range m.list.Items {
 		obj, _, err := m.decoder.Decode(item.Raw, nil, nil)
 		if err != nil {
@@ -275,7 +293,10 @@ func (m *OperatorManager) UninstallOperator(ctx context.Context, namespace strin
 	return nil
 }
 
-// createNewClientObject adds namespace to obj and creates or patches it
+// createNewClientObject adds namespace to obj and creates or patches it.
+// The fully merged operator ConfigMap data is stored on the manager as
+// lastAppliedConfigMapData (if obj is a ConfigMap) and is later used to
+// compute the config-hash annotation on the operator Deployment.
 func (m *OperatorManager) createNewClientObject(ctx context.Context, obj client.Object, namespace string) error {
 	log := m.log.WithValues("ns", namespace)
 
@@ -295,11 +316,19 @@ func (m *OperatorManager) createNewClientObject(ctx context.Context, obj client.
 		return fmt.Errorf("error while making the object key: %w", err)
 	}
 
-	// perform different modifications on the parsed objects based on their kind
+	// perform different modifications on the parsed objects based on their kind.
+	// Each case loads the current state from the cluster into `got` so we can
+	// build a JSON merge patch from `got` to `obj` afterwards, which the
+	// controller-runtime client computes for us. That keeps every reconcile
+	// idempotent: an unchanged object results in an empty patch, and any
+	// in-cluster modification (e.g. via `kubectl edit`) is detected via
+	// optimistic-concurrency conflicts rather than silently overwritten.
+	var got client.Object
 	switch v := obj.(type) {
 	case *corev1.ServiceAccount:
 		log.Info("handling ServiceAccount")
-		err = m.client.Get(ctx, key, &corev1.ServiceAccount{})
+		got = &corev1.ServiceAccount{}
+		err = m.client.Get(ctx, key, got)
 	case *rbacv1.ClusterRole:
 		log.Info("handling ClusterRole")
 		// Add our psp
@@ -313,7 +342,8 @@ func (m *OperatorManager) createNewClientObject(ctx context.Context, obj client.
 
 		// ClusterRole is not namespaced.
 		key.Namespace = ""
-		err = m.client.Get(ctx, key, &rbacv1.ClusterRole{})
+		got = &rbacv1.ClusterRole{}
+		err = m.client.Get(ctx, key, got)
 	case *rbacv1.ClusterRoleBinding:
 		log.Info("handling ClusterRoleBinding")
 
@@ -328,8 +358,8 @@ func (m *OperatorManager) createNewClientObject(ctx context.Context, obj client.
 		key.Namespace = ""
 
 		// Fetch the ClusterRoleBinding
-		got := &rbacv1.ClusterRoleBinding{}
-		if err := m.client.Get(ctx, key, got); err != nil {
+		cb := &rbacv1.ClusterRoleBinding{}
+		if err := m.client.Get(ctx, key, cb); err != nil {
 			if !errors.IsNotFound(err) {
 				return fmt.Errorf("error while fetching %v: %w", v, err)
 			}
@@ -344,36 +374,38 @@ func (m *OperatorManager) createNewClientObject(ctx context.Context, obj client.
 		}
 
 		// If the ServiceAccount already exists, return.
-		for i := range got.Subjects {
-			if got.Subjects[i].Kind == "ServiceAccount" && got.Subjects[i].Namespace == namespace {
+		for i := range cb.Subjects {
+			if cb.Subjects[i].Kind == "ServiceAccount" && cb.Subjects[i].Namespace == namespace {
 				return nil
 			}
 		}
 
 		// Patch the already existing ClusterRoleBinding
-		mergeFrom := client.MergeFrom(got.DeepCopy())
-		got.Subjects = append(got.Subjects, v.Subjects[0])
-		if err := m.client.Patch(ctx, got, mergeFrom); err != nil {
+		mergeFrom := client.MergeFrom(cb.DeepCopy())
+		cb.Subjects = append(cb.Subjects, v.Subjects[0])
+		if err := m.client.Patch(ctx, cb, mergeFrom); err != nil {
 			return fmt.Errorf("error while patching the `ClusterRoleBinding`: %w", err)
 		}
 		log.Info("ClusterRoleBinding patched")
 
-		// we already patched the object, no need to go through the update path at the bottom of this function
+		// we already patched the object, no need to go through the unified create/patch path at the bottom of this function
 		return nil
 	case *corev1.ConfigMap:
 		log.Info("handling ConfigMap")
 		m.editConfigMap(v, namespace, m.options)
-		err = m.client.Get(ctx, key, &corev1.ConfigMap{})
+		m.lastAppliedConfigMapData = v.Data
+		got = &corev1.ConfigMap{}
+		err = m.client.Get(ctx, key, got)
 	case *corev1.Service:
 		log.Info("handling Service")
-		got := corev1.Service{}
-		err = m.client.Get(ctx, key, &got)
+		svc := &corev1.Service{}
+		err = m.client.Get(ctx, key, svc)
+		// Preserve the server-assigned ClusterIP; the merge patch would
+		// otherwise set it to the empty string from the YAML.
 		if err == nil {
-			// Copy the ResourceVersion
-			v.ObjectMeta.ResourceVersion = got.ObjectMeta.ResourceVersion
-			// Copy the ClusterIP
-			v.Spec.ClusterIP = got.Spec.ClusterIP
+			v.Spec.ClusterIP = svc.Spec.ClusterIP
 		}
+		got = svc
 	case *appsv1.Deployment:
 		log.Info("handling Deployment")
 		if len(v.Spec.Template.Spec.Containers) != 1 {
@@ -382,7 +414,24 @@ func (m *OperatorManager) createNewClientObject(ctx context.Context, obj client.
 			log.Info("Patching operator image", "image", m.options.OperatorImage)
 			v.Spec.Template.Spec.Containers[0].Image = m.options.OperatorImage
 		}
-		err = m.client.Get(ctx, key, &appsv1.Deployment{})
+		if m.options.OperatorWithConfigHash {
+			// Add a hash of the operator ConfigMap as an annotation on the
+			// pod template. Prefer the fully merged data captured while
+			// processing the ConfigMap (covers both upstream defaults from
+			// the YAML and our overrides); fall back to building the data
+			// from namespace+options if the ConfigMap wasn't seen yet.
+			hash := operatorConfigHash(namespace, m.options)
+			if m.lastAppliedConfigMapData != nil {
+				hash = configMapDataHash(m.lastAppliedConfigMapData)
+			}
+			if v.Spec.Template.Annotations == nil {
+				v.Spec.Template.Annotations = map[string]string{}
+			}
+			v.Spec.Template.Annotations[operatorConfigHashAnnotationName] = hash
+			log.Info("set config-hash annotation on operator deployment", "hash", hash)
+		}
+		got = &appsv1.Deployment{}
+		err = m.client.Get(ctx, key, got)
 	default:
 		return errs.New("unknown `client.Object`")
 	}
@@ -401,70 +450,103 @@ func (m *OperatorManager) createNewClientObject(ctx context.Context, obj client.
 		return fmt.Errorf("error while fetching the `client.Object`: %w", err)
 	}
 
-	// if we made it this far, the object already exists, so we just update it
-	if err := m.client.Update(ctx, obj); err != nil {
-		return fmt.Errorf("error while updating the `client.Object`: %w", err)
+	// The object already exists: send a JSON merge patch built from the
+	// current in-cluster state (`got`) to the desired state (`obj`). The
+	// controller-runtime client computes the diff for us, so an unchanged
+	// object produces an empty patch and we don't bump resourceVersion or
+	// race against concurrent edits.
+	if err := m.client.Patch(ctx, obj, client.MergeFrom(got)); err != nil {
+		return fmt.Errorf("error while patching the `client.Object`: %w", err)
 	}
+	log.Info("`client.Object` patched")
 
 	return nil
 }
 
-// editConfigMap adds info to cm
+// editConfigMap populates cm with the data assembled from namespace and
+// options. Values from buildOperatorConfigData are merged into the existing
+// cm.Data, so we don't drop any of the upstream Zalando defaults that ship in
+// the bundled YAML and are not driven by our Options.
 func (m *OperatorManager) editConfigMap(cm *corev1.ConfigMap, namespace string, options Options) {
-	cm.Data["watched_namespace"] = namespace
-	// TODO don't use the same serviceaccount for operator and databases, see #88
-	cm.Data["pod_service_account_name"] = serviceAccountName
-	// set the reference to our custom pod environment configmap
-	cm.Data["pod_environment_configmap"] = PodEnvCMName
-	// set the reference to our custom pod environment secret
-	cm.Data["pod_environment_secret"] = PodEnvSecretName
-	// set the list of inherited labels that will be passed on to the pods
-	s := []string{pg.TenantLabelName, pg.ProjectIDLabelName, pg.UIDLabelName, pg.NameLabelName, pg.PartitionIDLabelName, pg.PostgresVersionLabelName, pg.PostgresDescriptionLabelName}
+	if cm.Data == nil {
+		cm.Data = map[string]string{}
+	}
+	maps.Copy(cm.Data, buildOperatorConfigData(namespace, options))
+}
+
+// buildOperatorConfigData assembles the data of the operator ConfigMap. It is
+// the single source of truth for what ends up in the ConfigMap, and is also
+// used to compute the hash that is added as a label to the operator
+// Deployment's pod template so a config change triggers a rollout.
+func buildOperatorConfigData(namespace string, options Options) map[string]string {
 	// TODO maybe use a precompiled string here
-	cm.Data["inherited_labels"] = strings.Join(s, ",")
+	inheritedLabels := strings.Join([]string{
+		pg.TenantLabelName,
+		pg.ProjectIDLabelName,
+		pg.UIDLabelName,
+		pg.NameLabelName,
+		pg.PartitionIDLabelName,
+		pg.PostgresVersionLabelName,
+		pg.PostgresDescriptionLabelName,
+	}, ",")
+
+	data := map[string]string{
+		"watched_namespace":                            namespace,
+		"pod_service_account_name":                     serviceAccountName, // TODO don't use the same serviceaccount for operator and databases, see #88
+		"pod_environment_configmap":                    PodEnvCMName,
+		"pod_environment_secret":                       PodEnvSecretName,
+		"inherited_labels":                             inheritedLabels,
+		"enable_crd_registration":                      strconv.FormatBool(options.CRDRegistration),
+		"major_version_upgrade_mode":                   options.MajorVersionUpgradeMode,
+		"super_username":                               pg.PostresConfigSuperUsername, // hardcoded for the cloud-api, see below
+		"replication_username":                         pg.PostgresConfigReplicationUsername,
+		"enable_pod_antiaffinity":                      strconv.FormatBool(options.PodAntiaffinity),
+		"pod_antiaffinity_preferred_during_scheduling": strconv.FormatBool(options.PodAntiaffinityPreferredDuringScheduling),
+		"secret_name_template":                         "{username}.{cluster}.credentials",
+		"master_dns_name_format":                       "{cluster}.{team}.{hostedzone}",
+		"replica_dns_name_format":                      "{cluster}-repl.{team}.{hostedzone}",
+		"spilo_fsgroup":                                spilo_fsgroup, // for correct tls cert permissions
+		"enable_patroni_failsafe_mode":                 strconv.FormatBool(options.PatroniFailsafeMode),
+		"enable_teams_api":                             strconv.FormatBool(false), // override teams_api defaults
+		"postgres_superuser_teams":                     "",
+		"teams_api_url":                                "",
+		"kubernetes_use_configmaps":                    strconv.FormatBool(options.KubernetesUseConfigMaps),
+	}
 
 	if options.DockerImage != "" {
-		cm.Data["docker_image"] = options.DockerImage
+		data["docker_image"] = options.DockerImage
 	}
-
 	if options.EtcdHost != "" {
-		cm.Data["etcd_host"] = options.EtcdHost
+		data["etcd_host"] = options.EtcdHost
 	}
-
-	cm.Data["enable_crd_registration"] = strconv.FormatBool(options.CRDRegistration)
-	cm.Data["major_version_upgrade_mode"] = options.MajorVersionUpgradeMode
-
-	// we specifically refer to those two users in the cloud-api, so we hardcode them here as well to be on the safe side.
-	cm.Data["super_username"] = pg.PostresConfigSuperUsername
-	cm.Data["replication_username"] = pg.PostgresConfigReplicationUsername
-
-	cm.Data["enable_pod_antiaffinity"] = strconv.FormatBool(options.PodAntiaffinity)
-	cm.Data["pod_antiaffinity_preferred_during_scheduling"] = strconv.FormatBool(options.PodAntiaffinityPreferredDuringScheduling)
 	if options.PodAntiaffinityTopologyKey != "" {
-		cm.Data["pod_antiaffinity_topology_key"] = options.PodAntiaffinityTopologyKey
+		data["pod_antiaffinity_topology_key"] = options.PodAntiaffinityTopologyKey
 	}
-
-	cm.Data["secret_name_template"] = "{username}.{cluster}.credentials"
-	cm.Data["master_dns_name_format"] = "{cluster}.{team}.{hostedzone}"
-	cm.Data["replica_dns_name_format"] = "{cluster}-repl.{team}.{hostedzone}"
-
-	// set the spilo_fsgroup for correct tls cert permissions
-	cm.Data["spilo_fsgroup"] = spilo_fsgroup
-
-	cm.Data["enable_patroni_failsafe_mode"] = strconv.FormatBool(options.PatroniFailsafeMode)
-
-	// override teams_api related defaults
-	cm.Data["enable_teams_api"] = strconv.FormatBool(false)
-	cm.Data["postgres_superuser_teams"] = ""
-	cm.Data["teams_api_url"] = ""
-
 	if options.EnableReadinessProbe {
-		cm.Data["enable_readiness_probe"] = strconv.FormatBool(true)
-		cm.Data["pod_management_policy"] = "parallel"
+		data["enable_readiness_probe"] = strconv.FormatBool(true)
+		data["pod_management_policy"] = "parallel"
 	}
 
-	cm.Data["kubernetes_use_configmaps"] = strconv.FormatBool(options.KubernetesUseConfigMaps)
+	return data
+}
 
+// operatorConfigHash returns a stable hash of the operator ConfigMap data
+// built from namespace and options. It is intended to be added as a label on
+// the operator Deployment's pod template, so that any change to the ConfigMap
+// changes the hash, the Deployment's pod template differs, and Kubernetes
+// rolls the operator pods.
+func operatorConfigHash(namespace string, options Options) string {
+	return configMapDataHash(buildOperatorConfigData(namespace, options))
+}
+
+// configMapDataHash returns a stable hex-encoded SHA-256 of the given
+// ConfigMap data. encoding/json sorts map keys, so the same data always
+// yields the same hash regardless of map iteration order.
+func configMapDataHash(data map[string]string) string {
+	// a map[string]string is always json-marshalable
+	b, _ := json.Marshal(data) //nolint:errchkjson
+	sum := sha256.Sum256(b)
+	return hex.EncodeToString(sum[:])
 }
 
 // ensureCleanMetadata ensures obj has clean metadata
