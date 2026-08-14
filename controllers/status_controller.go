@@ -42,7 +42,7 @@ type StatusReconciler struct {
 // +kubebuilder:rbac:groups=acid.zalan.do,resources=postgresqls,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=acid.zalan.do,resources=postgresqls/status,verbs=get;update;patch
 func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	log := r.Log.WithValues("ns", req.NamespacedName.Namespace)
+	log := r.Log.WithValues("ns", req.Namespace)
 
 	log.V(debugLogLevel).Info("fetching postgresql")
 	instance := &zalando.Postgresql{}
@@ -51,6 +51,7 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 			return ctrl.Result{}, err
 		}
 		log.Info("status changed to Deleted")
+
 		return ctrl.Result{}, nil
 	}
 
@@ -82,13 +83,15 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		// update the status of the remote object
 		owner.Status.Description = instance.Status.PostgresClusterStatus
 		// update the reference to the zalando instance in the remote object
-		owner.Status.ChildName = instance.ObjectMeta.Name
+		owner.Status.ChildName = instance.Name
 
 		log.V(debugLogLevel).Info("Updating owner", "owner", owner.UID)
 		if err := r.CtrlClient.Status().Update(ctx, owner); err != nil {
 			log.Error(err, "failed to update owner object")
+
 			return err
 		}
+
 		return nil
 	})
 
@@ -184,6 +187,7 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	if len(secrets.Items) == 0 {
 		log.Info("no local secrets found yet, requeuing", "status", owner.Status)
+
 		return ctrl.Result{Requeue: true, RequeueAfter: 2 * time.Second}, nil
 	}
 
@@ -230,6 +234,7 @@ func (r *StatusReconciler) createOrUpdateSecret(ctx context.Context, in *pg.Post
 	// todo: update to CreateOrPatch()
 	result, err := controllerutil.CreateOrUpdate(ctx, r.CtrlClient, fetched, func() error {
 		fetched.Data = secret.Data
+
 		return nil
 	})
 	if err != nil {
@@ -243,9 +248,10 @@ func (r *StatusReconciler) createOrUpdateSecret(ctx context.Context, in *pg.Post
 
 // Extract the UID of the owner object by reading the value of a certain label
 func deriveOwnerName(instance *zalando.Postgresql) (string, error) {
-	value, ok := instance.ObjectMeta.Labels[pg.NameLabelName]
+	value, ok := instance.Labels[pg.NameLabelName]
 	if !ok {
 		return "", fmt.Errorf("could not derive owner reference")
 	}
+
 	return value, nil
 }

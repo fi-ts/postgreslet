@@ -32,6 +32,7 @@ var _ = Describe("postgres controller", func() {
 				if len(instance.Finalizers) == 0 {
 					return false
 				}
+
 				return instance.Finalizers[0] == pg.PostgresFinalizerName
 			}, timeout, interval).Should(BeTrue())
 		})

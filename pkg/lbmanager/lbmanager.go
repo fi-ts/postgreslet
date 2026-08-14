@@ -54,6 +54,7 @@ func (m *LBManager) ReconcileSvcLBs(ctx context.Context, in *api.Postgres) error
 	if len(errs) > 0 {
 		return errors.Join(errs...)
 	}
+
 	return nil
 }
 
@@ -65,6 +66,7 @@ func (m *LBManager) CreateOrUpdateSharedSvcLB(ctx context.Context, in *api.Postg
 		if err != nil {
 			m.log.Info("could not delete dedicated loadbalancer", "ns", in.Namespace, "pgID", in.Name)
 		}
+
 		return nil
 	}
 
@@ -101,6 +103,7 @@ func (m *LBManager) CreateOrUpdateSharedSvcLB(ctx context.Context, in *api.Postg
 		if err := m.client.Create(ctx, svc); err != nil {
 			return fmt.Errorf("failed to create Service of type LoadBalancer: %w", err)
 		}
+
 		return nil
 	}
 
@@ -116,7 +119,7 @@ func (m *LBManager) CreateOrUpdateSharedSvcLB(ctx context.Context, in *api.Postg
 		svc.Spec.LoadBalancerSourceRanges = []string{}
 	}
 	// also update the annotations for our custom tls certs
-	svc.ObjectMeta.Annotations = updated.ObjectMeta.Annotations
+	svc.Annotations = updated.Annotations
 
 	if err := m.client.Update(ctx, svc); err != nil {
 		return fmt.Errorf("failed to update Service of type LoadBalancer (shared): %w", err)
@@ -133,6 +136,7 @@ func (m *LBManager) CreateOrUpdateDedicatedSvcLB(ctx context.Context, in *api.Po
 		if err != nil {
 			m.log.Info("could not delete dedicated loadbalancer", "ns", in.Namespace, "pgID", in.Name)
 		}
+
 		return nil
 	}
 
@@ -140,7 +144,7 @@ func (m *LBManager) CreateOrUpdateDedicatedSvcLB(ctx context.Context, in *api.Po
 	if in.Spec.DedicatedLoadBalancerPort != nil && *in.Spec.DedicatedLoadBalancerPort != 0 {
 		nextFreePort = *in.Spec.DedicatedLoadBalancerPort
 	}
-	var lbIPToUse string = *in.Spec.DedicatedLoadBalancerIP
+	lbIPToUse := *in.Spec.DedicatedLoadBalancerIP
 
 	sharedSvcLbAlsoEnabled := in.EnableSharedSVCLB(m.options.EnableForceSharedIP)
 
@@ -162,6 +166,7 @@ func (m *LBManager) CreateOrUpdateDedicatedSvcLB(ctx context.Context, in *api.Po
 		if err := m.client.Create(ctx, new); err != nil {
 			return fmt.Errorf("failed to create Service of type LoadBalancer: %w", err)
 		}
+
 		return nil
 	}
 
@@ -169,7 +174,7 @@ func (m *LBManager) CreateOrUpdateDedicatedSvcLB(ctx context.Context, in *api.Po
 	existing.Spec = new.Spec
 
 	// also update the annotations for our custom tls certs
-	existing.ObjectMeta.Annotations = new.ObjectMeta.Annotations
+	existing.Annotations = new.Annotations
 
 	if err := m.client.Update(ctx, existing); err != nil {
 		return fmt.Errorf("failed to update Service of type LoadBalancer (dedicated): %w", err)
@@ -186,6 +191,7 @@ func (m *LBManager) DeleteSharedSvcLB(ctx context.Context, in *api.Postgres) err
 	if err := m.client.Delete(ctx, lb); client.IgnoreNotFound(err) != nil {
 		return err
 	}
+
 	return nil
 }
 
@@ -197,6 +203,7 @@ func (m *LBManager) DeleteDedicatedSvcLB(ctx context.Context, in *api.Postgres) 
 	if err := m.client.Delete(ctx, lb); client.IgnoreNotFound(err) != nil {
 		return err
 	}
+
 	return nil
 }
 
@@ -254,5 +261,6 @@ func containsElem(s []int32, v int32) bool {
 			return true
 		}
 	}
+
 	return false
 }

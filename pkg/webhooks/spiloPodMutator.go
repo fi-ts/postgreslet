@@ -37,6 +37,7 @@ func (a *SpiloPodMutator) Handle(ctx context.Context, req admission.Request) adm
 	err := a.Decoder.Decode(req, pod)
 	if err != nil {
 		log.Error(err, "failed to decode request")
+
 		return admission.Errored(http.StatusBadRequest, err)
 	}
 
@@ -62,13 +63,13 @@ func (a *SpiloPodMutator) Handle(ctx context.Context, req admission.Request) adm
 			LabelSelector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
 					"application":           "spilo",
-					"cluster-name":          pod.ObjectMeta.Labels["cluster-name"],
-					pg.NameLabelName:        pod.ObjectMeta.Labels[pg.NameLabelName],
-					pg.PartitionIDLabelName: pod.ObjectMeta.Labels[pg.PartitionIDLabelName],
-					pg.ProjectIDLabelName:   pod.ObjectMeta.Labels[pg.ProjectIDLabelName],
-					pg.TenantLabelName:      pod.ObjectMeta.Labels[pg.TenantLabelName],
-					pg.UIDLabelName:         pod.ObjectMeta.Labels[pg.UIDLabelName],
-					"team":                  pod.ObjectMeta.Labels["team"],
+					"cluster-name":          pod.Labels["cluster-name"],
+					pg.NameLabelName:        pod.Labels[pg.NameLabelName],
+					pg.PartitionIDLabelName: pod.Labels[pg.PartitionIDLabelName],
+					pg.ProjectIDLabelName:   pod.Labels[pg.ProjectIDLabelName],
+					pg.TenantLabelName:      pod.Labels[pg.TenantLabelName],
+					pg.UIDLabelName:         pod.Labels[pg.UIDLabelName],
+					"team":                  pod.Labels["team"],
 				},
 			},
 			TopologyKey: a.PodTopologySpreadConstraintTopologyKey,
@@ -88,9 +89,11 @@ func (a *SpiloPodMutator) Handle(ctx context.Context, req admission.Request) adm
 	marshaledPod, err := json.Marshal(pod)
 	if err != nil {
 		log.Error(err, "failed to marshal response")
+
 		return admission.Errored(http.StatusInternalServerError, err)
 	}
 
 	log.V(1).Info("done")
+
 	return admission.PatchResponseFromRaw(req.Object.Raw, marshaledPod)
 }

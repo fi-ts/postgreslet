@@ -91,7 +91,7 @@ const (
 	defaultPostgresParamValueWalKeepSize            = "1GB"
 	defaultPostgresParamValuePGStatStatementsMax    = "500"
 	defaultSelectorDisableValue                     = "selector-disabled"
-	defaultPostgresParamValuePasswordEncryption     = "scram-sha-256" // nolint
+	defaultPostgresParamValuePasswordEncryption     = "scram-sha-256" //nolint
 	defaultPostgresParamValueLogMinErrorStatement   = "WARNING"
 	defaultPostgresParamValueLogErrorVerbosity      = "VERBOSE"
 	defaultPostgresParamValueLogLinePrefix          = "%m [%p]: [%l-1] db=%d,user=%u,app=%a,client=%h "
@@ -320,7 +320,7 @@ func (p *Postgres) HasSourceRanges() bool {
 
 // IsBeingDeleted returns true if the deletion-timestamp is set
 func (p *Postgres) IsBeingDeleted() bool {
-	return !p.ObjectMeta.DeletionTimestamp.IsZero()
+	return !p.DeletionTimestamp.IsZero()
 }
 
 // ToCWNP returns CRD ClusterwideNetworkPolicy derived from CRD Postgres
@@ -665,6 +665,7 @@ func (p *Postgres) ToDNSName(tlsSubDomain string) string {
 	if len(name) > maxLen {
 		name = name[:maxLen]
 	}
+
 	return name + "." + tlsSubDomain
 }
 
@@ -700,43 +701,43 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 		z.Spec.DockerImage = image
 	}
 	z.Spec.NumberOfInstances = p.Spec.NumberOfInstances
-	z.Spec.PostgresqlParam.PgVersion = p.Spec.Version
+	z.Spec.PgVersion = p.Spec.Version
 
 	// initialize the parameters
-	z.Spec.PostgresqlParam.Parameters = map[string]string{}
+	z.Spec.Parameters = map[string]string{}
 	// enable default audit logs (if not configured otherwise)
 	if p.Spec.AuditLogs == nil || *p.Spec.AuditLogs {
-		enableAuditLogs(z.Spec.PostgresqlParam.Parameters)
+		enableAuditLogs(z.Spec.Parameters)
 	}
 	// set some default postgres parameters
-	setDefaultPostgresParams(z.Spec.PostgresqlParam.Parameters, p.Spec.Version)
+	setDefaultPostgresParams(z.Spec.Parameters, p.Spec.Version)
 	// now set the given generic parameters (and potentially allow overwriting of default postgres params or audit log params)
-	setPostgresParams(z.Spec.PostgresqlParam.Parameters, p.Spec.PostgresParams, pgParamBlockList)
+	setPostgresParams(z.Spec.Parameters, p.Spec.PostgresParams, pgParamBlockList)
 	// finally, overwrite the (special to us) shared buffer parameter
-	setSharedBufferSize(z.Spec.PostgresqlParam.Parameters, p.Spec.Size.SharedBuffer)
+	setSharedBufferSize(z.Spec.Parameters, p.Spec.Size.SharedBuffer)
 
 	z.Spec.Resources = &zalando.Resources{}
 	cpuReq, err := p.calculateCPURequests(p.Spec.Size.CPU, cpuRequestsPercentage)
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert to unstructured zalando postgresql: %w", err)
 	}
-	z.Spec.Resources.ResourceRequests.CPU = ptr.To(cpuReq)
-	z.Spec.Resources.ResourceRequests.Memory = ptr.To(p.Spec.Size.Memory)
-	z.Spec.Resources.ResourceLimits.CPU = ptr.To(p.Spec.Size.CPU)
-	z.Spec.Resources.ResourceLimits.Memory = ptr.To(p.Spec.Size.Memory)
+	z.Spec.ResourceRequests.CPU = ptr.To(cpuReq)
+	z.Spec.ResourceRequests.Memory = ptr.To(p.Spec.Size.Memory)
+	z.Spec.ResourceLimits.CPU = ptr.To(p.Spec.Size.CPU)
+	z.Spec.ResourceLimits.Memory = ptr.To(p.Spec.Size.Memory)
 	z.Spec.TeamID = p.generateTeamID()
-	z.Spec.Volume.Size = p.Spec.Size.StorageSize
+	z.Spec.Size = p.Spec.Size.StorageSize
 	if p.Spec.StorageClass != nil {
-		z.Spec.Volume.StorageClass = *p.Spec.StorageClass
+		z.Spec.StorageClass = *p.Spec.StorageClass
 	} else {
-		z.Spec.Volume.StorageClass = sc
+		z.Spec.StorageClass = sc
 	}
 
-	z.Spec.Patroni.TTL = patroniTTL
-	z.Spec.Patroni.LoopWait = patroniLoopWait
-	z.Spec.Patroni.RetryTimeout = patroniRetryTimeout
-	z.Spec.Patroni.SynchronousMode = true
-	z.Spec.Patroni.SynchronousModeStrict = false
+	z.Spec.TTL = patroniTTL
+	z.Spec.LoopWait = patroniLoopWait
+	z.Spec.RetryTimeout = patroniRetryTimeout
+	z.Spec.SynchronousMode = true
+	z.Spec.SynchronousModeStrict = false
 
 	// required with image ermajn/postgres-operator:v1.6.0-20-g1cc71663-dirty
 	// see https://github.com/fi-ts/postgreslet/issues/293
@@ -867,15 +868,15 @@ func (p *Postgres) ToZalandoPostgresqlMatchingLabels() client.MatchingLabels {
 }
 
 func (p *Postgres) HasFinalizer(finalizerName string) bool {
-	return containsElem(p.ObjectMeta.Finalizers, finalizerName)
+	return containsElem(p.Finalizers, finalizerName)
 }
 
 func (p *Postgres) AddFinalizer(finalizerName string) {
-	p.ObjectMeta.Finalizers = append(p.ObjectMeta.Finalizers, finalizerName)
+	p.Finalizers = append(p.Finalizers, finalizerName)
 }
 
 func (p *Postgres) RemoveFinalizer(finalizerName string) {
-	p.ObjectMeta.Finalizers = removeElem(p.ObjectMeta.Finalizers, finalizerName)
+	p.Finalizers = removeElem(p.Finalizers, finalizerName)
 }
 
 func containsElem(ss []string, s string) bool {
@@ -884,6 +885,7 @@ func containsElem(ss []string, s string) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -894,6 +896,7 @@ func removeElem(ss []string, s string) (out []string) {
 		}
 		out = append(out, elem)
 	}
+
 	return
 }
 
@@ -942,6 +945,7 @@ func (p *Postgres) buildSidecars(c *corev1.ConfigMap) []zalando.Sidecar {
 		for j := range sidecars[i].Env {
 			if sidecars[i].Env[j].ValueFrom != nil && sidecars[i].Env[j].ValueFrom.SecretKeyRef != nil {
 				sidecars[i].Env[j].ValueFrom.SecretKeyRef.Name = PostgresConfigMonitoringUsername + "." + p.ToPeripheralResourceName() + ".credentials"
+
 				break
 			}
 		}
@@ -970,6 +974,7 @@ func (p *Postgres) IsReplicationPrimaryOrStandalone() bool {
 		// nothing is configured, or we are the leader. nothing to do.
 		return true
 	}
+
 	return false
 }
 
@@ -978,6 +983,7 @@ func (p *Postgres) IsReplicationTarget() bool {
 		// sth is configured and we are not the leader
 		return true
 	}
+
 	return false
 }
 
@@ -1126,13 +1132,13 @@ func (p *Postgres) calculateCPURequests(c string, percentage int) (string, error
 	// calculate the percentage
 	value := int64((milliValue / int64(100)) * int64(percentage))
 
-	//return the calculated cpu request, making sure it is not higher than the given input value
+	// return the calculated cpu request, making sure it is not higher than the given input value
 	return resource.NewMilliQuantity(min(value, milliValue), resource.BinarySI).String(), nil
 }
 
 // sanitize a string so it can be used as a label value. if the string is valid, it
 // will be returned unmodified. otherwise all illegal character will be replace with "_"
-// where multiple "_" will be shrinked to a single one. the string must also start and end
+// where multiple "_" will be shrunk to a single one. the string must also start and end
 // with a alphanumeric character. last but not least, a label value must not be longer than 63
 // characters.
 func sanitizeLabelValue(v string) string {
