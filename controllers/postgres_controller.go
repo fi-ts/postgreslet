@@ -1269,7 +1269,6 @@ func (r *PostgresReconciler) updatePatroniReplicationConfigOnAllPods(log logr.Lo
 	// iterate all spilo pods
 	var lastErr error
 	for _, pod := range pods.Items {
-		// pin!
 		podIP := pod.Status.PodIP
 		if err := r.httpPatchPatroni(log, ctx, instance, podIP, nil); err != nil {
 			lastErr = err
