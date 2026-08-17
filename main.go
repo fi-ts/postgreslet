@@ -346,10 +346,7 @@ func main() {
 	enableSuperUserForDBO = viper.GetBool(enableSuperUserForDBOFlg)
 
 	tlsClusterIssuer = viper.GetString(tlsClusterIssuerFlg)
-	enableCustomTLSCert := false
-	if tlsClusterIssuer != "" {
-		enableCustomTLSCert = true
-	}
+	enableCustomTLSCert := tlsClusterIssuer != ""
 	tlsSubDomain = viper.GetString(tlsSubDomainFlg)
 
 	viper.SetDefault(enablePatroniFailsafeModeFlg, true)
@@ -492,7 +489,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	var etcdMgrOpts etcdmanager.Options = etcdmanager.Options{
+	etcdMgrOpts := etcdmanager.Options{
 		EtcdImage:              etcdImage,
 		EtcdBackupSidecarImage: etcdBackupSidecarImage,
 		SecretKeyRefName:       etcdBackupSecretName,
@@ -517,7 +514,7 @@ func main() {
 		}
 	}
 
-	var opMgrOpts operatormanager.Options = operatormanager.Options{
+	opMgrOpts := operatormanager.Options{
 		PspName:                                  pspName,
 		OperatorImage:                            operatorImage,
 		DockerImage:                              postgresImage,
@@ -540,7 +537,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	var lbMgrOpts lbmanager.Options = lbmanager.Options{
+	lbMgrOpts := lbmanager.Options{
 		LBIP:                        lbIP,
 		PortRangeStart:              portRangeStart,
 		PortRangeSize:               portRangeSize,

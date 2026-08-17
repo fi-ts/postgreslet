@@ -110,6 +110,7 @@ func New(confRest *rest.Config, fileName string, scheme *runtime.Scheme, log log
 	}
 
 	log.Info("new `OperatorManager` created")
+
 	return &OperatorManager{
 		metadataAccessor: meta.NewAccessor(),
 		client:           client,
@@ -161,6 +162,7 @@ func (m *OperatorManager) InstallOrUpdateOperator(ctx context.Context, namespace
 	}
 
 	m.log.Info("operator installed", "ns", namespace)
+
 	return nil
 }
 
@@ -174,6 +176,7 @@ func (m *OperatorManager) IsOperatorDeletable(ctx context.Context, namespace str
 	}
 	if len(setList.Items) != 0 {
 		log.Info("statefulset still running")
+
 		return false, nil
 	}
 
@@ -185,10 +188,12 @@ func (m *OperatorManager) IsOperatorDeletable(ctx context.Context, namespace str
 	err := m.client.Get(ctx, ns, &corev1.Service{})
 	if !errors.IsNotFound(err) {
 		log.Info("service still running")
+
 		return false, nil
 	}
 
 	log.Info("operator deletable")
+
 	return true, nil
 }
 
@@ -206,6 +211,7 @@ func (m *OperatorManager) IsOperatorInstalled(ctx context.Context, namespace str
 		return false, nil
 	}
 	m.log.Info("operator is installed", "ns", namespace)
+
 	return true, nil
 }
 
@@ -254,6 +260,7 @@ func (m *OperatorManager) UninstallOperator(ctx context.Context, namespace strin
 				if errors.IsNotFound(err) {
 					return nil
 				}
+
 				return fmt.Errorf("error while deleting %v: %w", v, err)
 			}
 		}
@@ -370,7 +377,7 @@ func (m *OperatorManager) createNewClientObject(ctx context.Context, obj client.
 		err = m.client.Get(ctx, key, &got)
 		if err == nil {
 			// Copy the ResourceVersion
-			v.ObjectMeta.ResourceVersion = got.ObjectMeta.ResourceVersion
+			v.ResourceVersion = got.ResourceVersion
 			// Copy the ClusterIP
 			v.Spec.ClusterIP = got.Spec.ClusterIP
 		}
@@ -504,14 +511,14 @@ func (m *OperatorManager) createOrUpdateNamespace(ctx context.Context, namespace
 		// Create the namespace.
 		nsObj := &corev1.Namespace{}
 		nsObj.Name = namespace
-		nsObj.ObjectMeta.Labels = labels
+		nsObj.Labels = labels
 		if err := m.client.Create(ctx, nsObj); err != nil {
 			return fmt.Errorf("error while creating namespace %v: %w", namespace, err)
 		}
 		log.Info("namespace created")
 	} else {
 		// update namespace
-		ns.ObjectMeta.Labels = labels
+		ns.Labels = labels
 		if err := m.client.Update(ctx, &ns); err != nil {
 			return fmt.Errorf("error while updating namespace: %w", err)
 		}
@@ -534,6 +541,7 @@ func (m *OperatorManager) CreatePodEnvironmentConfigMap(ctx context.Context, nam
 		// configmap already exists, nothing to do here
 		// we will update the configmap with the correct S3 config in the postgres controller
 		log.Info("Pod Environment ConfigMap already exists")
+
 		return cm, nil
 	}
 
@@ -565,6 +573,7 @@ func (m *OperatorManager) CreateOrGetPodEnvironmentSecret(ctx context.Context, n
 		// secret already exists, nothing to do here
 		// we will update the secret with the correct S3 config in the postgres controller
 		log.Info("Pod Environment Secret already exists")
+
 		return s, nil
 	}
 
@@ -593,6 +602,7 @@ func (m *OperatorManager) createOrUpdateSidecarsConfig(ctx context.Context, name
 	if err := m.client.Get(ctx, cns, globalSidecarsCM); err != nil {
 		// configmap with configuration does not exists, nothing we can do here...
 		m.log.Error(err, "could not fetch global config for sidecars", "ns", namespace)
+
 		return err
 	}
 
@@ -642,6 +652,7 @@ func (m *OperatorManager) createOrUpdateSidecarsConfigMap(ctx context.Context, n
 			return fmt.Errorf("error while updating the new Sidecars ConfigMap: %w", err)
 		}
 		log.Info("Sidecars ConfigMap updated")
+
 		return nil
 	}
 	// todo: handle errors other than `NotFound`
@@ -667,6 +678,7 @@ func (m *OperatorManager) deletePodEnvironmentConfigMap(ctx context.Context, nam
 		return fmt.Errorf("error while deleting the Pod Environment ConfigMap: %w", err)
 	}
 	m.log.Info("Pod Environment ConfigMap deleted", "ns", namespace)
+
 	return nil
 }
 
@@ -681,6 +693,7 @@ func (m *OperatorManager) toObjectKey(obj runtime.Object, namespace string) (cli
 	if err != nil {
 		return client.ObjectKey{}, fmt.Errorf("error while extracting the name of the k8s resource: %w", err)
 	}
+
 	return client.ObjectKey{
 		Namespace: namespace,
 		Name:      name,
@@ -710,5 +723,6 @@ func (m *OperatorManager) UpdateAllManagedOperators(ctx context.Context) error {
 	}
 
 	m.log.Info("Done updating postgres operators in managed namespaces")
+
 	return nil
 }

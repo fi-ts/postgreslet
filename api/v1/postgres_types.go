@@ -90,7 +90,7 @@ const (
 	defaultPostgresParamValueWalKeepSize            = "1GB"
 	defaultPostgresParamValuePGStatStatementsMax    = "500"
 	defaultSelectorDisableValue                     = "selector-disabled"
-	defaultPostgresParamValuePasswordEncryption     = "scram-sha-256" // nolint
+	defaultPostgresParamValuePasswordEncryption     = "scram-sha-256" //nolint
 	defaultPostgresParamValueLogMinErrorStatement   = "WARNING"
 	defaultPostgresParamValueLogErrorVerbosity      = "VERBOSE"
 	defaultPostgresParamValueLogLinePrefix          = "%m [%p]: [%l-1] db=%d,user=%u,app=%a,client=%h "
@@ -159,6 +159,7 @@ type BackupConfig struct {
 // +kubebuilder:printcolumn:name="IP",type=string,JSONPath=`.status.socket.ip`
 // +kubebuilder:printcolumn:name="Port",type=integer,JSONPath=`.status.socket.port`
 // +kubebuilder:printcolumn:name="Status",type=string,JSONPath=`.status.description`
+// +kubebuilder:selectablefield:JSONPath=".spec.restore.postgresID"
 
 // Postgres is the Schema for the postgres API
 type Postgres struct {
@@ -318,7 +319,7 @@ func (p *Postgres) HasSourceRanges() bool {
 
 // IsBeingDeleted returns true if the deletion-timestamp is set
 func (p *Postgres) IsBeingDeleted() bool {
-	return !p.ObjectMeta.DeletionTimestamp.IsZero()
+	return !p.DeletionTimestamp.IsZero()
 }
 
 // ToCWNP returns CRD ClusterwideNetworkPolicy derived from CRD Postgres
@@ -663,6 +664,7 @@ func (p *Postgres) ToDNSName(tlsSubDomain string) string {
 	if len(name) > maxLen {
 		name = name[:maxLen]
 	}
+
 	return name + "." + tlsSubDomain
 }
 
@@ -903,15 +905,15 @@ func (p *Postgres) ToZalandoPostgresqlMatchingLabels() client.MatchingLabels {
 }
 
 func (p *Postgres) HasFinalizer(finalizerName string) bool {
-	return containsElem(p.ObjectMeta.Finalizers, finalizerName)
+	return containsElem(p.Finalizers, finalizerName)
 }
 
 func (p *Postgres) AddFinalizer(finalizerName string) {
-	p.ObjectMeta.Finalizers = append(p.ObjectMeta.Finalizers, finalizerName)
+	p.Finalizers = append(p.Finalizers, finalizerName)
 }
 
 func (p *Postgres) RemoveFinalizer(finalizerName string) {
-	p.ObjectMeta.Finalizers = removeElem(p.ObjectMeta.Finalizers, finalizerName)
+	p.Finalizers = removeElem(p.Finalizers, finalizerName)
 }
 
 func containsElem(ss []string, s string) bool {
@@ -920,6 +922,7 @@ func containsElem(ss []string, s string) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
@@ -930,6 +933,7 @@ func removeElem(ss []string, s string) (out []string) {
 		}
 		out = append(out, elem)
 	}
+
 	return
 }
 
@@ -978,6 +982,7 @@ func (p *Postgres) buildSidecars(c *corev1.ConfigMap) []zalando.Sidecar {
 		for j := range sidecars[i].Env {
 			if sidecars[i].Env[j].ValueFrom != nil && sidecars[i].Env[j].ValueFrom.SecretKeyRef != nil {
 				sidecars[i].Env[j].ValueFrom.SecretKeyRef.Name = PostgresConfigMonitoringUsername + "." + p.ToPeripheralResourceName() + ".credentials"
+
 				break
 			}
 		}
@@ -1006,6 +1011,7 @@ func (p *Postgres) IsReplicationPrimaryOrStandalone() bool {
 		// nothing is configured, or we are the leader. nothing to do.
 		return true
 	}
+
 	return false
 }
 
@@ -1014,6 +1020,7 @@ func (p *Postgres) IsReplicationTarget() bool {
 		// sth is configured and we are not the leader
 		return true
 	}
+
 	return false
 }
 
@@ -1162,13 +1169,13 @@ func (p *Postgres) calculateCPURequests(c string, percentage int) (string, error
 	// calculate the percentage
 	value := int64((milliValue / int64(100)) * int64(percentage))
 
-	//return the calculated cpu request, making sure it is not higher than the given input value
+	// return the calculated cpu request, making sure it is not higher than the given input value
 	return resource.NewMilliQuantity(min(value, milliValue), resource.BinarySI).String(), nil
 }
 
 // sanitize a string so it can be used as a label value. if the string is valid, it
 // will be returned unmodified. otherwise all illegal character will be replace with "_"
-// where multiple "_" will be shrinked to a single one. the string must also start and end
+// where multiple "_" will be shrunk to a single one. the string must also start and end
 // with a alphanumeric character. last but not least, a label value must not be longer than 63
 // characters.
 func sanitizeLabelValue(v string) string {

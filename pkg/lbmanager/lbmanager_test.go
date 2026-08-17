@@ -89,11 +89,12 @@ func TestLBManager_nextFreePort(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
+
 		t.Run(tt.name, func(t *testing.T) {
 			_, portGot, err := tt.lbMgr.nextFreeSocket(context.Background())
 			if (err != nil) != tt.wantErr {
 				t.Errorf("LBManager.nextFreePort() error = %v, wantErr %v", err, tt.wantErr)
+
 				return
 			}
 			if portGot != tt.portWant {
@@ -116,6 +117,7 @@ func svcListWithPorts(ports ...int32) *corev1.ServiceList {
 	for _, port := range ports {
 		svcList.Items = append(svcList.Items, *svcWithPort(port))
 	}
+
 	return svcList
 }
 
@@ -128,5 +130,6 @@ func svcWithPort(port int32) *corev1.Service {
 			Port: port,
 		},
 	}
+
 	return &svc
 }

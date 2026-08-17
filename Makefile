@@ -256,4 +256,4 @@ localkube-reinstall-postgreslet: localkube-load-image
 	helm upgrade --install postgreslet metal-stack-30/postgreslet --namespace postgreslet-system --values svc-cluster-values.yaml --set-file controlplaneKubeconfig=kubeconfig-ctrl  --kubeconfig ./kubeconfig-svc
 
 lint:
-	golangci-lint run --show-stats=false --timeout=5m
+	golangci-lint run --timeout=5m --fix --new-from-merge-base=main
