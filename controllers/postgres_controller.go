@@ -753,7 +753,7 @@ func (r *PostgresReconciler) getStandbyEnvs(ctx context.Context, p *pg.Postgres)
 	}
 	primaryS3url, err := url.Parse(primaryBackupConfig.S3Endpoint)
 	if err != nil {
-		r.recorder.Eventf(primary, "Warning", "Error", "error while parsing the s3 endpoint url in the backup secret: %w", err)
+		r.recorder.Eventf(primary, "Warning", "Error", "error while parsing the s3 endpoint url in the backup secret: %v", err)
 
 		return standbyEnvs
 	}
