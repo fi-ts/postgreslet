@@ -135,12 +135,7 @@ configmap:
 		> config/manager/configmap.yaml
 
 svc-postgres-operator-yaml:
-	kubectl apply \
-	-f $(POSTGRES_OPERATOR_URL)/configmap.yaml \
-	-f $(POSTGRES_OPERATOR_URL)/operator-service-account-rbac.yaml \
-	-f $(POSTGRES_OPERATOR_URL)/postgres-operator.yaml \
-	-f $(POSTGRES_OPERATOR_URL)/api-service.yaml \
-	--dry-run=client -o yaml > external/svc-postgres-operator.yaml
+	./gen-operator-yaml.sh $(POSTGRES_OPERATOR_VERSION) external/svc-postgres-operator.yaml
 
 # crd-postgresql-yaml:
 # 	kubectl apply -f $(POSTGRES_CRD_URL) --dry-run=client -o yaml > external/crd-postgresql.yaml
