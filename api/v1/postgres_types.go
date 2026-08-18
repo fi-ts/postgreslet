@@ -28,7 +28,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/apimachinery/pkg/util/yaml"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -680,7 +679,7 @@ func (p *Postgres) ToPeripheralResourceLookupKey() types.NamespacedName {
 	}
 }
 
-func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *corev1.ConfigMap, sc string, pgParamBlockList map[string]bool, rbs *BackupConfig, srcDB *Postgres, patroniTTL, patroniLoopWait, patroniRetryTimeout uint32, dboIsSuperuser bool, enableTlsCert bool, image string, cpuRequestsPercentage int) (*unstructured.Unstructured, error) {
+func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *corev1.ConfigMap, sc string, pgParamBlockList map[string]bool, rbs *BackupConfig, srcDB *Postgres, patroniTTL, patroniLoopWait, patroniRetryTimeout uint32, dboIsSuperuser bool, enableTLSCert bool, image string, cpuRequestsPercentage int, tscEnable bool, tscKey string, tscMaxSkew, tscMinDomains int32) (*unstructured.Unstructured, error) {
 	if z == nil {
 		z = &zalando.Postgresql{}
 	}
@@ -688,8 +687,12 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 	z.Namespace = p.ToPeripheralResourceNamespace()
 	z.Name = p.ToPeripheralResourceName()
 	z.Labels = p.ToZalandoPostgresqlMatchingLabels()
-	// Add the newly introduced label only here, not in  p.ToZalandoPostgresqlMatchingLabels() (so that the selectors using  p.ToZalandoPostgresqlMatchingLabels() will still work until all postgres resources have that new label)
-	// TODO once all the custom resources have that new label, move this part to p.ToZalandoPostgresqlMatchingLabels()
+	//   Add  the   newly   introduced  label   only   here,  not   in
+	//  p.ToZalandoPostgresqlMatchingLabels() (so  that the  selectors
+	//  using  p.ToZalandoPostgresqlMatchingLabels() will  still  work
+	// until all postgres resources have that new label) TODO once all
+	// the  custom resources have  that new  label, move this  part to
+	// p.ToZalandoPostgresqlMatchingLabels()
 	z.Labels[PartitionIDLabelName] = p.Spec.PartitionID
 	// Add the additional version label to the custom resource
 	z.Labels[PostgresVersionLabelName] = p.Spec.Version
@@ -721,12 +724,14 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert to unstructured zalando postgresql: %w", err)
 	}
-	z.Spec.ResourceRequests.CPU = ptr.To(cpuReq)
-	z.Spec.ResourceRequests.Memory = ptr.To(p.Spec.Size.Memory)
-	z.Spec.ResourceLimits.CPU = ptr.To(p.Spec.Size.CPU)
-	z.Spec.ResourceLimits.Memory = ptr.To(p.Spec.Size.Memory)
+
+	z.Spec.ResourceRequests.CPU = new(cpuReq)
+	z.Spec.ResourceRequests.Memory = new(p.Spec.Size.Memory)
+	z.Spec.ResourceLimits.CPU = new(p.Spec.Size.CPU)
+	z.Spec.ResourceLimits.Memory = new(p.Spec.Size.Memory)
 	z.Spec.TeamID = p.generateTeamID()
 	z.Spec.Size = p.Spec.Size.StorageSize
+
 	if p.Spec.StorageClass != nil {
 		z.Spec.StorageClass = *p.Spec.StorageClass
 	} else {
@@ -741,12 +746,12 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 
 	// required with image ermajn/postgres-operator:v1.6.0-20-g1cc71663-dirty
 	// see https://github.com/fi-ts/postgreslet/issues/293
-	z.Spec.EnableConnectionPooler = ptr.To(false)
+	z.Spec.EnableConnectionPooler = new(false)
 
 	prefix := alphaNumericRegExp.ReplaceAllString(string(p.Spec.Tenant), "")
 	prefix = strings.ToLower(prefix)
 	databaseName := prefix + "db01"
-	prepDbName := prefix + "prepdb01"
+	prepDBName := prefix + "prepdb01"
 	ownerName := prefix + "dbo"
 
 	// Create database owner
@@ -766,7 +771,7 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 
 	// Create prepared database
 	z.Spec.PreparedDatabases = make(map[string]zalando.PreparedDatabase)
-	z.Spec.PreparedDatabases[prepDbName] = zalando.PreparedDatabase{
+	z.Spec.PreparedDatabases[prepDBName] = zalando.PreparedDatabase{
 		DefaultUsers: true,
 		Extensions: map[string]string{
 			"pg_partman": "public",
@@ -789,7 +794,10 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 	}
 
 	if p.Spec.PostgresRestore != nil && rbs != nil && srcDB != nil {
-		// make sure there is always a value set. The operator will fall back to CLONE_WITH_BASEBACKUP, which assumes the source db's credentials are existing within the same namespace, which is not the case with the postgreslet.
+		// make  sure there is always  a value set. The  operator will
+		//  fall  back  to CLONE_WITH_BASEBACKUP,  which  assumes  the
+		//  source  db's  credentials  are existing  within  the  same
+		// namespace, which is not the case with the postgreslet.
 		if p.Spec.PostgresRestore.Timestamp == "" {
 			// e.g. 2021-12-07T15:28:00+01:00
 			p.Spec.PostgresRestore.Timestamp = time.Now().Format(zalando_timestamp_format)
@@ -801,7 +809,7 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 			S3Endpoint:        rbs.S3Endpoint,
 			S3AccessKeyId:     rbs.S3AccessKey,
 			S3SecretAccessKey: rbs.S3SecretKey,
-			S3ForcePathStyle:  ptr.To(true),
+			S3ForcePathStyle:  new(true),
 		}
 	} else {
 		// if we don't set the clone block, remove it completely
@@ -821,12 +829,41 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 		}
 	}
 
-	if enableTlsCert {
+	if enableTLSCert {
 		z.Spec.TLS = &zalando.TLSDescription{
 			SecretName: p.ToTLSSecretName(),
 		}
 	} else {
 		z.Spec.TLS = nil
+	}
+
+	if tscEnable {
+		tsc := corev1.TopologySpreadConstraint{
+			MaxSkew:           tscMaxSkew,
+			WhenUnsatisfiable: corev1.ScheduleAnyway,
+			LabelSelector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"application":        "spilo",
+					"cluster-name":       z.Name,
+					NameLabelName:        p.Name,
+					PartitionIDLabelName: p.Spec.PartitionID,
+					ProjectIDLabelName:   p.Spec.ProjectID,
+					TenantLabelName:      p.Spec.Tenant,
+					UIDLabelName:         string(p.UID),
+					"team":               p.generateTeamID(),
+				},
+			},
+			TopologyKey: tscKey,
+		}
+
+		// if defined, set the minDomains (and corresponding whenUnsatisfied) field as well
+		if tscMinDomains > 0 {
+			tsc.MinDomains = &tscMinDomains
+			tsc.WhenUnsatisfiable = corev1.DoNotSchedule
+		}
+
+		// override topology spread constraints
+		z.Spec.TopologySpreadConstraints = []corev1.TopologySpreadConstraint{tsc}
 	}
 
 	jsonZ, err := runtime.DefaultUnstructuredConverter.ToUnstructured(z)

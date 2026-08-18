@@ -471,7 +471,6 @@ func (m *OperatorManager) editConfigMap(cm *corev1.ConfigMap, namespace string, 
 	}
 
 	cm.Data["kubernetes_use_configmaps"] = strconv.FormatBool(options.KubernetesUseConfigMaps)
-
 }
 
 // ensureCleanMetadata ensures obj has clean metadata
