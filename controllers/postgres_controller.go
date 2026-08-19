@@ -114,6 +114,9 @@ type PostgresReconciler struct {
 	WalGExporterCPULimit                string
 	WalGExporterMemoryLimit             string
 	SpiloCpuRequestsPercentage          int
+	EnableTopologySpreadConstraints     bool
+	TscMinDomains, TscMaxSkew           int32
+	TscKey                              string
 }
 
 type PatroniStandbyCluster struct {
@@ -480,7 +483,7 @@ func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context
 			return fmt.Errorf("failed to fetch zalando postgresql: %w", err)
 		}
 
-		u, err := instance.ToUnstructuredZalandoPostgresql(nil, sidecarsCM, r.StorageClass, r.PgParamBlockList, restoreBackupConfig, restoreSourceInstance, patroniTTL, patroniLoopWait, patroniRetryTimeout, r.EnableSuperUserForDBO, r.EnableCustomTLSCert, r.PostgresImage, r.SpiloCpuRequestsPercentage)
+		u, err := instance.ToUnstructuredZalandoPostgresql(nil, sidecarsCM, r.StorageClass, r.PgParamBlockList, restoreBackupConfig, restoreSourceInstance, patroniTTL, patroniLoopWait, patroniRetryTimeout, r.EnableSuperUserForDBO, r.EnableCustomTLSCert, r.PostgresImage, r.SpiloCpuRequestsPercentage, r.EnableTopologySpreadConstraints, r.TscKey, r.TscMaxSkew, r.TscMinDomains)
 		if err != nil {
 			return fmt.Errorf("failed to convert to unstructured zalando postgresql: %w", err)
 		}
@@ -496,7 +499,7 @@ func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context
 	// Update zalando postgresql
 	mergeFrom := client.MergeFrom(rawZ.DeepCopy())
 
-	u, err := instance.ToUnstructuredZalandoPostgresql(rawZ, sidecarsCM, r.StorageClass, r.PgParamBlockList, restoreBackupConfig, restoreSourceInstance, patroniTTL, patroniLoopWait, patroniRetryTimeout, r.EnableSuperUserForDBO, r.EnableCustomTLSCert, r.PostgresImage, r.SpiloCpuRequestsPercentage)
+	u, err := instance.ToUnstructuredZalandoPostgresql(rawZ, sidecarsCM, r.StorageClass, r.PgParamBlockList, restoreBackupConfig, restoreSourceInstance, patroniTTL, patroniLoopWait, patroniRetryTimeout, r.EnableSuperUserForDBO, r.EnableCustomTLSCert, r.PostgresImage, r.SpiloCpuRequestsPercentage, r.EnableTopologySpreadConstraints, r.TscKey, r.TscMaxSkew, r.TscMinDomains)
 	if err != nil {
 		return fmt.Errorf("failed to convert to unstructured zalando postgresql: %w", err)
 	}

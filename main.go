@@ -98,6 +98,7 @@ const (
 	podAntiaffinityPreferredDuringSchedulingFlg = "pod-antiaffinity-preferred-during-scheduling"
 	podAntiaffinityTopologyKeyFlg               = "pod-antiaffinity-topology-key"
 	enablePodTopologySpreadConstraintWebhookFlg = "enable-pod-topology-spread-constraint-webhook"
+	enablePodTopologySpreadConstraintFlg        = "enable-pod-topology-spread-constraint"
 	podTopologySpreadConstraintTopologyKeyFlg   = "pod-topology-spread-constraint-topology-key"
 	podTopologySpreadConstraintMaxSkewFlg       = "pod-topology-spread-constraint-max-skew"
 	podTopologySpreadConstraintMinDomainsFlg    = "pod-topology-spread-constraint-min-domains"
@@ -173,6 +174,7 @@ func main() {
 		enableWalGExporter                       bool
 		podAntiaffinityPreferredDuringScheduling bool
 		enablePodTopologySpreadConstraintWebhook bool
+		enablePodTopologySpreadConstraint        bool
 		enableSpiloReadinessProbe                bool
 		enableKubernetesUseConfigMaps            bool
 
@@ -369,6 +371,15 @@ func main() {
 
 	viper.SetDefault(enablePodTopologySpreadConstraintWebhookFlg, false)
 	enablePodTopologySpreadConstraintWebhook = viper.GetBool(enablePodTopologySpreadConstraintWebhookFlg)
+
+	viper.SetDefault(enablePodTopologySpreadConstraintFlg, false)
+	enablePodTopologySpreadConstraint = viper.GetBool(enablePodTopologySpreadConstraintFlg)
+
+	if !strings.Contains(operatorImage, `:v2`) && enablePodTopologySpreadConstraint {
+		setupLog.Error(nil, fmt.Sprintf("Flag %s not supported with postgres operator v1, use %s instead, exiting.", enablePodTopologySpreadConstraintFlg, enablePodTopologySpreadConstraintWebhookFlg))
+		os.Exit(1)
+	}
+
 	viper.SetDefault(podTopologySpreadConstraintTopologyKeyFlg, "machine.metal-stack.io/rack")
 	podTopologySpreadConstraintTopologyKey = viper.GetString(podTopologySpreadConstraintTopologyKeyFlg)
 	viper.SetDefault(podTopologySpreadConstraintMaxSkewFlg, 1)
@@ -437,6 +448,7 @@ func main() {
 		walGExporterCPULimitFlg, walGExporterCPULimit,
 		walGExporterMemoryLimitFlg, walGExporterMemoryLimit,
 		enablePodTopologySpreadConstraintWebhookFlg, enablePodTopologySpreadConstraintWebhook,
+		enablePodTopologySpreadConstraintFlg, enablePodTopologySpreadConstraint,
 		podTopologySpreadConstraintTopologyKeyFlg, podTopologySpreadConstraintTopologyKey,
 		podTopologySpreadConstraintMaxSkewFlg, podTopologySpreadConstraintMaxSkew,
 		podTopologySpreadConstraintMinDomainsFlg, podTopologySpreadConstraintMinDomains,
@@ -570,6 +582,10 @@ func main() {
 		WalGExporterCPULimit:                walGExporterCPULimit,
 		WalGExporterMemoryLimit:             walGExporterMemoryLimit,
 		SpiloCpuRequestsPercentage:          spiloCpuRequestsPercentage,
+		EnableTopologySpreadConstraints:     enablePodTopologySpreadConstraint,
+		TscKey:                              podTopologySpreadConstraintTopologyKey,
+		TscMaxSkew:                          podTopologySpreadConstraintMaxSkew,
+		TscMinDomains:                       podTopologySpreadConstraintMinDomains,
 	}).SetupWithManager(ctrlPlaneClusterMgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Postgres")
 		os.Exit(1)

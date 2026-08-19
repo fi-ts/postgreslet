@@ -829,6 +829,35 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 		z.Spec.TLS = nil
 	}
 
+	if tscEnable {
+		tsc := corev1.TopologySpreadConstraint{
+			MaxSkew:           tscMaxSkew,
+			WhenUnsatisfiable: corev1.ScheduleAnyway,
+			LabelSelector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"application":        "spilo",
+					"cluster-name":       z.Name,
+					NameLabelName:        p.Name,
+					PartitionIDLabelName: p.Spec.PartitionID,
+					ProjectIDLabelName:   p.Spec.ProjectID,
+					TenantLabelName:      p.Spec.Tenant,
+					UIDLabelName:         string(p.UID),
+					"team":               p.generateTeamID(),
+				},
+			},
+			TopologyKey: tscKey,
+		}
+
+		// if defined, set the minDomains (and corresponding whenUnsatisfied) field as well
+		if tscMinDomains > 0 {
+			tsc.MinDomains = &tscMinDomains
+			tsc.WhenUnsatisfiable = corev1.DoNotSchedule
+		}
+
+		// override topology spread constraints
+		z.Spec.TopologySpreadConstraints = []corev1.TopologySpreadConstraint{tsc}
+	}
+
 	jsonZ, err := runtime.DefaultUnstructuredConverter.ToUnstructured(z)
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert to unstructured zalando postgresql: %w", err)
