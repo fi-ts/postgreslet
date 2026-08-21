@@ -23,6 +23,15 @@
       ],
     },
     {
+      // The zalando postgres-operator is both a go dependency and the source
+      // of the YAML manifests downloaded via the Makefile
+      groupName: "zalando postgres-operator",
+      matchPackageNames: [
+        "github.com/zalando/postgres-operator",
+        "zalando/postgres-operator",
+      ],
+    },
+    {
       // Combine github actions updates
       groupName: "github-actions",
       matchManagers: ["github-actions"],
