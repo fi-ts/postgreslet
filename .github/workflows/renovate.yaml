@@ -5,6 +5,9 @@ on:
   schedule:
     # Every day at 04:00 UTC.
     - cron: '0 4 * * *'
+  push:
+    branches:
+      - feat/renovate
   workflow_dispatch:
     inputs:
       logLevel:
@@ -29,12 +32,16 @@ jobs:
   renovate:
     runs-on: ubuntu-latest
     permissions:
-      pull-requests: write
       contents: read
+      pull-requests: read
     steps:
+      # Only required for testing on push
+      - name: Checkout
+        uses: actions/checkout@v4
       - name: Renovate
         uses: renovatebot/github-action@v46.2.2
-        with: {}
+        with:
+          configurationFile: .github/renovate.json5
           # Needs a PAT (repo + workflow scope) or a GitHub App token, not the
           # default GITHUB_TOKEN: that one may neither update files below
           # .github/workflows nor trigger the CI workflows on the PRs it opens.
@@ -42,8 +49,9 @@ jobs:
           # token: ${{ secrets.RENOVATE_TOKEN }}
         env:
           RENOVATE_REPOSITORIES: ${{ github.repository }}
-          # Configuration lives in .github/renovate.json5, no onboarding PR.
+          RENOVATE_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RENOVATE_ONBOARDING: 'false'
-          RENOVATE_REQUIRE_CONFIG: 'required'
-          RENOVATE_DRY_RUN: ${{ inputs.dryRun && 'full' || 'null' }}
+          RENOVATE_REQUIRE_CONFIG: ${{ github.event_name == 'push' && 'optional' || 'required' }}
+          RENOVATE_BASE_BRANCH_PATTERNS: ${{ github.event_name == 'push' && github.ref_name || '' }}
+          RENOVATE_DRY_RUN: ${{ github.event_name == 'push' && 'full' || (inputs.dryRun && 'full' || 'null') }}
           LOG_LEVEL: ${{ inputs.logLevel || 'info' }}
