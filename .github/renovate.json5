@@ -13,9 +13,11 @@
       matchPackageNames: ["go", "golang"],
     },
     {
-      // Make sure the K8s library versions line up
+      // Make sure the K8s library versions line up. Consciously not scoped to
+      // matchManagers "gomod": controller-tools is pinned in the Makefile and
+      // picked up by the custom manager below, so a gomod scope would leave it
+      // out of the group
       groupName: "kubernetes",
-      matchManagers: ["gomod"],
       matchPackageNames: [
         "k8s.io/**",
         "sigs.k8s.io/controller-runtime",
