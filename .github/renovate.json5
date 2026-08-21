@@ -1,0 +1,43 @@
+{
+  $schema: "https://docs.renovatebot.com/renovate-schema.json",
+  extends: [
+    "config:recommended",
+  ],
+  labels: ["dependencies"],
+  postUpdateOptions: ["gomodTidy"],
+  packageRules: [
+    {
+      // Make sure to update go in the Makefile, go.mod and workflows 
+      groupName: "golang",
+      matchDatasources: ["docker", "golang-version"],
+      matchPackageNames: ["go", "golang"],
+    },
+    {
+      // Make sure the K8s library versions line up
+      groupName: "kubernetes",
+      matchManagers: ["gomod"],
+      matchPackageNames: [
+        "k8s.io/**",
+        "sigs.k8s.io/controller-runtime",
+        "sigs.k8s.io/controller-tools",
+      ],
+    },
+    {
+      // Combine github actions updates
+      groupName: "github-actions",
+      matchManagers: ["github-actions"],
+    },
+  ],
+  customManagers: [
+    {
+      // Tool versions pinned in the Makefile, annotated with
+      // "# renovate: datasource=... depName=..." right above them.
+      // Stolen from https://docs.renovatebot.com/presets-customManagers/
+      customType: "regex",
+      managerFilePatterns: ["/^Makefile$/"],
+      matchStrings: [
+        "#\\s*renovate:\\s*datasource=(?<datasource>\\S+)\\s+depName=(?<depName>\\S+)(?:\\s+versioning=(?<versioning>\\S+))?(?:\\s+extractVersion=(?<extractVersion>\\S+))?\\s*\\n\\s*[A-Z_]+\\s*[:?]?=\\s*(?<currentValue>\\S+)",
+      ],
+    },
+  ],
+}
