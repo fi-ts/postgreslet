@@ -12,11 +12,6 @@ require (
 	github.com/onsi/gomega v1.39.0
 	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.80.1
 	github.com/spf13/viper v1.20.0-alpha.6
-	// This is a pseudo-version pinning zalando/postgres-operator v2.0.1,
-	// since upstream did not adjust the name of the go module when releasing v2
-	// Upstream Issue: https://github.com/zalando/postgres-operator/issues/3155
-	// PR: https://github.com/zalando/postgres-operator/pull/3156
-	github.com/zalando/postgres-operator v1.15.2-0.20260729085100-a2585e3ee147
 	k8s.io/api v0.36.1
 	k8s.io/apiextensions-apiserver v0.36.1
 	k8s.io/apimachinery v0.36.1
@@ -62,6 +57,7 @@ require (
 	github.com/spf13/pflag v1.0.9 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
+	github.com/zalando/postgres-operator/v2 v2.0.2 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.27.1 // indirect
 	go.yaml.in/yaml/v2 v2.4.3 // indirect
