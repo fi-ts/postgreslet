@@ -1,0 +1,13 @@
+kind: Deployment
+metadata:
+  name: postgres-operator
+spec:
+  template:
+    spec:
+      containers:
+        - securityContext:
+            seccompProfile:
+              type: RuntimeDefault
+            capabilities:
+              drop:
+                - ALL

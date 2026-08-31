@@ -11,7 +11,7 @@ import (
 	firewall "github.com/metal-stack/firewall-controller/v2/api/v1"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
+	zalando "github.com/zalando/postgres-operator/v2/pkg/apis/acid.zalan.do/v1"
 	core "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 )

@@ -17,7 +17,7 @@ import (
 
 	"github.com/metal-stack/v"
 	coreosv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
-	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
+	zalando "github.com/zalando/postgres-operator/v2/pkg/apis/acid.zalan.do/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"

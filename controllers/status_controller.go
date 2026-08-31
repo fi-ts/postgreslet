@@ -22,7 +22,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
-	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
+	zalando "github.com/zalando/postgres-operator/v2/pkg/apis/acid.zalan.do/v1"
 
 	pg "github.com/fi-ts/postgreslet/api/v1"
 )

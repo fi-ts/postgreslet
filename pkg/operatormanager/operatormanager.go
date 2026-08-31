@@ -17,7 +17,7 @@ import (
 
 	pg "github.com/fi-ts/postgreslet/api/v1"
 	"github.com/go-logr/logr"
-	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
+	zalando "github.com/zalando/postgres-operator/v2/pkg/apis/acid.zalan.do/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"

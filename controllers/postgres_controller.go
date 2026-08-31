@@ -23,7 +23,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	zalando "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
+	zalando "github.com/zalando/postgres-operator/v2/pkg/apis/acid.zalan.do/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -750,7 +750,7 @@ func (r *PostgresReconciler) getStandbyEnvs(ctx context.Context, p *pg.Postgres)
 	}
 	primaryS3url, err := url.Parse(primaryBackupConfig.S3Endpoint)
 	if err != nil {
-		r.recorder.Eventf(primary, "Warning", "Error", "error while parsing the s3 endpoint url in the backup secret: %w", err)
+		r.recorder.Eventf(primary, "Warning", "Error", "error while parsing the s3 endpoint url in the backup secret: %v", err)
 
 		return standbyEnvs
 	}
