@@ -680,7 +680,7 @@ func (p *Postgres) ToPeripheralResourceLookupKey() types.NamespacedName {
 	}
 }
 
-func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *corev1.ConfigMap, sc string, pgParamBlockList map[string]bool, rbs *BackupConfig, srcDB *Postgres, patroniTTL, patroniLoopWait, patroniRetryTimeout uint32, dboIsSuperuser bool, enableTlsCert bool, image string, cpuRequestsPercentage int) (*unstructured.Unstructured, error) {
+func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *corev1.ConfigMap, sc string, pgParamBlockList map[string]bool, rbs *BackupConfig, srcDB *Postgres, patroniTTL, patroniLoopWait, patroniRetryTimeout uint32, dboIsSuperuser bool, enableTlsCert bool, image string, cpuRequestsPercentage int, tscEnable bool, tscKey string, tscMaxSkew, tscMinDomains int32) (*unstructured.Unstructured, error) {
 	if z == nil {
 		z = &zalando.Postgresql{}
 	}
@@ -827,6 +827,35 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 		}
 	} else {
 		z.Spec.TLS = nil
+	}
+
+	if tscEnable {
+		tsc := corev1.TopologySpreadConstraint{
+			MaxSkew:           tscMaxSkew,
+			WhenUnsatisfiable: corev1.ScheduleAnyway,
+			LabelSelector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"application":        "spilo",
+					"cluster-name":       z.Name,
+					NameLabelName:        p.Name,
+					PartitionIDLabelName: p.Spec.PartitionID,
+					ProjectIDLabelName:   p.Spec.ProjectID,
+					TenantLabelName:      p.Spec.Tenant,
+					UIDLabelName:         string(p.UID),
+					"team":               p.generateTeamID(),
+				},
+			},
+			TopologyKey: tscKey,
+		}
+
+		// if defined, set the minDomains (and corresponding whenUnsatisfied) field as well
+		if tscMinDomains > 0 {
+			tsc.MinDomains = &tscMinDomains
+			tsc.WhenUnsatisfiable = corev1.DoNotSchedule
+		}
+
+		// override topology spread constraints
+		z.Spec.TopologySpreadConstraints = []corev1.TopologySpreadConstraint{tsc}
 	}
 
 	jsonZ, err := runtime.DefaultUnstructuredConverter.ToUnstructured(z)
