@@ -16,8 +16,14 @@
       // Make sure the K8s library versions line up. Consciously not scoped to
       // matchManagers "gomod": controller-tools is pinned in the Makefile and
       // picked up by the custom manager below, so a gomod scope would leave it
-      // out of the group
-      groupName: "kubernetes",
+      // out of the group.
+      // The group name deliberately matches the "kubernetes monorepo" group
+      // that config:recommended (group:monorepos) creates for k8s.io/api,
+      // apiextensions-apiserver, apimachinery and client-go. That built-in rule
+      // wins over this one for those four packages, so using the same name is
+      // what keeps them in one group together with the rest below instead of
+      // splitting into renovate/kubernetes and renovate/kubernetes-monorepo
+      groupName: "kubernetes monorepo",
       matchPackageNames: [
         "k8s.io/**",
         "sigs.k8s.io/controller-runtime",
