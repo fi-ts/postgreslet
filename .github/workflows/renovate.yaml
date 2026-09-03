@@ -1,0 +1,58 @@
+---
+name: Renovate
+
+on:
+  schedule:
+    # Every day at 04:00 UTC.
+    - cron: '0 4 * * *'
+  push:
+    branches:
+      - feat/renovate
+  workflow_dispatch:
+    inputs:
+      logLevel:
+        description: 'Renovate log level'
+        required: false
+        default: 'info'
+        type: choice
+        options:
+          - info
+          - debug
+      dryRun:
+        description: 'Run without creating branches, PRs or issues'
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: renovate
+  cancel-in-progress: false
+
+jobs:
+  renovate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Get token
+        id: get_token
+        uses: actions/create-github-app-token@v1
+        with:
+          private-key: ${{ secrets.RENOVATE_APP_PRIVATE_KEY }}
+          app-id: ${{ secrets.RENOVATE_APP_CLIENT_ID }}
+      # Only required for testing on push
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Renovate
+        uses: renovatebot/github-action@v46.2.2
+        with:
+          configurationFile: .github/renovate.json5
+          token: '${{ steps.get_token.outputs.token }}'
+        env:
+          RENOVATE_REPOSITORIES: ${{ github.repository }}
+          RENOVATE_ONBOARDING: 'false'
+          RENOVATE_REQUIRE_CONFIG: ${{ github.event_name == 'push' && 'optional' || 'required' }}
+          RENOVATE_BASE_BRANCH_PATTERNS: ${{ github.event_name == 'push' && github.ref_name || '' }}
+          RENOVATE_DRY_RUN: ${{ github.event_name == 'push' && 'full' || (inputs.dryRun && 'full' || 'null') }}
+          LOG_LEVEL: ${{ inputs.logLevel || 'info' }}

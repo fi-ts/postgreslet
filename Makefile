@@ -16,9 +16,11 @@ BUILDDATE := $(shell date -Iseconds)
 VERSION := $(or ${DOCKER_TAG},latest)
 LOCALBIN ?= $(shell pwd)/bin
 CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
+# renovate: datasource=go depName=sigs.k8s.io/controller-tools
 CONTROLLER_TOOLS_VERSION ?= v0.21.0
 
 # Postgres operator variables for YAML download
+# renovate: datasource=github-releases depName=zalando/postgres-operator
 POSTGRES_OPERATOR_VERSION ?= v2.0.2
 POSTGRES_OPERATOR_URL ?= https://raw.githubusercontent.com/zalando/postgres-operator/$(POSTGRES_OPERATOR_VERSION)/manifests
 POSTGRES_CRD_URL ?= https://raw.githubusercontent.com/zalando/postgres-operator/$(POSTGRES_OPERATOR_VERSION)/charts/postgres-operator/crds/postgresqls.yaml
@@ -191,6 +193,7 @@ localkube-install-crd-cwnp:
 crd-cwnp-for-testing:
 	curl https://raw.githubusercontent.com/metal-stack/firewall-controller/master/config/crd/bases/metal-stack.io_clusterwidenetworkpolicies.yaml -o external/test/crd-clusterwidenetworkpolicy.yaml
 
+# renovate: datasource=github-releases depName=kubernetes-sigs/kubebuilder extractVersion=^v(?<version>.*)$
 KUBEBUILDER_VERSION:=3.2.0
 kubebuilder:
 ifeq (,$(wildcard ~/.kubebuilder/${KUBEBUILDER_VERSION}))
