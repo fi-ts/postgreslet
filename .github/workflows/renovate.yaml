@@ -35,6 +35,12 @@ jobs:
       contents: read
       pull-requests: read
     steps:
+      - name: Get token
+        id: get_token
+        uses: actions/create-github-app-token@v1
+        with:
+          private-key: ${{ secrets.RENOVATE_APP_PRIVATE_KEY }}
+          app-id: ${{ secrets.RENOVATE_APP_CLIENT_ID }}
       # Only required for testing on push
       - name: Checkout
         uses: actions/checkout@v4
@@ -42,14 +48,9 @@ jobs:
         uses: renovatebot/github-action@v46.2.2
         with:
           configurationFile: .github/renovate.json5
-          # Needs a PAT (repo + workflow scope) or a GitHub App token, not the
-          # default GITHUB_TOKEN: that one may neither update files below
-          # .github/workflows nor trigger the CI workflows on the PRs it opens.
-          # Currently disabled for testing purposes
-          # token: ${{ secrets.RENOVATE_TOKEN }}
+          token: '${{ steps.get_token.outputs.token }}'
         env:
           RENOVATE_REPOSITORIES: ${{ github.repository }}
-          RENOVATE_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RENOVATE_ONBOARDING: 'false'
           RENOVATE_REQUIRE_CONFIG: ${{ github.event_name == 'push' && 'optional' || 'required' }}
           RENOVATE_BASE_BRANCH_PATTERNS: ${{ github.event_name == 'push' && github.ref_name || '' }}
