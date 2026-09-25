@@ -3,6 +3,10 @@
   extends: [
     "config:recommended",
   ],
+  // We define a wider Kubernetes group below. Excluding Renovate's built-in
+  // Kubernetes monorepo group prevents the same update from being assigned to
+  // both groups and producing overlapping branches/PRs.
+  ignorePresets: ["group:kubernetesMonorepo"],
   labels: ["dependencies"],
   postUpdateOptions: ["gomodTidy"],
   packageRules: [
@@ -13,17 +17,12 @@
       matchPackageNames: ["go", "golang"],
     },
     {
-      // Make sure the K8s library versions line up. Consciously not scoped to
+      // Keep the K8s library versions aligned. Consciously not scoped to
       // matchManagers "gomod": controller-tools is pinned in the Makefile and
       // picked up by the custom manager below, so a gomod scope would leave it
       // out of the group.
-      // The group name deliberately matches the "kubernetes monorepo" group
-      // that config:recommended (group:monorepos) creates for k8s.io/api,
-      // apiextensions-apiserver, apimachinery and client-go. That built-in rule
-      // wins over this one for those four packages, so using the same name is
-      // what keeps them in one group together with the rest below instead of
-      // splitting into renovate/kubernetes and renovate/kubernetes-monorepo
-      groupName: "kubernetes monorepo",
+      groupName: "kubernetes",
+      groupSlug: "kubernetes",
       matchPackageNames: [
         "k8s.io/**",
         "sigs.k8s.io/controller-runtime",
