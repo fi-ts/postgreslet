@@ -189,7 +189,7 @@ crd-cwnp-for-testing:
 	curl https://raw.githubusercontent.com/metal-stack/firewall-controller/master/config/crd/bases/metal-stack.io_clusterwidenetworkpolicies.yaml -o external/test/crd-clusterwidenetworkpolicy.yaml
 
 # renovate: datasource=github-releases depName=kubernetes-sigs/kubebuilder extractVersion=^v(?<version>.*)$
-KUBEBUILDER_VERSION:=3.2.0
+KUBEBUILDER_VERSION:=3.15.1
 kubebuilder:
 ifeq (,$(wildcard ~/.kubebuilder/${KUBEBUILDER_VERSION}))
 	{ \
