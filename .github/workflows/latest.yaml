@@ -20,7 +20,7 @@ jobs:
         password: ${{ secrets.DOCKER_REGISTRY_TOKEN }}
 
     - name: Ensure Go Version
-      uses: actions/setup-go@v4
+      uses: actions/setup-go@v5
       with:
         go-version-file: 'go.mod'
 
