@@ -5,9 +5,6 @@ on:
   schedule:
     # Every day at 04:00 UTC.
     - cron: '0 4 * * *'
-  push:
-    branches:
-      - feat/renovate
   workflow_dispatch:
     inputs:
       logLevel:
@@ -46,7 +43,6 @@ jobs:
         env:
           RENOVATE_REPOSITORIES: ${{ github.repository }}
           RENOVATE_ONBOARDING: 'false'
-          RENOVATE_REQUIRE_CONFIG: ${{ github.event_name == 'push' && 'optional' || 'required' }}
+          RENOVATE_REQUIRE_CONFIG: 'required'
           RENOVATE_BASE_BRANCH_PATTERNS: ${{ github.ref_name }}
-          RENOVATE_DRY_RUN: 'full'
           LOG_LEVEL: ${{ inputs.logLevel || 'info' }}
