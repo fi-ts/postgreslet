@@ -189,18 +189,17 @@ crd-cwnp-for-testing:
 	curl https://raw.githubusercontent.com/metal-stack/firewall-controller/master/config/crd/bases/metal-stack.io_clusterwidenetworkpolicies.yaml -o external/test/crd-clusterwidenetworkpolicy.yaml
 
 # renovate: datasource=github-releases depName=kubernetes-sigs/kubebuilder extractVersion=^v(?<version>.*)$
-KUBEBUILDER_VERSION:=3.2.0
-kubebuilder:
-ifeq (,$(wildcard ~/.kubebuilder/${KUBEBUILDER_VERSION}))
-	{ \
-	os=$$(go env GOOS) ;\
-	arch=$$(go env GOARCH) ;\
-	curl -L https://go.kubebuilder.io/dl/${KUBEBUILDER_VERSION}/$${os}/$${arch} | tar -xz -C /tmp/ ;\
-	mv /tmp/kubebuilder_${KUBEBUILDER_VERSION}_$${os}_$${arch}/bin/* ${GOBIN} ;\
-	mkdir -p ~/.kubebuilder ;\
-	touch ~/.kubebuilder/${KUBEBUILDER_VERSION} ;\
-	}
-endif
+KUBEBUILDER_VERSION:=3.15.1
+kubebuilder: | $(LOCALBIN)
+	set -eu; \
+	os=$$(go env GOOS); \
+	arch=$$(go env GOARCH); \
+	tmp="$(LOCALBIN)/kubebuilder.tmp"; \
+	curl --fail --location --silent --show-error \
+		"https://github.com/kubernetes-sigs/kubebuilder/releases/download/v$(KUBEBUILDER_VERSION)/kubebuilder_$${os}_$${arch}" \
+		--output "$$tmp"; \
+	chmod +x "$$tmp"; \
+	mv "$$tmp" "$(LOCALBIN)/kubebuilder"
 
 kubebuilder-version-ci:
 	@echo ${KUBEBUILDER_VERSION}
