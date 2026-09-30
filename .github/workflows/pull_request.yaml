@@ -25,32 +25,6 @@ jobs:
         only-new-issues: true
         args: --timeout=5m
 
-    - name: Get Kubebuilder Version
-      id: get-kubebuilder-version
-      run: echo "version=$(make kubebuilder-version-ci)" >> $GITHUB_OUTPUT
-      shell: bash
-
-    - name: Ensure etcd
-      id: Ensure-etcd
-      uses: actions/cache@v4
-      with:
-        path: ~/go/bin/etcd
-        key: ${{ runner.os }}-kubebuilder-${{ steps.get-kubebuilder-version.outputs.version }}-etcd
-
-    - name: Ensure kube-apiserver
-      id: ensure-kube-apiserver
-      uses: actions/cache@v4
-      with:
-        path: ~/go/bin/kube-apiserver
-        key: ${{ runner.os }}-kubebuilder-${{ steps.get-kubebuilder-version.outputs.version }}-kube-apiserver
-
-    - name: Ensure Kubebuilder Metadata
-      id: ensure-kubebuilder-metadata
-      uses: actions/cache@v4
-      with:
-        path: ~/.kubebuilder/${{ steps.get-kubebuilder-version.outputs.version }}
-        key: ${{ runner.os }}-kubebuilder-${{ steps.get-kubebuilder-version.outputs.version }}
-
     - name: Install Kubebuilder
       run: make kubebuilder
 
