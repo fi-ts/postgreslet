@@ -19,6 +19,7 @@ import (
 )
 
 func Test_setSharedBufferSize(t *testing.T) {
+	t.Parallel()
 
 	tests := []struct {
 		name     string
@@ -73,6 +74,8 @@ func Test_setSharedBufferSize(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			parameters := map[string]string{}
 
 			setSharedBufferSize(parameters, tt.input)
@@ -92,6 +95,8 @@ func Test_setSharedBufferSize(t *testing.T) {
 }
 
 func TestPostgres_generateTeamID(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name      string
 		projectID string
@@ -131,6 +136,8 @@ func TestPostgres_generateTeamID(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			dnsRegExp := regexp.MustCompile("^[a-z]([-a-z0-9]*[a-z0-9])?$")
 			p := &Postgres{
 				Spec: PostgresSpec{
@@ -145,6 +152,8 @@ func TestPostgres_generateTeamID(t *testing.T) {
 	}
 }
 func TestPostgres_ToPeripheralResourceName(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name         string
 		projectID    string
@@ -193,6 +202,8 @@ func TestPostgres_ToPeripheralResourceName(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			dnsRegExp := regexp.MustCompile("^[a-z]([-a-z0-9]*[a-z0-9])?$")
 			p := &Postgres{
 				ObjectMeta: v1.ObjectMeta{
@@ -218,6 +229,8 @@ func TestPostgres_ToPeripheralResourceName(t *testing.T) {
 }
 
 func TestPostgresRestoreTimestamp_ToUnstructuredZalandoPostgresql(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name             string
 		spec             PostgresSpec
@@ -376,6 +389,8 @@ func TestPostgresRestoreTimestamp_ToUnstructuredZalandoPostgresql(t *testing.T) 
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			p := &Postgres{
 				Spec: tt.spec,
 			}
@@ -397,6 +412,7 @@ func TestPostgresRestoreTimestamp_ToUnstructuredZalandoPostgresql(t *testing.T) 
 }
 
 func Test_calculateCPURequests(t *testing.T) {
+	t.Parallel()
 
 	tests := []struct {
 		name            string
@@ -443,6 +459,8 @@ func Test_calculateCPURequests(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			p := &Postgres{
 				Spec: PostgresSpec{
 					ProjectID: tt.name,
@@ -463,6 +481,8 @@ func Test_calculateCPURequests(t *testing.T) {
 }
 
 func Test_sanitizeLabelValue(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name string // description of this test case
 		v    string
@@ -501,6 +521,8 @@ func Test_sanitizeLabelValue(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			got := sanitizeLabelValue(tt.v)
 			if got != tt.want {
 				t.Errorf("sanitizeLabelValue() = %v, want %v", got, tt.want)
