@@ -170,7 +170,7 @@ func createCredentialSecrets() {
 
 	users := []string{"postgres", "standby"}
 	for i := range users {
-		bytes, err := os.ReadFile(filepath.Join(externalYAMLDirTest, string("secret-credential-"+users[i]+".yaml")))
+		bytes, err := os.ReadFile(filepath.Join(externalYAMLDirTest, "secret-credential-"+users[i]+".yaml"))
 		Expect(err).ToNot(HaveOccurred())
 		s := &core.Secret{}
 		Expect(yaml.Unmarshal(bytes, s)).Should(Succeed())
