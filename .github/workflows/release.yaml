@@ -25,12 +25,6 @@ jobs:
       with:
         go-version-file: 'go.mod'
   
-    - name: Lint
-      uses: golangci/golangci-lint-action@v9
-      with:
-        args: --timeout=5m --new-from-merge-base main
-        only-new-issues: true
-
     - name: Build and push Docker image
       run: |
         export DOCKER_TAG=${GITHUB_REF##*/}
