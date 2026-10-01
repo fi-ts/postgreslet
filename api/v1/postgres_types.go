@@ -407,12 +407,13 @@ func (p *Postgres) ToSharedSvcLB(lbIP string, lbPort int32, enableStandbyLeaderS
 	if p.IsReplicationPrimaryOrStandalone() {
 		lb.Spec.Selector[SpiloRoleLabelName] = SpiloRoleLabelValueMaster
 	} else {
-		if enableStandbyLeaderSelector {
+		switch {
+		case enableStandbyLeaderSelector:
 			// Only set this value when we are NOT a primary and the StandbyLeaderSelector is enabled.
 			lb.Spec.Selector[SpiloRoleLabelName] = SpiloRoleLabelValueStandbyLeader
-		} else if enableLegacyStandbySelector {
+		case enableLegacyStandbySelector:
 			lb.Spec.Selector[SpiloRoleLabelName] = SpiloRoleLabelValueMaster
-		} else {
+		default:
 			// select the first pod in the statefulset
 			lb.Spec.Selector[StatefulsetPodNameLabelName] = p.ToPeripheralResourceName() + "-0"
 		}

@@ -84,13 +84,14 @@ func (m *LBManager) CreateOrUpdateSharedSvcLB(ctx context.Context, in *api.Postg
 			return fmt.Errorf("failed to get a free port for creating Service of type LoadBalancer: %w", err)
 		}
 		var lbIPToUse string
-		if m.options.LBIP != "" {
+		switch {
+		case m.options.LBIP != "":
 			// a specific IP was configured in the config, so use that one
 			lbIPToUse = m.options.LBIP
-		} else if existingLBIP != "" {
+		case existingLBIP != "":
 			// no ip was configured, but one is already in use, so use the existing one
 			lbIPToUse = existingLBIP
-		} else {
+		default:
 			// nothing was configured, nothing exists yet, so use an empty address so a new loadbalancer will be created and assigned
 			lbIPToUse = ""
 		}
