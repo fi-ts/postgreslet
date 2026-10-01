@@ -189,7 +189,7 @@ func (m *LBManager) DeleteSharedSvcLB(ctx context.Context, in *api.Postgres) err
 	lb.Namespace = in.ToPeripheralResourceNamespace()
 	lb.Name = in.ToSharedSvcLBName()
 
-	// nolint:wrapcheck
+	//nolint:wrapcheck
 	return client.IgnoreNotFound(m.client.Delete(ctx, lb))
 }
 
@@ -199,7 +199,7 @@ func (m *LBManager) DeleteDedicatedSvcLB(ctx context.Context, in *api.Postgres) 
 	lb.Namespace = in.ToPeripheralResourceNamespace()
 	lb.Name = in.ToDedicatedSvcLBName()
 
-	// nolint:wrapcheck
+	//nolint:wrapcheck
 	return client.IgnoreNotFound(m.client.Delete(ctx, lb))
 }
 
