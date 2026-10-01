@@ -13,6 +13,8 @@ import (
 	"os"
 	"strings"
 
+	"slices"
+
 	pg "github.com/fi-ts/postgreslet/api/v1"
 	"github.com/go-logr/logr"
 	coreosv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
@@ -26,7 +28,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
-	"k8s.io/utils/strings/slices"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 

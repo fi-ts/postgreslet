@@ -84,13 +84,14 @@ func (m *LBManager) CreateOrUpdateSharedSvcLB(ctx context.Context, in *api.Postg
 			return fmt.Errorf("failed to get a free port for creating Service of type LoadBalancer: %w", err)
 		}
 		var lbIPToUse string
-		if m.options.LBIP != "" {
+		switch {
+		case m.options.LBIP != "":
 			// a specific IP was configured in the config, so use that one
 			lbIPToUse = m.options.LBIP
-		} else if existingLBIP != "" {
+		case existingLBIP != "":
 			// no ip was configured, but one is already in use, so use the existing one
 			lbIPToUse = existingLBIP
-		} else {
+		default:
 			// nothing was configured, nothing exists yet, so use an empty address so a new loadbalancer will be created and assigned
 			lbIPToUse = ""
 		}
@@ -148,10 +149,10 @@ func (m *LBManager) CreateOrUpdateDedicatedSvcLB(ctx context.Context, in *api.Po
 
 	sharedSvcLbAlsoEnabled := in.EnableSharedSVCLB(m.options.EnableForceSharedIP)
 
-	new := in.ToDedicatedSvcLB(lbIPToUse, nextFreePort, m.options.StandbyClustersSourceRanges, sharedSvcLbAlsoEnabled)
+	newLb := in.ToDedicatedSvcLB(lbIPToUse, nextFreePort, m.options.StandbyClustersSourceRanges, sharedSvcLbAlsoEnabled)
 	if !m.options.EnableLBSourceRanges {
 		// leave empty / disable source ranges
-		new.Spec.LoadBalancerSourceRanges = []string{}
+		newLb.Spec.LoadBalancerSourceRanges = []string{}
 	}
 
 	existing := &corev1.Service{}
@@ -163,7 +164,7 @@ func (m *LBManager) CreateOrUpdateDedicatedSvcLB(ctx context.Context, in *api.Po
 			return fmt.Errorf("failed to fetch Service of type LoadBalancer: %w", err)
 		}
 
-		if err := m.client.Create(ctx, new); err != nil {
+		if err := m.client.Create(ctx, newLb); err != nil {
 			return fmt.Errorf("failed to create Service of type LoadBalancer: %w", err)
 		}
 
@@ -171,10 +172,10 @@ func (m *LBManager) CreateOrUpdateDedicatedSvcLB(ctx context.Context, in *api.Po
 	}
 
 	// replace the whole spec
-	existing.Spec = new.Spec
+	existing.Spec = newLb.Spec
 
 	// also update the annotations for our custom tls certs
-	existing.Annotations = new.Annotations
+	existing.Annotations = newLb.Annotations
 
 	if err := m.client.Update(ctx, existing); err != nil {
 		return fmt.Errorf("failed to update Service of type LoadBalancer (dedicated): %w", err)
@@ -188,11 +189,9 @@ func (m *LBManager) DeleteSharedSvcLB(ctx context.Context, in *api.Postgres) err
 	lb := &corev1.Service{}
 	lb.Namespace = in.ToPeripheralResourceNamespace()
 	lb.Name = in.ToSharedSvcLBName()
-	if err := m.client.Delete(ctx, lb); client.IgnoreNotFound(err) != nil {
-		return err
-	}
 
-	return nil
+	//nolint:wrapcheck
+	return client.IgnoreNotFound(m.client.Delete(ctx, lb))
 }
 
 // DeleteDedicatedSvcLB Deletes the corresponding Service of type LoadBalancer of the given Postgres resource.
@@ -200,11 +199,9 @@ func (m *LBManager) DeleteDedicatedSvcLB(ctx context.Context, in *api.Postgres) 
 	lb := &corev1.Service{}
 	lb.Namespace = in.ToPeripheralResourceNamespace()
 	lb.Name = in.ToDedicatedSvcLBName()
-	if err := m.client.Delete(ctx, lb); client.IgnoreNotFound(err) != nil {
-		return err
-	}
 
-	return nil
+	//nolint:wrapcheck
+	return client.IgnoreNotFound(m.client.Delete(ctx, lb))
 }
 
 // nextFreeSocket finds any existing LoadBalancerIP and the next free port out of the configure port range.

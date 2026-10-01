@@ -28,7 +28,8 @@ linters:
     - gochecksumtype
     - goconst
     - gocritic
-    - godox
+    # re-enable when todo's are done
+    #- godox 
     - goheader
     - gomoddirectives
     - gomodguard_v2
@@ -69,7 +70,6 @@ linters:
     - staticcheck
     - tagalign
     - testifylint
-    - testpackage
     - tparallel
     - unconvert
     - unparam

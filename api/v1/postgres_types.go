@@ -407,12 +407,13 @@ func (p *Postgres) ToSharedSvcLB(lbIP string, lbPort int32, enableStandbyLeaderS
 	if p.IsReplicationPrimaryOrStandalone() {
 		lb.Spec.Selector[SpiloRoleLabelName] = SpiloRoleLabelValueMaster
 	} else {
-		if enableStandbyLeaderSelector {
+		switch {
+		case enableStandbyLeaderSelector:
 			// Only set this value when we are NOT a primary and the StandbyLeaderSelector is enabled.
 			lb.Spec.Selector[SpiloRoleLabelName] = SpiloRoleLabelValueStandbyLeader
-		} else if enableLegacyStandbySelector {
+		case enableLegacyStandbySelector:
 			lb.Spec.Selector[SpiloRoleLabelName] = SpiloRoleLabelValueMaster
-		} else {
+		default:
 			// select the first pod in the statefulset
 			lb.Spec.Selector[StatefulsetPodNameLabelName] = p.ToPeripheralResourceName() + "-0"
 		}
@@ -611,7 +612,7 @@ func (p *Postgres) generateTeamID() string {
 
 func (p *Postgres) generateDatabaseName() string {
 	// We only want letters and numbers
-	generatedDatabaseName := alphaNumericRegExp.ReplaceAllString(string(p.Spec.Description), "")
+	generatedDatabaseName := alphaNumericRegExp.ReplaceAllString(p.Spec.Description, "")
 
 	// and only lower case
 	generatedDatabaseName = strings.ToLower(generatedDatabaseName)
@@ -623,7 +624,7 @@ func (p *Postgres) generateDatabaseName() string {
 	}
 
 	// Add UID in the mix
-	generatedDatabaseName += alphaNumericRegExp.ReplaceAllString(string(p.Name), "")
+	generatedDatabaseName += alphaNumericRegExp.ReplaceAllString(p.Name, "")
 
 	// Limit to final size
 	// This way, we have at least 5 chars of the uid as part of the database name.
@@ -646,7 +647,7 @@ func (p *Postgres) ToPeripheralResourceNamespace() string {
 	}
 
 	// We only want letters and numbers
-	name := alphaNumericRegExp.ReplaceAllString(string(p.Name), "")
+	name := alphaNumericRegExp.ReplaceAllString(p.Name, "")
 
 	// Limit size
 	maxLen = 20
@@ -659,7 +660,7 @@ func (p *Postgres) ToPeripheralResourceNamespace() string {
 
 func (p *Postgres) ToDNSName(tlsSubDomain string) string {
 	// We only want letters and numbers
-	name := alphaNumericRegExp.ReplaceAllString(string(p.Name), "")
+	name := alphaNumericRegExp.ReplaceAllString(p.Name, "")
 	// Limit size
 	maxLen := 12
 	if len(name) > maxLen {
@@ -743,7 +744,7 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 	// see https://github.com/fi-ts/postgreslet/issues/293
 	z.Spec.EnableConnectionPooler = ptr.To(false)
 
-	prefix := alphaNumericRegExp.ReplaceAllString(string(p.Spec.Tenant), "")
+	prefix := alphaNumericRegExp.ReplaceAllString(p.Spec.Tenant, "")
 	prefix = strings.ToLower(prefix)
 	databaseName := prefix + "db01"
 	prepDbName := prefix + "prepdb01"
@@ -918,7 +919,9 @@ func containsElem(ss []string, s string) bool {
 	return false
 }
 
-func removeElem(ss []string, s string) (out []string) {
+func removeElem(ss []string, s string) []string {
+	out := []string{}
+
 	for _, elem := range ss {
 		if elem == s {
 			continue
@@ -926,7 +929,7 @@ func removeElem(ss []string, s string) (out []string) {
 		out = append(out, elem)
 	}
 
-	return
+	return out
 }
 
 func deleteIfEmpty(json map[string]interface{}, key string) {
@@ -1152,14 +1155,14 @@ func (p *Postgres) calculateCPURequests(c string, percentage int) (string, error
 	// parse the provided cpu quantity
 	cpu, err := resource.ParseQuantity(c)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to convert cpu quantity: %w", err)
 	}
 
 	// convert the cpu quantity to millis
 	milliValue := cpu.MilliValue()
 
 	// calculate the percentage
-	value := int64((milliValue / int64(100)) * int64(percentage))
+	value := (milliValue / int64(100)) * int64(percentage)
 
 	// return the calculated cpu request, making sure it is not higher than the given input value
 	return resource.NewMilliQuantity(min(value, milliValue), resource.BinarySI).String(), nil

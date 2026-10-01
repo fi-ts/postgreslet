@@ -205,6 +205,7 @@ func (m *OperatorManager) IsOperatorInstalled(ctx context.Context, namespace str
 		operatorPodMatchingLabels,
 	}
 	if err := m.client.List(ctx, pods, opts...); err != nil {
+		//nolint:wrapcheck
 		return false, client.IgnoreNotFound(err)
 	}
 	if len(pods.Items) == 0 {
@@ -604,7 +605,7 @@ func (m *OperatorManager) createOrUpdateSidecarsConfig(ctx context.Context, name
 		// configmap with configuration does not exists, nothing we can do here...
 		m.log.Error(err, "could not fetch global config for sidecars", "ns", namespace)
 
-		return err
+		return fmt.Errorf("could not fetch global config for sidecars in namespace %s: %w", namespace, err)
 	}
 
 	// Add our sidecars configmap
@@ -713,6 +714,7 @@ func (m *OperatorManager) UpdateAllManagedOperators(ctx context.Context) error {
 		matchingLabels,
 	}
 	if err := m.client.List(ctx, zList, opts...); err != nil {
+		//nolint:wrapcheck
 		return client.IgnoreNotFound(err)
 	}
 	// update each namespace

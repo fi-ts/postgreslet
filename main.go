@@ -62,7 +62,7 @@ const (
 	etcdHostFlg                                 = "etcd-host"
 	crdRegistrationFlg                          = "enable-crd-registration"
 	operatorImageFlg                            = "operator-image"
-	pgParamBlockListFlg                         = "postgres-param-blocklist" // nolint
+	pgParamBlockListFlg                         = "postgres-param-blocklist"
 	majorVersionUpgradeModeFlg                  = "major-version-upgrade-mode"
 	standbyClustersSourceRangesFlg              = "standby-clusters-source-ranges"
 	postgresletNamespaceFlg                     = "postgreslet-namespace"
@@ -76,7 +76,7 @@ const (
 	deployEtcdFlg                               = "deploy-etcd"
 	etcdImageFlg                                = "etcd-image"
 	etcdBackupSidecarImageFlg                   = "etcd-backup-sidecar-image"
-	etcdBackupSecretNameFlg                     = "etcd-backup-secret-name" // nolint
+	etcdBackupSecretNameFlg                     = "etcd-backup-secret-name" //nolint
 	etcdPSPNameFlg                              = "etcd-psp-name"
 	replicationChangeRequeueTimeFlg             = "replication-change-requeue-time-in-seconds"
 	postgresletFullnameFlg                      = "postgreslet-fullname"
