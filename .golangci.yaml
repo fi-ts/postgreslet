@@ -69,7 +69,6 @@ linters:
     - staticcheck
     - tagalign
     - testifylint
-    - testpackage
     - tparallel
     - unconvert
     - unparam
