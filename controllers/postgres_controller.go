@@ -1190,12 +1190,10 @@ func (r *PostgresReconciler) checkAndUpdatePatroniReplicationConfig(log logr.Log
 
 				return requeueAfterReconcile, r.httpPatchPatroni(log, ctx, instance, leaderIP, synchronousStandbyApplicationName)
 			}
-		} else {
-			if resp.SynchronousNodesAdditional != nil {
-				log.V(debugLogLevel).Info("synchronous_nodes_additional mismatch, updating and requeing", "response", resp)
+		} else if resp.SynchronousNodesAdditional != nil {
+			log.V(debugLogLevel).Info("synchronous_nodes_additional mismatch, updating and requeing", "response", resp)
 
-				return requeueAfterReconcile, r.httpPatchPatroni(log, ctx, instance, leaderIP, nil)
-			}
+			return requeueAfterReconcile, r.httpPatchPatroni(log, ctx, instance, leaderIP, nil)
 		}
 
 	} else {
@@ -1306,9 +1304,11 @@ func (r *PostgresReconciler) httpPatchPatroni(log logr.Logger, ctx context.Conte
 
 	log.V(debugLogLevel).Info("Preparing request")
 	var request PatroniConfig
-	if instance.Spec.PostgresConnection == nil {
+
+	switch {
+	case instance.Spec.PostgresConnection == nil:
 		// use empty config
-	} else if instance.IsReplicationPrimaryOrStandalone() {
+	case instance.IsReplicationPrimaryOrStandalone():
 		request = PatroniConfig{
 			StandbyCluster: nil,
 		}
@@ -1334,7 +1334,7 @@ func (r *PostgresReconciler) httpPatchPatroni(log logr.Logger, ctx context.Conte
 			// disable sync replication
 			request.SynchronousNodesAdditional = nil
 		}
-	} else {
+	default:
 		request = PatroniConfig{
 			StandbyCluster: &PatroniStandbyCluster{
 				CreateReplicaMethods: []string{"basebackup_fast_xlog"},
@@ -1345,6 +1345,7 @@ func (r *PostgresReconciler) httpPatchPatroni(log logr.Logger, ctx context.Conte
 			SynchronousNodesAdditional: nil,
 		}
 	}
+
 	log.V(debugLogLevel).Info("Prepared request", "request", request)
 	jsonReq, err := json.Marshal(request)
 	if err != nil {
