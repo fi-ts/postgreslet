@@ -205,7 +205,7 @@ func (m *OperatorManager) IsOperatorInstalled(ctx context.Context, namespace str
 		operatorPodMatchingLabels,
 	}
 	if err := m.client.List(ctx, pods, opts...); err != nil {
-		// nolint:wrapcheck
+		//nolint:wrapcheck
 		return false, client.IgnoreNotFound(err)
 	}
 	if len(pods.Items) == 0 {
@@ -714,7 +714,7 @@ func (m *OperatorManager) UpdateAllManagedOperators(ctx context.Context) error {
 		matchingLabels,
 	}
 	if err := m.client.List(ctx, zList, opts...); err != nil {
-		// nolint:wrapcheck
+		//nolint:wrapcheck
 		return client.IgnoreNotFound(err)
 	}
 	// update each namespace
