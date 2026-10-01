@@ -1961,7 +1961,9 @@ func (r *PostgresReconciler) removeStorageEncryptionSecretFinalizer(log logr.Log
 	return nil
 }
 
-func removeElem(ss []string, s string) (out []string) {
+func removeElem(ss []string, s string) []string {
+	out := []string{}
+
 	for _, elem := range ss {
 		if elem == s {
 			continue
@@ -1969,7 +1971,7 @@ func removeElem(ss []string, s string) (out []string) {
 		out = append(out, elem)
 	}
 
-	return
+	return out
 }
 
 func (r *PostgresReconciler) ensureInitDBJob(log logr.Logger, ctx context.Context, instance *pg.Postgres) error {

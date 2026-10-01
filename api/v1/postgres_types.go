@@ -918,7 +918,9 @@ func containsElem(ss []string, s string) bool {
 	return false
 }
 
-func removeElem(ss []string, s string) (out []string) {
+func removeElem(ss []string, s string) []string {
+	out := []string{}
+
 	for _, elem := range ss {
 		if elem == s {
 			continue
@@ -926,7 +928,7 @@ func removeElem(ss []string, s string) (out []string) {
 		out = append(out, elem)
 	}
 
-	return
+	return out
 }
 
 func deleteIfEmpty(json map[string]interface{}, key string) {
