@@ -1152,7 +1152,7 @@ func (p *Postgres) calculateCPURequests(c string, percentage int) (string, error
 	// parse the provided cpu quantity
 	cpu, err := resource.ParseQuantity(c)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to convert cpu quantity: %w", err)
 	}
 
 	// convert the cpu quantity to millis
