@@ -939,9 +939,9 @@ func (r *PostgresReconciler) getZalandoPostgresql(ctx context.Context, instance 
 		return nil, err
 	}
 
-	if len := len(items); len > 1 {
-		return nil, fmt.Errorf("error while fetching zalando postgresql: Not unique, got %d results", len)
-	} else if len < 1 {
+	if itemCount := len(items); itemCount > 1 {
+		return nil, fmt.Errorf("error while fetching zalando postgresql: Not unique, got %d results", itemCount)
+	} else if itemCount < 1 {
 		return nil, apierrors.NewNotFound(zalando.Resource("postgresql"), "")
 	}
 
@@ -1605,15 +1605,15 @@ func (r *PostgresReconciler) createOrUpdateNetPol(ctx context.Context, instance 
 
 // createOrUpdateExporterSidecarServices ensures the necessary services to access the sidecars exist
 func (r *PostgresReconciler) createOrUpdateExporterSidecarServices(log logr.Logger, ctx context.Context, namespace string, c *corev1.ConfigMap, in *pg.Postgres) error {
-	pesPort, error := strconv.ParseInt(c.Data[postgresExporterServicePortKeyName], 10, 32)
-	if error != nil {
-		log.Error(error, "postgres-exporter-service-port could not be parsed to int32, falling back to default value")
+	pesPort, err := strconv.ParseInt(c.Data[postgresExporterServicePortKeyName], 10, 32)
+	if err != nil {
+		log.Error(err, "postgres-exporter-service-port could not be parsed to int32, falling back to default value")
 		pesPort = 9187
 	}
 
-	pesTargetPort, error := strconv.ParseInt(c.Data[postgresExporterServiceTargetPortKeyName], 10, 32)
-	if error != nil {
-		log.Error(error, "postgres-exporter-service-target-port could not be parsed to int32, falling back to default value")
+	pesTargetPort, err := strconv.ParseInt(c.Data[postgresExporterServiceTargetPortKeyName], 10, 32)
+	if err != nil {
+		log.Error(err, "postgres-exporter-service-target-port could not be parsed to int32, falling back to default value")
 		pesTargetPort = pesPort
 	}
 

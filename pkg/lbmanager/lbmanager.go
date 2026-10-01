@@ -148,10 +148,10 @@ func (m *LBManager) CreateOrUpdateDedicatedSvcLB(ctx context.Context, in *api.Po
 
 	sharedSvcLbAlsoEnabled := in.EnableSharedSVCLB(m.options.EnableForceSharedIP)
 
-	new := in.ToDedicatedSvcLB(lbIPToUse, nextFreePort, m.options.StandbyClustersSourceRanges, sharedSvcLbAlsoEnabled)
+	newLb := in.ToDedicatedSvcLB(lbIPToUse, nextFreePort, m.options.StandbyClustersSourceRanges, sharedSvcLbAlsoEnabled)
 	if !m.options.EnableLBSourceRanges {
 		// leave empty / disable source ranges
-		new.Spec.LoadBalancerSourceRanges = []string{}
+		newLb.Spec.LoadBalancerSourceRanges = []string{}
 	}
 
 	existing := &corev1.Service{}
@@ -163,7 +163,7 @@ func (m *LBManager) CreateOrUpdateDedicatedSvcLB(ctx context.Context, in *api.Po
 			return fmt.Errorf("failed to fetch Service of type LoadBalancer: %w", err)
 		}
 
-		if err := m.client.Create(ctx, new); err != nil {
+		if err := m.client.Create(ctx, newLb); err != nil {
 			return fmt.Errorf("failed to create Service of type LoadBalancer: %w", err)
 		}
 
@@ -171,10 +171,10 @@ func (m *LBManager) CreateOrUpdateDedicatedSvcLB(ctx context.Context, in *api.Po
 	}
 
 	// replace the whole spec
-	existing.Spec = new.Spec
+	existing.Spec = newLb.Spec
 
 	// also update the annotations for our custom tls certs
-	existing.Annotations = new.Annotations
+	existing.Annotations = newLb.Annotations
 
 	if err := m.client.Update(ctx, existing); err != nil {
 		return fmt.Errorf("failed to update Service of type LoadBalancer (dedicated): %w", err)
