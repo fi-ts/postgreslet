@@ -48,7 +48,7 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	instance := &zalando.Postgresql{}
 	if err := r.SvcClient.Get(ctx, req.NamespacedName, instance); err != nil {
 		if !errors.IsNotFound(err) {
-			return ctrl.Result{}, err
+			return ctrl.Result{}, fmt.Errorf("failed to fetch postgresql in ns %s: %w", req.Namespace, err)
 		}
 		log.Info("status changed to Deleted")
 
@@ -78,7 +78,7 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		// get a fresh copy of the owner object
 		if err := r.CtrlClient.Get(ctx, types.NamespacedName{Name: owner.Name, Namespace: owner.Namespace}, owner); err != nil {
-			return err
+			return fmt.Errorf("failed to fetch owner object: %w", err)
 		}
 		// update the status of the remote object
 		owner.Status.Description = instance.Status.PostgresClusterStatus
@@ -89,14 +89,14 @@ func (r *StatusReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		if err := r.CtrlClient.Status().Update(ctx, owner); err != nil {
 			log.Error(err, "failed to update owner object")
 
-			return err
+			return fmt.Errorf("failed to update owner object: %w", err)
 		}
 
 		return nil
 	})
 
 	if retryErr != nil {
-		return ctrl.Result{}, retryErr
+		return ctrl.Result{}, fmt.Errorf("all retries failed to update owner object: %w", retryErr)
 	}
 
 	log.V(debugLogLevel).Info("updating socket")
@@ -217,10 +217,14 @@ func (r *StatusReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		return fmt.Errorf("failed to create LabelSelectorPredicate: %w", err)
 	}
 
-	return ctrl.NewControllerManagedBy(mgr).
+	if err = ctrl.NewControllerManagedBy(mgr).
 		For(&zalando.Postgresql{}).
 		WithEventFilter(lsp).
-		Complete(r)
+		Complete(r); err != nil {
+		return fmt.Errorf("failed to register status reconciler: %w", err)
+	}
+
+	return nil
 }
 
 func (r *StatusReconciler) createOrUpdateSecret(ctx context.Context, in *pg.Postgres, secrets *corev1.SecretList, log logr.Logger) error {

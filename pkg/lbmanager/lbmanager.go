@@ -188,11 +188,9 @@ func (m *LBManager) DeleteSharedSvcLB(ctx context.Context, in *api.Postgres) err
 	lb := &corev1.Service{}
 	lb.Namespace = in.ToPeripheralResourceNamespace()
 	lb.Name = in.ToSharedSvcLBName()
-	if err := m.client.Delete(ctx, lb); client.IgnoreNotFound(err) != nil {
-		return err
-	}
 
-	return nil
+	// nolint:wrapcheck
+	return client.IgnoreNotFound(m.client.Delete(ctx, lb))
 }
 
 // DeleteDedicatedSvcLB Deletes the corresponding Service of type LoadBalancer of the given Postgres resource.
@@ -200,11 +198,9 @@ func (m *LBManager) DeleteDedicatedSvcLB(ctx context.Context, in *api.Postgres) 
 	lb := &corev1.Service{}
 	lb.Namespace = in.ToPeripheralResourceNamespace()
 	lb.Name = in.ToDedicatedSvcLBName()
-	if err := m.client.Delete(ctx, lb); client.IgnoreNotFound(err) != nil {
-		return err
-	}
 
-	return nil
+	// nolint:wrapcheck
+	return client.IgnoreNotFound(m.client.Delete(ctx, lb))
 }
 
 // nextFreeSocket finds any existing LoadBalancerIP and the next free port out of the configure port range.

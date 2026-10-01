@@ -149,7 +149,7 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 
 		r.recorder.Eventf(instance, "Warning", "Error", "failed to get resource: %v", err)
 
-		return ctrl.Result{}, err
+		return ctrl.Result{}, fmt.Errorf("failed to get resource: %w", err)
 	}
 	log.V(debugLogLevel).Info("postgres fetched", "postgres", instance)
 
@@ -169,7 +169,7 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		if err := r.CtrlClient.Status().Update(ctx, instance); err != nil {
 			log.Error(err, "failed to update owner object")
 
-			return ctrl.Result{}, err
+			return ctrl.Result{}, fmt.Errorf("failed to update owner object: %w", err)
 		}
 		log.Info("instance being deleted")
 
@@ -179,20 +179,20 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		if err := r.deleteCWNP(log, ctx, instance); client.IgnoreNotFound(err) != nil { // todo: remove ignorenotfound
 			r.recorder.Event(instance, "Warning", "Error", "failed to delete ClusterwideNetworkPolicy")
 
-			return ctrl.Result{}, err
+			return ctrl.Result{}, fmt.Errorf("failed to delete ClusterwideNetworkPolicy: %w", err)
 		}
 		log.V(debugLogLevel).Info("corresponding CRD ClusterwideNetworkPolicy deleted")
 
 		if err := r.DeleteSharedSvcLB(ctx, instance); err != nil {
 			r.recorder.Eventf(instance, "Warning", "Error", "failed to delete Service with shared ip: %v", err)
 
-			return ctrl.Result{}, err
+			return ctrl.Result{}, fmt.Errorf("failed to delete Service with shared ip: %w", err)
 		}
 
 		if err := r.DeleteDedicatedSvcLB(ctx, instance); err != nil {
 			r.recorder.Eventf(instance, "Warning", "Error", "failed to delete Service with dedicated ip: %v", err)
 
-			return ctrl.Result{}, err
+			return ctrl.Result{}, fmt.Errorf("failed to delete Service with dedicated ip: %w", err)
 		}
 		log.V(debugLogLevel).Info("corresponding Service(s) of type LoadBalancer deleted")
 
@@ -373,7 +373,7 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	if err := r.ReconcileSvcLBs(ctx, instance); err != nil {
 		r.recorder.Eventf(instance, "Warning", "Error", "failed to create Service: %v", err)
 
-		return ctrl.Result{}, err
+		return ctrl.Result{}, fmt.Errorf("failed to create Service: %w", err)
 	}
 
 	if r.EnableWalGExporter {
@@ -442,10 +442,14 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 func (r *PostgresReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.recorder = mgr.GetEventRecorderFor("PostgresController")
 
-	return ctrl.NewControllerManagedBy(mgr).
+	if err := ctrl.NewControllerManagedBy(mgr).
 		For(&pg.Postgres{}).
 		WithEventFilter(predicate.GenerationChangedPredicate{}).
-		Complete(r)
+		Complete(r); err != nil {
+		return fmt.Errorf("failed to register postgres reconciler: %w", err)
+	}
+
+	return nil
 }
 
 func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context, instance *pg.Postgres, log logr.Logger, sidecarsCM *corev1.ConfigMap, patroniTTL, patroniLoopWait, patroniRetryTimeout uint32) error {
@@ -953,7 +957,7 @@ func (r *PostgresReconciler) getZPostgresqlByLabels(ctx context.Context, matchin
 		matchingLabels,
 	}
 	if err := r.SvcClient.List(ctx, zpl, opts...); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to list postgresqls: %w", err)
 	}
 
 	return zpl.Items, nil
@@ -1238,7 +1242,7 @@ func (r *PostgresReconciler) findLeaderPods(log logr.Logger, ctx context.Context
 	if err != nil {
 		log.V(debugLogLevel).Info("could not create requirements for label selector to query pods, requeuing")
 
-		return leaderPods, err
+		return leaderPods, fmt.Errorf("could not create requirements for label selector to query pods: %w", err)
 	}
 	leaderSelector := labels.NewSelector().Add(*roleReq)
 	opts := []client.ListOption{
@@ -1246,7 +1250,11 @@ func (r *PostgresReconciler) findLeaderPods(log logr.Logger, ctx context.Context
 		client.MatchingLabelsSelector{Selector: leaderSelector},
 	}
 
-	return leaderPods, r.SvcClient.List(ctx, leaderPods, opts...)
+	if err := r.SvcClient.List(ctx, leaderPods, opts...); err != nil {
+		return leaderPods, fmt.Errorf("failed to list leader pods: %w", err)
+	}
+
+	return leaderPods, nil
 }
 
 func (r *PostgresReconciler) updatePatroniReplicationConfigOnAllPods(log logr.Logger, ctx context.Context, instance *pg.Postgres) error {
@@ -1258,7 +1266,7 @@ func (r *PostgresReconciler) updatePatroniReplicationConfigOnAllPods(log logr.Lo
 	if err := r.SvcClient.List(ctx, pods, opts...); err != nil {
 		log.V(debugLogLevel).Info("could not query pods, requeuing")
 
-		return err
+		return fmt.Errorf("could not query pods: %w", err)
 	}
 
 	if len(pods.Items) == 0 {
@@ -1342,7 +1350,7 @@ func (r *PostgresReconciler) httpPatchPatroni(log logr.Logger, ctx context.Conte
 	if err != nil {
 		log.V(debugLogLevel).Info("could not create config")
 
-		return err
+		return fmt.Errorf("could not create patroni config: %w", err)
 	}
 
 	httpClient := &http.Client{}
@@ -1352,7 +1360,7 @@ func (r *PostgresReconciler) httpPatchPatroni(log logr.Logger, ctx context.Conte
 	if err != nil {
 		log.Error(err, "could not create PATCH request")
 
-		return err
+		return fmt.Errorf("could not create patroni PATCH request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
@@ -1360,7 +1368,7 @@ func (r *PostgresReconciler) httpPatchPatroni(log logr.Logger, ctx context.Conte
 	if err != nil {
 		log.Error(err, "could not perform PATCH request")
 
-		return err
+		return fmt.Errorf("could not perform patroni PATCH request: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -1401,7 +1409,7 @@ func (r *PostgresReconciler) httpGetPatroniConfig(log logr.Logger, ctx context.C
 	if err != nil {
 		log.Error(err, "could not create GET request")
 
-		return nil, err
+		return nil, fmt.Errorf("could not create patroni config GET request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
@@ -1409,7 +1417,7 @@ func (r *PostgresReconciler) httpGetPatroniConfig(log logr.Logger, ctx context.C
 	if err != nil {
 		log.Error(err, "could not perform GET request")
 
-		return nil, err
+		return nil, fmt.Errorf("patroni config request failed: %w", err)
 	}
 
 	defer resp.Body.Close()
@@ -1418,19 +1426,19 @@ func (r *PostgresReconciler) httpGetPatroniConfig(log logr.Logger, ctx context.C
 	if err != nil {
 		log.Info("could not read body")
 
-		return nil, err
+		return nil, fmt.Errorf("could not read patroni config response body: %w", err)
 	}
 	var jsonResp PatroniConfig
 	err = json.Unmarshal(body, &jsonResp)
 	if err != nil {
 		log.V(debugLogLevel).Info("could not parse config response")
 
-		return nil, err
+		return nil, fmt.Errorf("could not parse patroni config response: %w", err)
 	}
 
 	log.V(debugLogLevel).Info("Got config", "response", jsonResp)
 
-	return &jsonResp, err
+	return &jsonResp, nil
 }
 
 func (r *PostgresReconciler) getBackupConfig(ctx context.Context, ns, name string) (*pg.BackupConfig, error) {
@@ -1916,7 +1924,7 @@ func (r *PostgresReconciler) generateRandomString() (string, error) {
 	for i := range b {
 		x, err := rand.Int(rand.Reader, size)
 		if err != nil {
-			return "", err
+			return "", fmt.Errorf("failed to get random bytes: %w", err)
 		}
 		b[i] = chars[x.Int64()]
 	}
