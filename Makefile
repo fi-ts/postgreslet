@@ -21,7 +21,7 @@ CONTROLLER_TOOLS_VERSION ?= v0.21.0
 
 # Postgres operator variables for YAML download
 # renovate: datasource=github-releases depName=zalando/postgres-operator
-POSTGRES_OPERATOR_VERSION ?= v2.0.2
+POSTGRES_OPERATOR_VERSION ?= v2.0.3
 POSTGRES_OPERATOR_URL ?= https://raw.githubusercontent.com/zalando/postgres-operator/$(POSTGRES_OPERATOR_VERSION)/manifests
 POSTGRES_CRD_URL ?= https://raw.githubusercontent.com/zalando/postgres-operator/$(POSTGRES_OPERATOR_VERSION)/charts/postgres-operator/crds/postgresqls.yaml
 
