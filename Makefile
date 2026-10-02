@@ -17,7 +17,7 @@ VERSION := $(or ${DOCKER_TAG},latest)
 LOCALBIN ?= $(shell pwd)/bin
 CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
 # renovate: datasource=go depName=sigs.k8s.io/controller-tools
-CONTROLLER_TOOLS_VERSION ?= v0.21.0
+CONTROLLER_TOOLS_VERSION ?= v0.22.0
 
 # Postgres operator variables for YAML download
 # renovate: datasource=github-releases depName=zalando/postgres-operator
