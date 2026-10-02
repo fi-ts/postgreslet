@@ -12,7 +12,7 @@ require (
 	github.com/onsi/gomega v1.39.0
 	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.80.1
 	github.com/spf13/viper v1.20.0-alpha.6
-	github.com/zalando/postgres-operator/v2 v2.0.2
+	github.com/zalando/postgres-operator/v2 v2.0.3
 	k8s.io/api v0.36.1
 	k8s.io/apiextensions-apiserver v0.36.1
 	k8s.io/apimachinery v0.36.1
