@@ -10,17 +10,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
 
     - name: Docker Login
-      uses: docker/login-action@v3
+      uses: docker/login-action@v4
       with:
         registry: ${{ secrets.DOCKER_REGISTRY }}
         username: ${{ secrets.DOCKER_REGISTRY_USER }}
         password: ${{ secrets.DOCKER_REGISTRY_TOKEN }}
 
     - name: Ensure Go Version
-      uses: actions/setup-go@v5
+      uses: actions/setup-go@v7
       with:
         go-version-file: 'go.mod'
 
@@ -36,6 +36,6 @@ jobs:
         make docker-build
         make docker-push
 
-    - uses: release-drafter/release-drafter@v6
+    - uses: release-drafter/release-drafter@v7
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
