@@ -29,12 +29,12 @@ jobs:
     steps:
       - name: Get token
         id: get_token
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@v3
         with:
           private-key: ${{ secrets.RENOVATE_APP_PRIVATE_KEY }}
           app-id: ${{ secrets.RENOVATE_APP_CLIENT_ID }}
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Renovate
         uses: renovatebot/github-action@v46.3.7
         with:
