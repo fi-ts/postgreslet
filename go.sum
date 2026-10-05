@@ -148,8 +148,8 @@ github.com/subosito/gotenv v1.6.0/go.mod h1:Dk4QP5c2W3ibzajGcXpNraDfq2IrhjMIvMSW
 github.com/x448/float16 v0.8.4 h1:qLwI1I70+NjRFUR3zs1JPUCgaCXSh3SW62uAKT1mSBM=
 github.com/x448/float16 v0.8.4/go.mod h1:14CWIYCyZA/cWjXOioeEpHeN/83MdbZDRQHoFcYsOfg=
 github.com/yuin/goldmark v1.2.1/go.mod h1:3hX8gzYuyVAZsxl0MRgGTJEmQBFcNTphYh9decYSb74=
-github.com/zalando/postgres-operator/v2 v2.0.2 h1:jmmfB1doEq/8LozwMgBHQIYvF92963yF6Ov82Y2AVwU=
-github.com/zalando/postgres-operator/v2 v2.0.2/go.mod h1:PwXEmcSw4P0g7YmxUN6H617Xftrn/N4tK/r5LJ6QqBA=
+github.com/zalando/postgres-operator/v2 v2.0.3 h1:nrjgma/PUDFZXaeQG7aLyat0Zw5Cvs+WOrz3zeaAzEw=
+github.com/zalando/postgres-operator/v2 v2.0.3/go.mod h1:PwXEmcSw4P0g7YmxUN6H617Xftrn/N4tK/r5LJ6QqBA=
 go.uber.org/goleak v1.3.0 h1:2K3zAYmnTNqV73imy9J1T3WC+gmCePx2hEGkimedGto=
 go.uber.org/goleak v1.3.0/go.mod h1:CoHD4mav9JJNrW/WLlf7HGZPjdw8EucARQHekz1X6bE=
 go.uber.org/multierr v1.11.0 h1:blXXJkSxSSfBVBlC76pxqeO+LN3aDfLQo+309xJstO0=
