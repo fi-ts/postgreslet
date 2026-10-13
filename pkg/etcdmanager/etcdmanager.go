@@ -350,7 +350,7 @@ func (m *EtcdManager) createNewClientObject(ctx context.Context, obj client.Obje
 		case "etcd-psql":
 			v.Name = svcName
 		default:
-			return fmt.Errorf("unknown service name: %v", v.ObjectMeta.Name)
+			return fmt.Errorf("unknown service name: %v", v.Name)
 		}
 
 		m.log.Info("Updating labels")
