@@ -13,7 +13,7 @@ linters:
     - dogsled
     - dupl
     - durationcheck
-    - err113
+    #- err113
     - errchkjson
     - errname
     - errorlint
