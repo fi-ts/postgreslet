@@ -943,10 +943,6 @@ func deleteIfEmpty(json map[string]interface{}, key string) {
 	}
 }
 
-func init() {
-	SchemeBuilder.Register(&Postgres{}, &PostgresList{})
-}
-
 func (p *Postgres) buildAdditionalVolumes(c *corev1.ConfigMap) []zalando.AdditionalVolume {
 	if c == nil {
 		// abort if the global configmap is not there
