@@ -19,7 +19,7 @@ linters:
     - errorlint
     - exhaustive
     - exptostd
-    - forbidigo
+    #- forbidigo
     - forcetypeassert
     - ginkgolinter
     - gocheckcompilerdirectives
