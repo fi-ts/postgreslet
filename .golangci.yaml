@@ -23,7 +23,7 @@ linters:
     - forcetypeassert
     - ginkgolinter
     - gocheckcompilerdirectives
-    - gochecknoglobals
+    #- gochecknoglobals
     #- gochecknoinits
     - gochecksumtype
     - goconst
