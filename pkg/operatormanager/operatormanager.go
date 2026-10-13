@@ -713,8 +713,8 @@ func (m *OperatorManager) UpdateAllManagedOperators(ctx context.Context) error {
 	opts := []client.ListOption{
 		matchingLabels,
 	}
+	//nolint:wrapcheck
 	if err := m.client.List(ctx, zList, opts...); err != nil {
-		//nolint:wrapcheck
 		return client.IgnoreNotFound(err)
 	}
 	// update each namespace
