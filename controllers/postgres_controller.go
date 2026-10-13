@@ -65,6 +65,7 @@ const (
 	storageEncryptionKeyFinalizerName              string = "postgres.database.fits.cloud/secret-finalizer"
 	walGEncryptionSecretNamePostfix                string = "-walg-encryption"
 	walGEncryptionSecretKeyName                    string = "key"
+	labelName                                      string = "app.kubernetes.io/name"
 	podMonitorName                                 string = "patroni"
 	walGExporterName                               string = "wal-g-exporter"
 	walGExporterPort                               int32  = 9351
@@ -72,6 +73,8 @@ const (
 	initDBName                                     string = "postgres-initdb"
 	initDBSQLDummy                                 string = `SELECT 'NOOP';`
 	debugLogLevel                                  int    = 1
+	pgName                                         string = "postgres"
+	True                                           string = "true"
 )
 
 // requeue defines in how many seconds a requeue should happen
@@ -151,7 +154,7 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 
 		return ctrl.Result{}, fmt.Errorf("failed to get resource: %w", err)
 	}
-	log.V(debugLogLevel).Info("postgres fetched", "postgres", instance)
+	log.V(debugLogLevel).Info("postgres fetched", pgName, instance)
 
 	log = log.WithValues("ns", instance.ToPeripheralResourceNamespace())
 
@@ -467,7 +470,7 @@ func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context
 		if err := r.CtrlClient.Get(ctx, srcNs, src); err != nil {
 			r.recorder.Eventf(instance, "Warning", "Error", "failed to get source postgres for restore: %v", err)
 		} else {
-			log.V(debugLogLevel).Info("source for restore fetched", "postgres", instance)
+			log.V(debugLogLevel).Info("source for restore fetched", pgName, instance)
 
 			bc, err := r.getBackupConfig(ctx, instance.Namespace, src.Spec.BackupSecretRef)
 			if err != nil {
@@ -595,19 +598,19 @@ func (r *PostgresReconciler) updatePodEnvironmentConfigMap(log logr.Logger, ctx 
 
 	// s3 server side encryption SSE is disabled
 	// we use client side encryption
-	walgDisableSSE := "true"
+	walgDisableSSE := True
 
 	// create updated content for pod environment configmap
 	data := map[string]string{
-		"USE_WALG_BACKUP":                    "true",
-		"USE_WALG_RESTORE":                   "true",
+		"USE_WALG_BACKUP":                    True,
+		"USE_WALG_RESTORE":                   True,
 		"WALE_S3_PREFIX":                     "s3://" + bucketName + "/$(SCOPE)",
 		"WALG_S3_PREFIX":                     "s3://" + bucketName + "/$(SCOPE)",
 		"CLONE_WALG_S3_PREFIX":               "s3://" + bucketName + "/$(CLONE_SCOPE)",
 		"WALE_BACKUP_THRESHOLD_PERCENTAGE":   "100",
 		"AWS_ENDPOINT":                       awsEndpoint,
 		"WALE_S3_ENDPOINT":                   walES3Endpoint, // same as above, but slightly modified
-		"AWS_S3_FORCE_PATH_STYLE":            "true",
+		"AWS_S3_FORCE_PATH_STYLE":            True,
 		"AWS_REGION":                         region,         // now we can use AWS S3
 		"WALG_DISABLE_S3_SSE":                walgDisableSSE, // server side encryption
 		"BACKUP_SCHEDULE":                    backupSchedule,
@@ -774,7 +777,7 @@ func (r *PostgresReconciler) getStandbyEnvs(ctx context.Context, p *pg.Postgres)
 	primaryWalGS3Prefix := "s3://" + primaryBackupConfig.S3BucketName + "/" + primary.ToPeripheralResourceName()
 	// s3 server side encryption SSE is disabled, we use client side encryption
 	// see STANDBY_WALG_LIBSODIUM_KEY above
-	primaryWalgDisableSSE := "true"
+	primaryWalgDisableSSE := True
 	// aws access key
 	primaryAwsAccessKeyID := primaryBackupConfig.S3AccessKey
 	// aws secret key
@@ -785,17 +788,17 @@ func (r *PostgresReconciler) getStandbyEnvs(ctx context.Context, p *pg.Postgres)
 	standbyEnvs["STANDBY_AWS_ACCESS_KEY_ID"] = []byte(primaryAwsAccessKeyID)
 	standbyEnvs["STANDBY_AWS_SECRET_ACCESS_KEY"] = []byte(primaryAwsSecretAccessKey)
 	standbyEnvs["STANDBY_AWS_ENDPOINT"] = []byte(primaryAwsEndpoint)
-	standbyEnvs["STANDBY_AWS_S3_FORCE_PATH_STYLE"] = []byte("true")
+	standbyEnvs["STANDBY_AWS_S3_FORCE_PATH_STYLE"] = []byte(True)
 	standbyEnvs["STANDBY_AWS_REGION"] = []byte(primaryRegion)
 	standbyEnvs["STANDBY_AWS_WALG_S3_ENDPOINT"] = []byte(primaryWalES3Endpoint)
-	standbyEnvs["STANDBY_USE_WALG_BACKUP"] = []byte("true")
-	standbyEnvs["STANDBY_USE_WALG_RESTORE"] = []byte("true")
+	standbyEnvs["STANDBY_USE_WALG_BACKUP"] = []byte(True)
+	standbyEnvs["STANDBY_USE_WALG_RESTORE"] = []byte(True)
 	standbyEnvs["STANDBY_WALE_S3_ENDPOINT"] = []byte(primaryWalES3Endpoint)
 	standbyEnvs["STANDBY_WALG_DISABLE_S3_SSE"] = []byte(primaryWalgDisableSSE)
 	standbyEnvs["STANDBY_WALG_S3_ENDPOINT"] = []byte(primaryWalES3Endpoint)
 	standbyEnvs["STANDBY_WALG_S3_PREFIX"] = []byte(primaryWalGS3Prefix)
 	standbyEnvs["STANDBY_WALG_S3_SSE"] = []byte("")
-	standbyEnvs["STANDBY_WITH_WALG"] = []byte("true")
+	standbyEnvs["STANDBY_WITH_WALG"] = []byte(True)
 
 	return standbyEnvs
 }
@@ -1097,7 +1100,7 @@ func (r *PostgresReconciler) copySecrets(log logr.Logger, ctx context.Context, s
 			},
 			Data: map[string][]byte{
 				"username": []byte(username),
-				"password": remoteSecret.Data[username],
+				"password": remoteSecret.Data[username], //nolint:goconst
 			},
 		}
 
@@ -1620,7 +1623,7 @@ func (r *PostgresReconciler) createOrUpdateExporterSidecarServices(log logr.Logg
 
 	labels := map[string]string{
 		// pg.ApplicationLabelName: pg.ApplicationLabelValue, // TODO check if we still need that label, IsOperatorDeletable won't work anymore if we set it.
-		"app": "postgres-exporter",
+		"app": "postgres-exporter", //nolint:goconst
 	}
 	annotations := map[string]string{
 		postgresExporterServiceTenantAnnotationName:    in.Spec.Tenant,
@@ -2053,7 +2056,7 @@ func (r *PostgresReconciler) ensureInitDBJob(log logr.Logger, ctx context.Contex
 						Env: []corev1.EnvVar{
 							{
 								Name:  "PGUSER_SUPERUSER",
-								Value: "postgres",
+								Value: pgName,
 							},
 							{
 								Name: "PGPASSWORD_SUPERUSER",
@@ -2163,12 +2166,12 @@ func (r *PostgresReconciler) createOrUpdateWalGExporterDeployment(log logr.Logge
 	}
 
 	labels := map[string]string{
-		"app.kubernetes.io/name": walGExporterName,
-		pg.UIDLabelName:          string(instance.UID),
-		pg.NameLabelName:         instance.Name,
-		pg.TenantLabelName:       instance.Spec.Tenant,
-		pg.ProjectIDLabelName:    instance.Spec.ProjectID,
-		pg.PartitionIDLabelName:  instance.Spec.PartitionID,
+		labelName:               walGExporterName,
+		pg.UIDLabelName:         string(instance.UID),
+		pg.NameLabelName:        instance.Name,
+		pg.TenantLabelName:      instance.Spec.Tenant,
+		pg.ProjectIDLabelName:   instance.Spec.ProjectID,
+		pg.PartitionIDLabelName: instance.Spec.PartitionID,
 	}
 
 	annotations := map[string]string{}
@@ -2214,7 +2217,7 @@ func (r *PostgresReconciler) createOrUpdateWalGExporterDeployment(log logr.Logge
 								},
 								{
 									Name:  "PGDATABASE",
-									Value: "postgres",
+									Value: pgName,
 								},
 								{
 									Name:  "PGUSER",
@@ -2347,12 +2350,12 @@ func (r *PostgresReconciler) deleteWalGExporterDeployment(ctx context.Context, n
 // createOrUpdateWalGExporterPodMonitor ensures the necessary services to access the wal-g-exporter exist
 func (r *PostgresReconciler) createOrUpdateWalGExporterPodMonitor(log logr.Logger, ctx context.Context, namespace string, in *pg.Postgres) error {
 	l := map[string]string{
-		"app.kubernetes.io/name": walGExporterName,
-		pg.UIDLabelName:          string(in.UID),
-		pg.NameLabelName:         in.Name,
-		pg.TenantLabelName:       in.Spec.Tenant,
-		pg.ProjectIDLabelName:    in.Spec.ProjectID,
-		pg.PartitionIDLabelName:  in.Spec.PartitionID,
+		labelName:               walGExporterName,
+		pg.UIDLabelName:         string(in.UID),
+		pg.NameLabelName:        in.Name,
+		pg.TenantLabelName:      in.Spec.Tenant,
+		pg.ProjectIDLabelName:   in.Spec.ProjectID,
+		pg.PartitionIDLabelName: in.Spec.PartitionID,
 	}
 	a := map[string]string{
 		postgresExporterServiceTenantAnnotationName:    in.Spec.Tenant,
@@ -2374,7 +2377,7 @@ func (r *PostgresReconciler) createOrUpdateWalGExporterPodMonitor(log logr.Logge
 		},
 	}
 	selector := map[string]string{
-		"app.kubernetes.io/name": walGExporterName,
+		labelName: walGExporterName,
 	}
 	s.Spec.Selector = metav1.LabelSelector{MatchLabels: selector}
 

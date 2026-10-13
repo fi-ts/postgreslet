@@ -77,6 +77,7 @@ const (
 	ClusterNameLabelName             = "cluster-name"
 
 	teamIDPrefix = "pg"
+	teamName     = "team"
 
 	DefaultPatroniParamValueLoopWait     uint32 = 10
 	DefaultPatroniParamValueRetryTimeout uint32 = 10
@@ -108,13 +109,14 @@ const (
 	PostgresConfigAuditorUsername     = "auditor"
 	PostgresConfigMonitoringUsername  = "monitoring"
 
-	zalando_timestamp_format = "2006-01-02T15:04:05-07:00"
+	zalandoTimestampFormat = "2006-01-02T15:04:05-07:00"
+	pgName                 = "postgresql"
 )
 
 var (
 	ZalandoPostgresqlTypeMeta = metav1.TypeMeta{
 		APIVersion: "acid.zalan.do/v1",
-		Kind:       "postgresql",
+		Kind:       pgName,
 	}
 	invalidLabelValueChars = regexp.MustCompile(`[^a-zA-Z0-9._-]`)
 	multipleUnderscores    = regexp.MustCompile(`_+`)
@@ -393,7 +395,7 @@ func (p *Postgres) ToSharedSvcLB(lbIP string, lbPort int32, enableStandbyLeaderS
 	lb.Spec.LoadBalancerSourceRanges = lbsr
 
 	port := corev1.ServicePort{}
-	port.Name = "postgresql"
+	port.Name = pgName
 	port.Port = lbPort
 	port.Protocol = corev1.ProtocolTCP
 	port.TargetPort = intstr.FromInt(5432)
@@ -402,7 +404,7 @@ func (p *Postgres) ToSharedSvcLB(lbIP string, lbPort int32, enableStandbyLeaderS
 	lb.Spec.Selector = map[string]string{
 		ApplicationLabelName: ApplicationLabelValue,
 		ClusterNameLabelName: p.ToPeripheralResourceName(),
-		"team":               p.generateTeamID(),
+		teamName:             p.generateTeamID(),
 	}
 	if p.IsReplicationPrimaryOrStandalone() {
 		lb.Spec.Selector[SpiloRoleLabelName] = SpiloRoleLabelValueMaster
@@ -487,7 +489,7 @@ func (p *Postgres) ToDedicatedSvcLB(lbIP string, lbPort int32, standbyClustersSo
 	lb.Spec.LoadBalancerSourceRanges = lbsr
 
 	port := corev1.ServicePort{}
-	port.Name = "postgresql"
+	port.Name = pgName
 	port.Port = lbPort
 	port.Protocol = corev1.ProtocolTCP
 	port.TargetPort = intstr.FromInt(5432)
@@ -496,7 +498,7 @@ func (p *Postgres) ToDedicatedSvcLB(lbIP string, lbPort int32, standbyClustersSo
 	lb.Spec.Selector = map[string]string{
 		ApplicationLabelName: ApplicationLabelValue,
 		ClusterNameLabelName: p.ToPeripheralResourceName(),
-		"team":               p.generateTeamID(),
+		teamName:             p.generateTeamID(),
 	}
 	if p.IsReplicationPrimaryOrStandalone() {
 		lb.Spec.Selector[SpiloRoleLabelName] = SpiloRoleLabelValueMaster
@@ -586,7 +588,7 @@ func (p *Postgres) ToUserPasswordSecretMatchingLabels() map[string]string {
 	return map[string]string{
 		ApplicationLabelName: ApplicationLabelValue,
 		"cluster-name":       p.ToPeripheralResourceName(),
-		"team":               p.generateTeamID(),
+		teamName:             p.generateTeamID(),
 	}
 }
 
@@ -793,7 +795,7 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 		// make sure there is always a value set. The operator will fall back to CLONE_WITH_BASEBACKUP, which assumes the source db's credentials are existing within the same namespace, which is not the case with the postgreslet.
 		if p.Spec.PostgresRestore.Timestamp == "" {
 			// e.g. 2021-12-07T15:28:00+01:00
-			p.Spec.PostgresRestore.Timestamp = time.Now().Format(zalando_timestamp_format)
+			p.Spec.PostgresRestore.Timestamp = time.Now().Format(zalandoTimestampFormat)
 		}
 
 		z.Spec.Clone = &zalando.CloneDescription{
@@ -843,7 +845,7 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 					ProjectIDLabelName:   p.Spec.ProjectID,
 					TenantLabelName:      p.Spec.Tenant,
 					UIDLabelName:         string(p.UID),
-					"team":               p.generateTeamID(),
+					teamName:             p.generateTeamID(),
 				},
 			},
 			TopologyKey: tscKey,
@@ -880,7 +882,7 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 	deleteIfEmpty(jsonSpec, "tls")
 	deleteIfEmpty(jsonSpec, "users")
 
-	jsonP, _ := jsonSpec["postgresql"].(map[string]interface{})
+	jsonP, _ := jsonSpec[pgName].(map[string]interface{})
 	deleteIfEmpty(jsonP, "parameters")
 
 	return &unstructured.Unstructured{

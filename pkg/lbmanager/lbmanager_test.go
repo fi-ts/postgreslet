@@ -11,6 +11,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
+const (
+	prefixAny = "0.0.0.0"
+)
+
 func TestLBManager_nextFreePort(t *testing.T) {
 	t.Parallel()
 
@@ -28,7 +32,7 @@ func TestLBManager_nextFreePort(t *testing.T) {
 			lbMgr: &LBManager{
 				client: fake.NewClientBuilder().WithScheme(scheme()).WithLists(svcListWithPorts()).Build(),
 				options: Options{
-					LBIP:           "0.0.0.0",
+					LBIP:           prefixAny,
 					PortRangeStart: portRangeStart,
 					PortRangeSize:  portRangeSize,
 				},
@@ -41,7 +45,7 @@ func TestLBManager_nextFreePort(t *testing.T) {
 			lbMgr: &LBManager{
 				client: fake.NewClientBuilder().WithScheme(scheme()).WithLists(svcListWithPorts(0)).Build(),
 				options: Options{
-					LBIP:           "0.0.0.0",
+					LBIP:           prefixAny,
 					PortRangeStart: portRangeStart,
 					PortRangeSize:  portRangeSize,
 				},
@@ -54,7 +58,7 @@ func TestLBManager_nextFreePort(t *testing.T) {
 			lbMgr: &LBManager{
 				client: fake.NewClientBuilder().WithScheme(scheme()).WithLists(svcListWithPorts(0, 1, 2, 3)).Build(),
 				options: Options{
-					LBIP:           "0.0.0.0",
+					LBIP:           prefixAny,
 					PortRangeStart: portRangeStart,
 					PortRangeSize:  portRangeSize,
 				},
@@ -67,7 +71,7 @@ func TestLBManager_nextFreePort(t *testing.T) {
 			lbMgr: &LBManager{
 				client: fake.NewClientBuilder().WithScheme(scheme()).WithLists(svcListWithPorts(0, 1, 2, 3, 4)).Build(),
 				options: Options{
-					LBIP:           "0.0.0.0",
+					LBIP:           prefixAny,
 					PortRangeStart: portRangeStart,
 					PortRangeSize:  portRangeSize,
 				},
@@ -80,7 +84,7 @@ func TestLBManager_nextFreePort(t *testing.T) {
 			lbMgr: &LBManager{
 				client: fake.NewClientBuilder().WithScheme(scheme()).WithLists(svcListWithPorts(0, 2, 3)).Build(),
 				options: Options{
-					LBIP:           "0.0.0.0",
+					LBIP:           prefixAny,
 					PortRangeStart: portRangeStart,
 					PortRangeSize:  portRangeSize,
 				},
