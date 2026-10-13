@@ -533,6 +533,8 @@ func (m *OperatorManager) createOrUpdateNamespace(ctx context.Context, namespace
 }
 
 // CreatePodEnvironmentConfigMap creates a new ConfigMap with additional environment variables for the pods
+//
+//nolint:dupl
 func (m *OperatorManager) CreatePodEnvironmentConfigMap(ctx context.Context, namespace string) (*corev1.ConfigMap, error) {
 	log := m.log.WithValues("ns", namespace)
 
@@ -565,6 +567,8 @@ func (m *OperatorManager) CreatePodEnvironmentConfigMap(ctx context.Context, nam
 }
 
 // CreateOrGetPodEnvironmentSecret creates a new Secret with additional environment variables for the pods or simply returns it if it already exists
+//
+//nolint:dupl
 func (m *OperatorManager) CreateOrGetPodEnvironmentSecret(ctx context.Context, namespace string) (*corev1.Secret, error) {
 	log := m.log.WithValues("ns", namespace)
 
