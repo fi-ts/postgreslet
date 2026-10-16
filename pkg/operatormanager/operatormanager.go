@@ -52,6 +52,8 @@ const (
 
 	spilo_fsgroup     = "103"
 	debugLogLevel int = 1
+
+	kindSa = "ServiceAccount"
 )
 
 // operatorPodMatchingLabels is for listing operator pods
@@ -205,6 +207,7 @@ func (m *OperatorManager) IsOperatorInstalled(ctx context.Context, namespace str
 		operatorPodMatchingLabels,
 	}
 	if err := m.client.List(ctx, pods, opts...); err != nil {
+		//nolint:wrapcheck
 		return false, client.IgnoreNotFound(err)
 	}
 	if len(pods.Items) == 0 {
@@ -239,7 +242,7 @@ func (m *OperatorManager) UninstallOperator(ctx context.Context, namespace strin
 
 			// Remove the ServiceAccount from the ClusterRoleBinding's `Subjects` and then patch the ClusterRoleBinding
 			for i, s := range v.Subjects {
-				if s.Kind == "ServiceAccount" && s.Namespace == namespace {
+				if s.Kind == kindSa && s.Namespace == namespace {
 					mergeFrom := client.MergeFrom(v.DeepCopy())
 					v.Subjects = append(v.Subjects[:i], v.Subjects[i+1:]...)
 					if err = m.client.Patch(ctx, v, mergeFrom); err != nil {
@@ -326,7 +329,7 @@ func (m *OperatorManager) createNewClientObject(ctx context.Context, obj client.
 
 		// Set the namespace of the ServiceAccount in the ClusterRoleBinding.
 		for i, s := range v.Subjects {
-			if s.Kind == "ServiceAccount" {
+			if s.Kind == kindSa {
 				v.Subjects[i].Namespace = namespace
 			}
 		}
@@ -352,7 +355,7 @@ func (m *OperatorManager) createNewClientObject(ctx context.Context, obj client.
 
 		// If the ServiceAccount already exists, return.
 		for i := range got.Subjects {
-			if got.Subjects[i].Kind == "ServiceAccount" && got.Subjects[i].Namespace == namespace {
+			if got.Subjects[i].Kind == kindSa && got.Subjects[i].Namespace == namespace {
 				return nil
 			}
 		}
@@ -530,6 +533,8 @@ func (m *OperatorManager) createOrUpdateNamespace(ctx context.Context, namespace
 }
 
 // CreatePodEnvironmentConfigMap creates a new ConfigMap with additional environment variables for the pods
+//
+//nolint:dupl
 func (m *OperatorManager) CreatePodEnvironmentConfigMap(ctx context.Context, namespace string) (*corev1.ConfigMap, error) {
 	log := m.log.WithValues("ns", namespace)
 
@@ -562,6 +567,8 @@ func (m *OperatorManager) CreatePodEnvironmentConfigMap(ctx context.Context, nam
 }
 
 // CreateOrGetPodEnvironmentSecret creates a new Secret with additional environment variables for the pods or simply returns it if it already exists
+//
+//nolint:dupl
 func (m *OperatorManager) CreateOrGetPodEnvironmentSecret(ctx context.Context, namespace string) (*corev1.Secret, error) {
 	log := m.log.WithValues("ns", namespace)
 
@@ -604,7 +611,7 @@ func (m *OperatorManager) createOrUpdateSidecarsConfig(ctx context.Context, name
 		// configmap with configuration does not exists, nothing we can do here...
 		m.log.Error(err, "could not fetch global config for sidecars", "ns", namespace)
 
-		return err
+		return fmt.Errorf("could not fetch global config for sidecars in namespace %s: %w", namespace, err)
 	}
 
 	// Add our sidecars configmap
@@ -712,6 +719,7 @@ func (m *OperatorManager) UpdateAllManagedOperators(ctx context.Context) error {
 	opts := []client.ListOption{
 		matchingLabels,
 	}
+	//nolint:wrapcheck
 	if err := m.client.List(ctx, zList, opts...); err != nil {
 		return client.IgnoreNotFound(err)
 	}

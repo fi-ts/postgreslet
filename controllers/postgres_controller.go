@@ -65,6 +65,7 @@ const (
 	storageEncryptionKeyFinalizerName              string = "postgres.database.fits.cloud/secret-finalizer"
 	walGEncryptionSecretNamePostfix                string = "-walg-encryption"
 	walGEncryptionSecretKeyName                    string = "key"
+	labelName                                      string = "app.kubernetes.io/name"
 	podMonitorName                                 string = "patroni"
 	walGExporterName                               string = "wal-g-exporter"
 	walGExporterPort                               int32  = 9351
@@ -72,6 +73,8 @@ const (
 	initDBName                                     string = "postgres-initdb"
 	initDBSQLDummy                                 string = `SELECT 'NOOP';`
 	debugLogLevel                                  int    = 1
+	pgName                                         string = "postgres"
+	True                                           string = "true"
 )
 
 // requeue defines in how many seconds a requeue should happen
@@ -149,9 +152,9 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 
 		r.recorder.Eventf(instance, "Warning", "Error", "failed to get resource: %v", err)
 
-		return ctrl.Result{}, err
+		return ctrl.Result{}, fmt.Errorf("failed to get resource: %w", err)
 	}
-	log.V(debugLogLevel).Info("postgres fetched", "postgres", instance)
+	log.V(debugLogLevel).Info("postgres fetched", pgName, instance)
 
 	log = log.WithValues("ns", instance.ToPeripheralResourceNamespace())
 
@@ -169,7 +172,7 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		if err := r.CtrlClient.Status().Update(ctx, instance); err != nil {
 			log.Error(err, "failed to update owner object")
 
-			return ctrl.Result{}, err
+			return ctrl.Result{}, fmt.Errorf("failed to update owner object: %w", err)
 		}
 		log.Info("instance being deleted")
 
@@ -179,20 +182,20 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		if err := r.deleteCWNP(log, ctx, instance); client.IgnoreNotFound(err) != nil { // todo: remove ignorenotfound
 			r.recorder.Event(instance, "Warning", "Error", "failed to delete ClusterwideNetworkPolicy")
 
-			return ctrl.Result{}, err
+			return ctrl.Result{}, fmt.Errorf("failed to delete ClusterwideNetworkPolicy: %w", err)
 		}
 		log.V(debugLogLevel).Info("corresponding CRD ClusterwideNetworkPolicy deleted")
 
 		if err := r.DeleteSharedSvcLB(ctx, instance); err != nil {
 			r.recorder.Eventf(instance, "Warning", "Error", "failed to delete Service with shared ip: %v", err)
 
-			return ctrl.Result{}, err
+			return ctrl.Result{}, fmt.Errorf("failed to delete Service with shared ip: %w", err)
 		}
 
 		if err := r.DeleteDedicatedSvcLB(ctx, instance); err != nil {
 			r.recorder.Eventf(instance, "Warning", "Error", "failed to delete Service with dedicated ip: %v", err)
 
-			return ctrl.Result{}, err
+			return ctrl.Result{}, fmt.Errorf("failed to delete Service with dedicated ip: %w", err)
 		}
 		log.V(debugLogLevel).Info("corresponding Service(s) of type LoadBalancer deleted")
 
@@ -373,7 +376,7 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	if err := r.ReconcileSvcLBs(ctx, instance); err != nil {
 		r.recorder.Eventf(instance, "Warning", "Error", "failed to create Service: %v", err)
 
-		return ctrl.Result{}, err
+		return ctrl.Result{}, fmt.Errorf("failed to create Service: %w", err)
 	}
 
 	if r.EnableWalGExporter {
@@ -442,10 +445,14 @@ func (r *PostgresReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 func (r *PostgresReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.recorder = mgr.GetEventRecorderFor("PostgresController")
 
-	return ctrl.NewControllerManagedBy(mgr).
+	if err := ctrl.NewControllerManagedBy(mgr).
 		For(&pg.Postgres{}).
 		WithEventFilter(predicate.GenerationChangedPredicate{}).
-		Complete(r)
+		Complete(r); err != nil {
+		return fmt.Errorf("failed to register postgres reconciler: %w", err)
+	}
+
+	return nil
 }
 
 func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context, instance *pg.Postgres, log logr.Logger, sidecarsCM *corev1.ConfigMap, patroniTTL, patroniLoopWait, patroniRetryTimeout uint32) error {
@@ -463,7 +470,7 @@ func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context
 		if err := r.CtrlClient.Get(ctx, srcNs, src); err != nil {
 			r.recorder.Eventf(instance, "Warning", "Error", "failed to get source postgres for restore: %v", err)
 		} else {
-			log.V(debugLogLevel).Info("source for restore fetched", "postgres", instance)
+			log.V(debugLogLevel).Info("source for restore fetched", pgName, instance)
 
 			bc, err := r.getBackupConfig(ctx, instance.Namespace, src.Spec.BackupSecretRef)
 			if err != nil {
@@ -591,19 +598,19 @@ func (r *PostgresReconciler) updatePodEnvironmentConfigMap(log logr.Logger, ctx 
 
 	// s3 server side encryption SSE is disabled
 	// we use client side encryption
-	walgDisableSSE := "true"
+	walgDisableSSE := True
 
 	// create updated content for pod environment configmap
 	data := map[string]string{
-		"USE_WALG_BACKUP":                    "true",
-		"USE_WALG_RESTORE":                   "true",
+		"USE_WALG_BACKUP":                    True,
+		"USE_WALG_RESTORE":                   True,
 		"WALE_S3_PREFIX":                     "s3://" + bucketName + "/$(SCOPE)",
 		"WALG_S3_PREFIX":                     "s3://" + bucketName + "/$(SCOPE)",
 		"CLONE_WALG_S3_PREFIX":               "s3://" + bucketName + "/$(CLONE_SCOPE)",
 		"WALE_BACKUP_THRESHOLD_PERCENTAGE":   "100",
 		"AWS_ENDPOINT":                       awsEndpoint,
 		"WALE_S3_ENDPOINT":                   walES3Endpoint, // same as above, but slightly modified
-		"AWS_S3_FORCE_PATH_STYLE":            "true",
+		"AWS_S3_FORCE_PATH_STYLE":            True,
 		"AWS_REGION":                         region,         // now we can use AWS S3
 		"WALG_DISABLE_S3_SSE":                walgDisableSSE, // server side encryption
 		"BACKUP_SCHEDULE":                    backupSchedule,
@@ -770,7 +777,7 @@ func (r *PostgresReconciler) getStandbyEnvs(ctx context.Context, p *pg.Postgres)
 	primaryWalGS3Prefix := "s3://" + primaryBackupConfig.S3BucketName + "/" + primary.ToPeripheralResourceName()
 	// s3 server side encryption SSE is disabled, we use client side encryption
 	// see STANDBY_WALG_LIBSODIUM_KEY above
-	primaryWalgDisableSSE := "true"
+	primaryWalgDisableSSE := True
 	// aws access key
 	primaryAwsAccessKeyID := primaryBackupConfig.S3AccessKey
 	// aws secret key
@@ -781,17 +788,17 @@ func (r *PostgresReconciler) getStandbyEnvs(ctx context.Context, p *pg.Postgres)
 	standbyEnvs["STANDBY_AWS_ACCESS_KEY_ID"] = []byte(primaryAwsAccessKeyID)
 	standbyEnvs["STANDBY_AWS_SECRET_ACCESS_KEY"] = []byte(primaryAwsSecretAccessKey)
 	standbyEnvs["STANDBY_AWS_ENDPOINT"] = []byte(primaryAwsEndpoint)
-	standbyEnvs["STANDBY_AWS_S3_FORCE_PATH_STYLE"] = []byte("true")
+	standbyEnvs["STANDBY_AWS_S3_FORCE_PATH_STYLE"] = []byte(True)
 	standbyEnvs["STANDBY_AWS_REGION"] = []byte(primaryRegion)
 	standbyEnvs["STANDBY_AWS_WALG_S3_ENDPOINT"] = []byte(primaryWalES3Endpoint)
-	standbyEnvs["STANDBY_USE_WALG_BACKUP"] = []byte("true")
-	standbyEnvs["STANDBY_USE_WALG_RESTORE"] = []byte("true")
+	standbyEnvs["STANDBY_USE_WALG_BACKUP"] = []byte(True)
+	standbyEnvs["STANDBY_USE_WALG_RESTORE"] = []byte(True)
 	standbyEnvs["STANDBY_WALE_S3_ENDPOINT"] = []byte(primaryWalES3Endpoint)
 	standbyEnvs["STANDBY_WALG_DISABLE_S3_SSE"] = []byte(primaryWalgDisableSSE)
 	standbyEnvs["STANDBY_WALG_S3_ENDPOINT"] = []byte(primaryWalES3Endpoint)
 	standbyEnvs["STANDBY_WALG_S3_PREFIX"] = []byte(primaryWalGS3Prefix)
 	standbyEnvs["STANDBY_WALG_S3_SSE"] = []byte("")
-	standbyEnvs["STANDBY_WITH_WALG"] = []byte("true")
+	standbyEnvs["STANDBY_WITH_WALG"] = []byte(True)
 
 	return standbyEnvs
 }
@@ -935,9 +942,9 @@ func (r *PostgresReconciler) getZalandoPostgresql(ctx context.Context, instance 
 		return nil, err
 	}
 
-	if len := len(items); len > 1 {
-		return nil, fmt.Errorf("error while fetching zalando postgresql: Not unique, got %d results", len)
-	} else if len < 1 {
+	if itemCount := len(items); itemCount > 1 {
+		return nil, fmt.Errorf("error while fetching zalando postgresql: Not unique, got %d results", itemCount)
+	} else if itemCount < 1 {
 		return nil, apierrors.NewNotFound(zalando.Resource("postgresql"), "")
 	}
 
@@ -953,7 +960,7 @@ func (r *PostgresReconciler) getZPostgresqlByLabels(ctx context.Context, matchin
 		matchingLabels,
 	}
 	if err := r.SvcClient.List(ctx, zpl, opts...); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to list postgresqls: %w", err)
 	}
 
 	return zpl.Items, nil
@@ -1093,7 +1100,7 @@ func (r *PostgresReconciler) copySecrets(log logr.Logger, ctx context.Context, s
 			},
 			Data: map[string][]byte{
 				"username": []byte(username),
-				"password": remoteSecret.Data[username],
+				"password": remoteSecret.Data[username], //nolint:goconst
 			},
 		}
 
@@ -1186,12 +1193,10 @@ func (r *PostgresReconciler) checkAndUpdatePatroniReplicationConfig(log logr.Log
 
 				return requeueAfterReconcile, r.httpPatchPatroni(log, ctx, instance, leaderIP, synchronousStandbyApplicationName)
 			}
-		} else {
-			if resp.SynchronousNodesAdditional != nil {
-				log.V(debugLogLevel).Info("synchronous_nodes_additional mismatch, updating and requeing", "response", resp)
+		} else if resp.SynchronousNodesAdditional != nil {
+			log.V(debugLogLevel).Info("synchronous_nodes_additional mismatch, updating and requeing", "response", resp)
 
-				return requeueAfterReconcile, r.httpPatchPatroni(log, ctx, instance, leaderIP, nil)
-			}
+			return requeueAfterReconcile, r.httpPatchPatroni(log, ctx, instance, leaderIP, nil)
 		}
 
 	} else {
@@ -1238,7 +1243,7 @@ func (r *PostgresReconciler) findLeaderPods(log logr.Logger, ctx context.Context
 	if err != nil {
 		log.V(debugLogLevel).Info("could not create requirements for label selector to query pods, requeuing")
 
-		return leaderPods, err
+		return leaderPods, fmt.Errorf("could not create requirements for label selector to query pods: %w", err)
 	}
 	leaderSelector := labels.NewSelector().Add(*roleReq)
 	opts := []client.ListOption{
@@ -1246,7 +1251,11 @@ func (r *PostgresReconciler) findLeaderPods(log logr.Logger, ctx context.Context
 		client.MatchingLabelsSelector{Selector: leaderSelector},
 	}
 
-	return leaderPods, r.SvcClient.List(ctx, leaderPods, opts...)
+	if err := r.SvcClient.List(ctx, leaderPods, opts...); err != nil {
+		return leaderPods, fmt.Errorf("failed to list leader pods: %w", err)
+	}
+
+	return leaderPods, nil
 }
 
 func (r *PostgresReconciler) updatePatroniReplicationConfigOnAllPods(log logr.Logger, ctx context.Context, instance *pg.Postgres) error {
@@ -1258,7 +1267,7 @@ func (r *PostgresReconciler) updatePatroniReplicationConfigOnAllPods(log logr.Lo
 	if err := r.SvcClient.List(ctx, pods, opts...); err != nil {
 		log.V(debugLogLevel).Info("could not query pods, requeuing")
 
-		return err
+		return fmt.Errorf("could not query pods: %w", err)
 	}
 
 	if len(pods.Items) == 0 {
@@ -1298,9 +1307,11 @@ func (r *PostgresReconciler) httpPatchPatroni(log logr.Logger, ctx context.Conte
 
 	log.V(debugLogLevel).Info("Preparing request")
 	var request PatroniConfig
-	if instance.Spec.PostgresConnection == nil {
+
+	switch {
+	case instance.Spec.PostgresConnection == nil:
 		// use empty config
-	} else if instance.IsReplicationPrimaryOrStandalone() {
+	case instance.IsReplicationPrimaryOrStandalone():
 		request = PatroniConfig{
 			StandbyCluster: nil,
 		}
@@ -1326,7 +1337,7 @@ func (r *PostgresReconciler) httpPatchPatroni(log logr.Logger, ctx context.Conte
 			// disable sync replication
 			request.SynchronousNodesAdditional = nil
 		}
-	} else {
+	default:
 		request = PatroniConfig{
 			StandbyCluster: &PatroniStandbyCluster{
 				CreateReplicaMethods: []string{"basebackup_fast_xlog"},
@@ -1337,12 +1348,13 @@ func (r *PostgresReconciler) httpPatchPatroni(log logr.Logger, ctx context.Conte
 			SynchronousNodesAdditional: nil,
 		}
 	}
+
 	log.V(debugLogLevel).Info("Prepared request", "request", request)
 	jsonReq, err := json.Marshal(request)
 	if err != nil {
 		log.V(debugLogLevel).Info("could not create config")
 
-		return err
+		return fmt.Errorf("could not create patroni config: %w", err)
 	}
 
 	httpClient := &http.Client{}
@@ -1352,7 +1364,7 @@ func (r *PostgresReconciler) httpPatchPatroni(log logr.Logger, ctx context.Conte
 	if err != nil {
 		log.Error(err, "could not create PATCH request")
 
-		return err
+		return fmt.Errorf("could not create patroni PATCH request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
@@ -1360,7 +1372,7 @@ func (r *PostgresReconciler) httpPatchPatroni(log logr.Logger, ctx context.Conte
 	if err != nil {
 		log.Error(err, "could not perform PATCH request")
 
-		return err
+		return fmt.Errorf("could not perform patroni PATCH request: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -1401,7 +1413,7 @@ func (r *PostgresReconciler) httpGetPatroniConfig(log logr.Logger, ctx context.C
 	if err != nil {
 		log.Error(err, "could not create GET request")
 
-		return nil, err
+		return nil, fmt.Errorf("could not create patroni config GET request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
@@ -1409,7 +1421,7 @@ func (r *PostgresReconciler) httpGetPatroniConfig(log logr.Logger, ctx context.C
 	if err != nil {
 		log.Error(err, "could not perform GET request")
 
-		return nil, err
+		return nil, fmt.Errorf("patroni config request failed: %w", err)
 	}
 
 	defer resp.Body.Close()
@@ -1418,19 +1430,19 @@ func (r *PostgresReconciler) httpGetPatroniConfig(log logr.Logger, ctx context.C
 	if err != nil {
 		log.Info("could not read body")
 
-		return nil, err
+		return nil, fmt.Errorf("could not read patroni config response body: %w", err)
 	}
 	var jsonResp PatroniConfig
 	err = json.Unmarshal(body, &jsonResp)
 	if err != nil {
 		log.V(debugLogLevel).Info("could not parse config response")
 
-		return nil, err
+		return nil, fmt.Errorf("could not parse patroni config response: %w", err)
 	}
 
 	log.V(debugLogLevel).Info("Got config", "response", jsonResp)
 
-	return &jsonResp, err
+	return &jsonResp, nil
 }
 
 func (r *PostgresReconciler) getBackupConfig(ctx context.Context, ns, name string) (*pg.BackupConfig, error) {
@@ -1597,21 +1609,21 @@ func (r *PostgresReconciler) createOrUpdateNetPol(ctx context.Context, instance 
 
 // createOrUpdateExporterSidecarServices ensures the necessary services to access the sidecars exist
 func (r *PostgresReconciler) createOrUpdateExporterSidecarServices(log logr.Logger, ctx context.Context, namespace string, c *corev1.ConfigMap, in *pg.Postgres) error {
-	pesPort, error := strconv.ParseInt(c.Data[postgresExporterServicePortKeyName], 10, 32)
-	if error != nil {
-		log.Error(error, "postgres-exporter-service-port could not be parsed to int32, falling back to default value")
+	pesPort, err := strconv.ParseInt(c.Data[postgresExporterServicePortKeyName], 10, 32)
+	if err != nil {
+		log.Error(err, "postgres-exporter-service-port could not be parsed to int32, falling back to default value")
 		pesPort = 9187
 	}
 
-	pesTargetPort, error := strconv.ParseInt(c.Data[postgresExporterServiceTargetPortKeyName], 10, 32)
-	if error != nil {
-		log.Error(error, "postgres-exporter-service-target-port could not be parsed to int32, falling back to default value")
+	pesTargetPort, err := strconv.ParseInt(c.Data[postgresExporterServiceTargetPortKeyName], 10, 32)
+	if err != nil {
+		log.Error(err, "postgres-exporter-service-target-port could not be parsed to int32, falling back to default value")
 		pesTargetPort = pesPort
 	}
 
 	labels := map[string]string{
 		// pg.ApplicationLabelName: pg.ApplicationLabelValue, // TODO check if we still need that label, IsOperatorDeletable won't work anymore if we set it.
-		"app": "postgres-exporter",
+		"app": "postgres-exporter", //nolint:goconst
 	}
 	annotations := map[string]string{
 		postgresExporterServiceTenantAnnotationName:    in.Spec.Tenant,
@@ -1916,7 +1928,7 @@ func (r *PostgresReconciler) generateRandomString() (string, error) {
 	for i := range b {
 		x, err := rand.Int(rand.Reader, size)
 		if err != nil {
-			return "", err
+			return "", fmt.Errorf("failed to get random bytes: %w", err)
 		}
 		b[i] = chars[x.Int64()]
 	}
@@ -1953,7 +1965,9 @@ func (r *PostgresReconciler) removeStorageEncryptionSecretFinalizer(log logr.Log
 	return nil
 }
 
-func removeElem(ss []string, s string) (out []string) {
+func removeElem(ss []string, s string) []string {
+	out := []string{}
+
 	for _, elem := range ss {
 		if elem == s {
 			continue
@@ -1961,7 +1975,7 @@ func removeElem(ss []string, s string) (out []string) {
 		out = append(out, elem)
 	}
 
-	return
+	return out
 }
 
 func (r *PostgresReconciler) ensureInitDBJob(log logr.Logger, ctx context.Context, instance *pg.Postgres) error {
@@ -2042,7 +2056,7 @@ func (r *PostgresReconciler) ensureInitDBJob(log logr.Logger, ctx context.Contex
 						Env: []corev1.EnvVar{
 							{
 								Name:  "PGUSER_SUPERUSER",
-								Value: "postgres",
+								Value: pgName,
 							},
 							{
 								Name: "PGPASSWORD_SUPERUSER",
@@ -2152,12 +2166,12 @@ func (r *PostgresReconciler) createOrUpdateWalGExporterDeployment(log logr.Logge
 	}
 
 	labels := map[string]string{
-		"app.kubernetes.io/name": walGExporterName,
-		pg.UIDLabelName:          string(instance.UID),
-		pg.NameLabelName:         instance.Name,
-		pg.TenantLabelName:       instance.Spec.Tenant,
-		pg.ProjectIDLabelName:    instance.Spec.ProjectID,
-		pg.PartitionIDLabelName:  instance.Spec.PartitionID,
+		labelName:               walGExporterName,
+		pg.UIDLabelName:         string(instance.UID),
+		pg.NameLabelName:        instance.Name,
+		pg.TenantLabelName:      instance.Spec.Tenant,
+		pg.ProjectIDLabelName:   instance.Spec.ProjectID,
+		pg.PartitionIDLabelName: instance.Spec.PartitionID,
 	}
 
 	annotations := map[string]string{}
@@ -2203,7 +2217,7 @@ func (r *PostgresReconciler) createOrUpdateWalGExporterDeployment(log logr.Logge
 								},
 								{
 									Name:  "PGDATABASE",
-									Value: "postgres",
+									Value: pgName,
 								},
 								{
 									Name:  "PGUSER",
@@ -2336,12 +2350,12 @@ func (r *PostgresReconciler) deleteWalGExporterDeployment(ctx context.Context, n
 // createOrUpdateWalGExporterPodMonitor ensures the necessary services to access the wal-g-exporter exist
 func (r *PostgresReconciler) createOrUpdateWalGExporterPodMonitor(log logr.Logger, ctx context.Context, namespace string, in *pg.Postgres) error {
 	l := map[string]string{
-		"app.kubernetes.io/name": walGExporterName,
-		pg.UIDLabelName:          string(in.UID),
-		pg.NameLabelName:         in.Name,
-		pg.TenantLabelName:       in.Spec.Tenant,
-		pg.ProjectIDLabelName:    in.Spec.ProjectID,
-		pg.PartitionIDLabelName:  in.Spec.PartitionID,
+		labelName:               walGExporterName,
+		pg.UIDLabelName:         string(in.UID),
+		pg.NameLabelName:        in.Name,
+		pg.TenantLabelName:      in.Spec.Tenant,
+		pg.ProjectIDLabelName:   in.Spec.ProjectID,
+		pg.PartitionIDLabelName: in.Spec.PartitionID,
 	}
 	a := map[string]string{
 		postgresExporterServiceTenantAnnotationName:    in.Spec.Tenant,
@@ -2363,7 +2377,7 @@ func (r *PostgresReconciler) createOrUpdateWalGExporterPodMonitor(log logr.Logge
 		},
 	}
 	selector := map[string]string{
-		"app.kubernetes.io/name": walGExporterName,
+		labelName: walGExporterName,
 	}
 	s.Spec.Selector = metav1.LabelSelector{MatchLabels: selector}
 
