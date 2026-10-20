@@ -39,7 +39,7 @@ test: generate fmt vet manifests
 # Build manager binary
 manager: generate fmt vet manifests
 	CGO_ENABLED=0 \
-	go build -a -ldflags "-extldflags '-static' \
+	go build -ldflags "-extldflags '-static' \
 						-X 'github.com/metal-stack/v.Version=$(VERSION)' \
 						-X 'github.com/metal-stack/v.Revision=$(GITVERSION)' \
 						-X 'github.com/metal-stack/v.GitSHA1=$(SHA)' \
