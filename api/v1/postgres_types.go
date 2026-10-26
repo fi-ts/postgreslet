@@ -864,7 +864,7 @@ func (p *Postgres) ToZalandoPostgresql(z *zalando.Postgresql, c *corev1.ConfigMa
 		var parsedMaintenanceWindow zalando.MaintenanceWindow
 
 		if err := parsedMaintenanceWindow.UnmarshalJSON([]byte(maintenanceWindowString)); err != nil {
-			return nil, fmt.Errorf("Unable to parse %v into zalando maintenanceWindow: %w", maintenanceWindowString, err)
+			return nil, fmt.Errorf("unable to parse %v into zalando maintenanceWindow: %w", maintenanceWindowString, err)
 		}
 		maintenanceWindows = append(maintenanceWindows, parsedMaintenanceWindow)
 	}
