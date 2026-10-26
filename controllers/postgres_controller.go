@@ -483,9 +483,9 @@ func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context
 			return fmt.Errorf("failed to fetch zalando postgresql: %w", err)
 		}
 
-		u, err := instance.ToUnstructuredZalandoPostgresql(nil, sidecarsCM, r.StorageClass, r.PgParamBlockList, restoreBackupConfig, restoreSourceInstance, patroniTTL, patroniLoopWait, patroniRetryTimeout, r.EnableSuperUserForDBO, r.EnableCustomTLSCert, r.PostgresImage, r.SpiloCpuRequestsPercentage, r.EnableTopologySpreadConstraints, r.TscKey, r.TscMaxSkew, r.TscMinDomains)
+		u, err := instance.ToZalandoPostgresql(nil, sidecarsCM, r.StorageClass, r.PgParamBlockList, restoreBackupConfig, restoreSourceInstance, patroniTTL, patroniLoopWait, patroniRetryTimeout, r.EnableSuperUserForDBO, r.EnableCustomTLSCert, r.PostgresImage, r.SpiloCpuRequestsPercentage, r.EnableTopologySpreadConstraints, r.TscKey, r.TscMaxSkew, r.TscMinDomains)
 		if err != nil {
-			return fmt.Errorf("failed to convert to unstructured zalando postgresql: %w", err)
+			return fmt.Errorf("failed to convert to zalando postgresql: %w", err)
 		}
 
 		if err := r.SvcClient.Create(ctx, u); err != nil {
@@ -499,9 +499,9 @@ func (r *PostgresReconciler) createOrUpdateZalandoPostgresql(ctx context.Context
 	// Update zalando postgresql
 	mergeFrom := client.MergeFrom(rawZ.DeepCopy())
 
-	u, err := instance.ToUnstructuredZalandoPostgresql(rawZ, sidecarsCM, r.StorageClass, r.PgParamBlockList, restoreBackupConfig, restoreSourceInstance, patroniTTL, patroniLoopWait, patroniRetryTimeout, r.EnableSuperUserForDBO, r.EnableCustomTLSCert, r.PostgresImage, r.SpiloCpuRequestsPercentage, r.EnableTopologySpreadConstraints, r.TscKey, r.TscMaxSkew, r.TscMinDomains)
+	u, err := instance.ToZalandoPostgresql(rawZ, sidecarsCM, r.StorageClass, r.PgParamBlockList, restoreBackupConfig, restoreSourceInstance, patroniTTL, patroniLoopWait, patroniRetryTimeout, r.EnableSuperUserForDBO, r.EnableCustomTLSCert, r.PostgresImage, r.SpiloCpuRequestsPercentage, r.EnableTopologySpreadConstraints, r.TscKey, r.TscMaxSkew, r.TscMinDomains)
 	if err != nil {
-		return fmt.Errorf("failed to convert to unstructured zalando postgresql: %w", err)
+		return fmt.Errorf("failed to convert to zalando postgresql: %w", err)
 	}
 	if err := r.SvcClient.Patch(ctx, u, mergeFrom); err != nil {
 		return fmt.Errorf("failed to update zalando postgresql: %w", err)

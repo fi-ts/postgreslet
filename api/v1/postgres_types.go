@@ -22,7 +22,6 @@ import (
 	networkingv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -680,7 +679,7 @@ func (p *Postgres) ToPeripheralResourceLookupKey() types.NamespacedName {
 	}
 }
 
-func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *corev1.ConfigMap, sc string, pgParamBlockList map[string]bool, rbs *BackupConfig, srcDB *Postgres, patroniTTL, patroniLoopWait, patroniRetryTimeout uint32, dboIsSuperuser bool, enableTlsCert bool, image string, cpuRequestsPercentage int, tscEnable bool, tscKey string, tscMaxSkew, tscMinDomains int32) (*unstructured.Unstructured, error) {
+func (p *Postgres) ToZalandoPostgresql(z *zalando.Postgresql, c *corev1.ConfigMap, sc string, pgParamBlockList map[string]bool, rbs *BackupConfig, srcDB *Postgres, patroniTTL, patroniLoopWait, patroniRetryTimeout uint32, dboIsSuperuser bool, enableTlsCert bool, image string, cpuRequestsPercentage int, tscEnable bool, tscKey string, tscMaxSkew, tscMinDomains int32) (*zalando.Postgresql, error) {
 	if z == nil {
 		z = &zalando.Postgresql{}
 	}
@@ -720,7 +719,7 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 	z.Spec.Resources = &zalando.Resources{}
 	cpuReq, err := p.calculateCPURequests(p.Spec.Size.CPU, cpuRequestsPercentage)
 	if err != nil {
-		return nil, fmt.Errorf("failed to convert to unstructured zalando postgresql: %w", err)
+		return nil, fmt.Errorf("failed to convert to zalando postgresql: %w", err)
 	}
 	z.Spec.ResourceRequests.CPU = ptr.To(cpuReq)
 	z.Spec.ResourceRequests.Memory = ptr.To(p.Spec.Size.Memory)
@@ -809,7 +808,7 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 		z.Spec.Clone = nil
 	}
 
-	// Enable replication (using unstructured json)
+	// Enable replication
 	if p.IsReplicationPrimaryOrStandalone() {
 		// delete field
 		z.Spec.StandbyCluster = nil
@@ -859,33 +858,20 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 		z.Spec.TopologySpreadConstraints = []corev1.TopologySpreadConstraint{tsc}
 	}
 
-	jsonZ, err := runtime.DefaultUnstructuredConverter.ToUnstructured(z)
-	if err != nil {
-		return nil, fmt.Errorf("failed to convert to unstructured zalando postgresql: %w", err)
+	var maintenanceWindows []zalando.MaintenanceWindow
+
+	for _, maintenanceWindowString := range p.Spec.Maintenance {
+		var parsedMaintenanceWindow zalando.MaintenanceWindow
+
+		if err := parsedMaintenanceWindow.UnmarshalJSON([]byte(maintenanceWindowString)); err != nil {
+			return nil, fmt.Errorf("unable to parse %v into zalando maintenanceWindow: %w", maintenanceWindowString, err)
+		}
+		maintenanceWindows = append(maintenanceWindows, parsedMaintenanceWindow)
 	}
-	jsonSpec, _ := jsonZ["spec"].(map[string]interface{})
 
-	// In the code, zalando's `MaintenanceWindows` is a `struct`, but in the CRD
-	// it's an array of strings, so we can only set its `Unstructured` contents
-	// and deal with possible `nil`.
-	jsonSpec["maintenanceWindows"] = p.Spec.Maintenance
-	deleteIfEmpty(jsonSpec, "maintenanceWindows")
+	z.Spec.MaintenanceWindows = maintenanceWindows
 
-	// Delete unused fields
-	deleteIfEmpty(jsonSpec, "clone")
-	deleteIfEmpty(jsonSpec, "patroni") // if in use, deleteIfEmpty needs to consider the case of struct.
-	deleteIfEmpty(jsonSpec, "podAnnotations")
-	deleteIfEmpty(jsonSpec, "serviceAnnotations")
-	deleteIfEmpty(jsonSpec, "standby")
-	deleteIfEmpty(jsonSpec, "tls")
-	deleteIfEmpty(jsonSpec, "users")
-
-	jsonP, _ := jsonSpec["postgresql"].(map[string]interface{})
-	deleteIfEmpty(jsonP, "parameters")
-
-	return &unstructured.Unstructured{
-		Object: jsonZ,
-	}, nil
+	return z, nil
 }
 
 func (p *Postgres) ToZalandoPostgresqlMatchingLabels() client.MatchingLabels {
