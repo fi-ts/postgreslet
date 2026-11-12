@@ -77,6 +77,7 @@ const (
 	ClusterNameLabelName             = "cluster-name"
 
 	teamIDPrefix = "pg"
+	teamName     = "team"
 
 	DefaultPatroniParamValueLoopWait     uint32 = 10
 	DefaultPatroniParamValueRetryTimeout uint32 = 10
@@ -108,13 +109,14 @@ const (
 	PostgresConfigAuditorUsername     = "auditor"
 	PostgresConfigMonitoringUsername  = "monitoring"
 
-	zalando_timestamp_format = "2006-01-02T15:04:05-07:00"
+	zalandoTimestampFormat = "2006-01-02T15:04:05-07:00"
+	pgName                 = "postgresql"
 )
 
 var (
 	ZalandoPostgresqlTypeMeta = metav1.TypeMeta{
 		APIVersion: "acid.zalan.do/v1",
-		Kind:       "postgresql",
+		Kind:       pgName,
 	}
 	invalidLabelValueChars = regexp.MustCompile(`[^a-zA-Z0-9._-]`)
 	multipleUnderscores    = regexp.MustCompile(`_+`)
@@ -393,7 +395,7 @@ func (p *Postgres) ToSharedSvcLB(lbIP string, lbPort int32, enableStandbyLeaderS
 	lb.Spec.LoadBalancerSourceRanges = lbsr
 
 	port := corev1.ServicePort{}
-	port.Name = "postgresql"
+	port.Name = pgName
 	port.Port = lbPort
 	port.Protocol = corev1.ProtocolTCP
 	port.TargetPort = intstr.FromInt(5432)
@@ -402,17 +404,18 @@ func (p *Postgres) ToSharedSvcLB(lbIP string, lbPort int32, enableStandbyLeaderS
 	lb.Spec.Selector = map[string]string{
 		ApplicationLabelName: ApplicationLabelValue,
 		ClusterNameLabelName: p.ToPeripheralResourceName(),
-		"team":               p.generateTeamID(),
+		teamName:             p.generateTeamID(),
 	}
 	if p.IsReplicationPrimaryOrStandalone() {
 		lb.Spec.Selector[SpiloRoleLabelName] = SpiloRoleLabelValueMaster
 	} else {
-		if enableStandbyLeaderSelector {
+		switch {
+		case enableStandbyLeaderSelector:
 			// Only set this value when we are NOT a primary and the StandbyLeaderSelector is enabled.
 			lb.Spec.Selector[SpiloRoleLabelName] = SpiloRoleLabelValueStandbyLeader
-		} else if enableLegacyStandbySelector {
+		case enableLegacyStandbySelector:
 			lb.Spec.Selector[SpiloRoleLabelName] = SpiloRoleLabelValueMaster
-		} else {
+		default:
 			// select the first pod in the statefulset
 			lb.Spec.Selector[StatefulsetPodNameLabelName] = p.ToPeripheralResourceName() + "-0"
 		}
@@ -486,7 +489,7 @@ func (p *Postgres) ToDedicatedSvcLB(lbIP string, lbPort int32, standbyClustersSo
 	lb.Spec.LoadBalancerSourceRanges = lbsr
 
 	port := corev1.ServicePort{}
-	port.Name = "postgresql"
+	port.Name = pgName
 	port.Port = lbPort
 	port.Protocol = corev1.ProtocolTCP
 	port.TargetPort = intstr.FromInt(5432)
@@ -495,7 +498,7 @@ func (p *Postgres) ToDedicatedSvcLB(lbIP string, lbPort int32, standbyClustersSo
 	lb.Spec.Selector = map[string]string{
 		ApplicationLabelName: ApplicationLabelValue,
 		ClusterNameLabelName: p.ToPeripheralResourceName(),
-		"team":               p.generateTeamID(),
+		teamName:             p.generateTeamID(),
 	}
 	if p.IsReplicationPrimaryOrStandalone() {
 		lb.Spec.Selector[SpiloRoleLabelName] = SpiloRoleLabelValueMaster
@@ -585,7 +588,7 @@ func (p *Postgres) ToUserPasswordSecretMatchingLabels() map[string]string {
 	return map[string]string{
 		ApplicationLabelName: ApplicationLabelValue,
 		"cluster-name":       p.ToPeripheralResourceName(),
-		"team":               p.generateTeamID(),
+		teamName:             p.generateTeamID(),
 	}
 }
 
@@ -611,7 +614,7 @@ func (p *Postgres) generateTeamID() string {
 
 func (p *Postgres) generateDatabaseName() string {
 	// We only want letters and numbers
-	generatedDatabaseName := alphaNumericRegExp.ReplaceAllString(string(p.Spec.Description), "")
+	generatedDatabaseName := alphaNumericRegExp.ReplaceAllString(p.Spec.Description, "")
 
 	// and only lower case
 	generatedDatabaseName = strings.ToLower(generatedDatabaseName)
@@ -623,7 +626,7 @@ func (p *Postgres) generateDatabaseName() string {
 	}
 
 	// Add UID in the mix
-	generatedDatabaseName += alphaNumericRegExp.ReplaceAllString(string(p.Name), "")
+	generatedDatabaseName += alphaNumericRegExp.ReplaceAllString(p.Name, "")
 
 	// Limit to final size
 	// This way, we have at least 5 chars of the uid as part of the database name.
@@ -646,7 +649,7 @@ func (p *Postgres) ToPeripheralResourceNamespace() string {
 	}
 
 	// We only want letters and numbers
-	name := alphaNumericRegExp.ReplaceAllString(string(p.Name), "")
+	name := alphaNumericRegExp.ReplaceAllString(p.Name, "")
 
 	// Limit size
 	maxLen = 20
@@ -659,7 +662,7 @@ func (p *Postgres) ToPeripheralResourceNamespace() string {
 
 func (p *Postgres) ToDNSName(tlsSubDomain string) string {
 	// We only want letters and numbers
-	name := alphaNumericRegExp.ReplaceAllString(string(p.Name), "")
+	name := alphaNumericRegExp.ReplaceAllString(p.Name, "")
 	// Limit size
 	maxLen := 12
 	if len(name) > maxLen {
@@ -744,7 +747,7 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 	// see https://github.com/fi-ts/postgreslet/issues/293
 	z.Spec.EnableConnectionPooler = ptr.To(false)
 
-	prefix := alphaNumericRegExp.ReplaceAllString(string(p.Spec.Tenant), "")
+	prefix := alphaNumericRegExp.ReplaceAllString(p.Spec.Tenant, "")
 	prefix = strings.ToLower(prefix)
 	databaseName := prefix + "db01"
 	prepDbName := prefix + "prepdb01"
@@ -793,7 +796,7 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 		// make sure there is always a value set. The operator will fall back to CLONE_WITH_BASEBACKUP, which assumes the source db's credentials are existing within the same namespace, which is not the case with the postgreslet.
 		if p.Spec.PostgresRestore.Timestamp == "" {
 			// e.g. 2021-12-07T15:28:00+01:00
-			p.Spec.PostgresRestore.Timestamp = time.Now().Format(zalando_timestamp_format)
+			p.Spec.PostgresRestore.Timestamp = time.Now().Format(zalandoTimestampFormat)
 		}
 
 		z.Spec.Clone = &zalando.CloneDescription{
@@ -843,7 +846,7 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 					ProjectIDLabelName:   p.Spec.ProjectID,
 					TenantLabelName:      p.Spec.Tenant,
 					UIDLabelName:         string(p.UID),
-					"team":               p.generateTeamID(),
+					teamName:             p.generateTeamID(),
 				},
 			},
 			TopologyKey: tscKey,
@@ -880,7 +883,7 @@ func (p *Postgres) ToUnstructuredZalandoPostgresql(z *zalando.Postgresql, c *cor
 	deleteIfEmpty(jsonSpec, "tls")
 	deleteIfEmpty(jsonSpec, "users")
 
-	jsonP, _ := jsonSpec["postgresql"].(map[string]interface{})
+	jsonP, _ := jsonSpec[pgName].(map[string]interface{})
 	deleteIfEmpty(jsonP, "parameters")
 
 	return &unstructured.Unstructured{
@@ -919,7 +922,9 @@ func containsElem(ss []string, s string) bool {
 	return false
 }
 
-func removeElem(ss []string, s string) (out []string) {
+func removeElem(ss []string, s string) []string {
+	out := []string{}
+
 	for _, elem := range ss {
 		if elem == s {
 			continue
@@ -927,7 +932,7 @@ func removeElem(ss []string, s string) (out []string) {
 		out = append(out, elem)
 	}
 
-	return
+	return out
 }
 
 func deleteIfEmpty(json map[string]interface{}, key string) {
@@ -937,10 +942,6 @@ func deleteIfEmpty(json map[string]interface{}, key string) {
 	if i == nil || reflect.ValueOf(json[key]).IsNil() {
 		delete(json, key)
 	}
-}
-
-func init() {
-	SchemeBuilder.Register(&Postgres{}, &PostgresList{})
 }
 
 func (p *Postgres) buildAdditionalVolumes(c *corev1.ConfigMap) []zalando.AdditionalVolume {
@@ -1153,14 +1154,14 @@ func (p *Postgres) calculateCPURequests(c string, percentage int) (string, error
 	// parse the provided cpu quantity
 	cpu, err := resource.ParseQuantity(c)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to convert cpu quantity: %w", err)
 	}
 
 	// convert the cpu quantity to millis
 	milliValue := cpu.MilliValue()
 
 	// calculate the percentage
-	value := int64((milliValue / int64(100)) * int64(percentage))
+	value := (milliValue / int64(100)) * int64(percentage)
 
 	// return the calculated cpu request, making sure it is not higher than the given input value
 	return resource.NewMilliQuantity(min(value, milliValue), resource.BinarySI).String(), nil
