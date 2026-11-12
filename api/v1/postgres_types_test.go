@@ -217,7 +217,7 @@ func TestPostgres_ToPeripheralResourceName(t *testing.T) {
 	}
 }
 
-func TestPostgresRestoreTimestamp_ToUnstructuredZalandoPostgresql(t *testing.T) {
+func TestPostgresRestoreTimestamp_ToZalandoPostgresql(t *testing.T) {
 	tests := []struct {
 		name             string
 		spec             PostgresSpec
@@ -379,12 +379,12 @@ func TestPostgresRestoreTimestamp_ToUnstructuredZalandoPostgresql(t *testing.T) 
 			p := &Postgres{
 				Spec: tt.spec,
 			}
-			got, _ := p.ToUnstructuredZalandoPostgresql(nil, tt.c, tt.sc, tt.pgParamBlockList, tt.rbs, tt.srcDB,
+			got, _ := p.ToZalandoPostgresql(nil, tt.c, tt.sc, tt.pgParamBlockList, tt.rbs, tt.srcDB,
 				130, 10, 60, false, false, "dockerImage", 66, false, "", 0, 0)
 
 			jsonZ, err := runtime.DefaultUnstructuredConverter.ToUnstructured(got)
 			if err != nil {
-				t.Errorf("failed to convert to unstructured zalando postgresql: %v", err)
+				t.Errorf("failed to convert to zalando postgresql: %v", err)
 			}
 			jsonSpec, _ := jsonZ["spec"].(map[string]interface{})
 			jsonClone, _ := jsonSpec["clone"].(map[string]interface{})
