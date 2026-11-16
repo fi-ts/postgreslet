@@ -12,6 +12,8 @@ import (
 )
 
 func TestLBManager_nextFreePort(t *testing.T) {
+	t.Parallel()
+
 	portRangeStart := int32(0)
 	portRangeSize := int32(5)
 
@@ -89,8 +91,9 @@ func TestLBManager_nextFreePort(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			_, portGot, err := tt.lbMgr.nextFreeSocket(context.Background())
 			if (err != nil) != tt.wantErr {
 				t.Errorf("LBManager.nextFreePort() error = %v, wantErr %v", err, tt.wantErr)
