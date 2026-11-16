@@ -170,7 +170,7 @@ var _ = AfterSuite(func() {
 func createCredentialSecrets() {
 	defer GinkgoRecover()
 
-	users := []string{pgName, "standby"}
+	users := []string{"postgres", "standby"}
 	for i := range users {
 		bytes, err := os.ReadFile(filepath.Join(externalYAMLDirTest, "secret-credential-"+users[i]+".yaml"))
 		Expect(err).ToNot(HaveOccurred())

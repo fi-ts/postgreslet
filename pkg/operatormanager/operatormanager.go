@@ -52,8 +52,6 @@ const (
 
 	spilo_fsgroup     = "103"
 	debugLogLevel int = 1
-
-	kindSa = "ServiceAccount"
 )
 
 // operatorPodMatchingLabels is for listing operator pods
@@ -242,7 +240,7 @@ func (m *OperatorManager) UninstallOperator(ctx context.Context, namespace strin
 
 			// Remove the ServiceAccount from the ClusterRoleBinding's `Subjects` and then patch the ClusterRoleBinding
 			for i, s := range v.Subjects {
-				if s.Kind == kindSa && s.Namespace == namespace {
+				if s.Kind == "ServiceAccount" && s.Namespace == namespace {
 					mergeFrom := client.MergeFrom(v.DeepCopy())
 					v.Subjects = append(v.Subjects[:i], v.Subjects[i+1:]...)
 					if err = m.client.Patch(ctx, v, mergeFrom); err != nil {
@@ -329,7 +327,7 @@ func (m *OperatorManager) createNewClientObject(ctx context.Context, obj client.
 
 		// Set the namespace of the ServiceAccount in the ClusterRoleBinding.
 		for i, s := range v.Subjects {
-			if s.Kind == kindSa {
+			if s.Kind == "ServiceAccount" {
 				v.Subjects[i].Namespace = namespace
 			}
 		}
@@ -355,7 +353,7 @@ func (m *OperatorManager) createNewClientObject(ctx context.Context, obj client.
 
 		// If the ServiceAccount already exists, return.
 		for i := range got.Subjects {
-			if got.Subjects[i].Kind == kindSa && got.Subjects[i].Namespace == namespace {
+			if got.Subjects[i].Kind == "ServiceAccount" && got.Subjects[i].Namespace == namespace {
 				return nil
 			}
 		}
